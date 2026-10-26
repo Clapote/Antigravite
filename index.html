@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravité - Gestion Personnelle</title>
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+
+  <!-- ÉCRAN D'ACCUEIL & CHARGEMENT INITIAL (SPLASH SCREEN) -->
+  <div id="app-splash-screen" class="splash-screen">
+    <div class="splash-content">
+      <div class="splash-logo-container">
+        <div class="splash-brand-icon">
+          <img src="./assets/Icon antigravité.png" alt="Antigravité" class="splash-icon-img">
+        </div>
+        <h1 class="splash-title">Antigravité</h1>
+      </div>
+      <div class="splash-greeting-container">
+        <h2 id="splash-greeting" class="splash-greeting">Bonjour ! Passez une excellente journée ✨</h2>
+        <p id="splash-status" class="splash-status">Préparation de votre espace et actualisation de l'agenda...</p>
+      </div>
+      <div class="splash-progress-wrapper">
+        <div class="splash-progress-track">
+          <div id="splash-progress-bar" class="splash-progress-bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Couche d'image d'arrière-plan (Fond d'écran derrière les panneaux) -->
+  <div id="app-wallpaper-layer" class="app-wallpaper-layer" style="display: none;"></div>
+
+  <div id="app-container">
+    
+    <!-- Barre latérale -->
+    <aside id="sidebar">
+      <div class="brand">
+        <div class="brand-logo-wrapper">
+          <img src="./assets/logo-dark.png" alt="Antigravité" class="brand-logo-img logo-dark">
+          <img src="./assets/logo-light.png" alt="Antigravité" class="brand-logo-img logo-light">
+        </div>
+        <button type="button" id="btn-collapse-sidebar" class="btn-icon" title="Fermer le volet latéral (Ctrl+B)" style="margin-left: auto; font-size: 0.85rem; opacity: 0.75; padding: 4px 6px;">◀</button>
+      </div>
+
+      <ul class="nav-menu">
+        <li class="nav-item active" data-screen="home">
+          <span class="icon">🏠</span>
+          <span>Accueil</span>
+        </li>
+        <li class="nav-item" data-screen="tasks">
+          <span class="icon">📋</span>
+          <span>Tâches</span>
+        </li>
+        <li class="nav-item" data-screen="projects">
+          <span class="icon">📁</span>
+          <span>Projets</span>
+        </li>
+        <li class="nav-item" data-screen="agenda">
+          <span class="icon">📅</span>
+          <span>Agenda</span>
+        </li>
+        <li class="nav-item" data-screen="notes">
+          <span class="icon">📝</span>
+          <span>Notes</span>
+        </li>
+        <li class="nav-item" data-screen="backups">
+          <span class="icon">💾</span>
+          <span>Sauvegardes</span>
+        </li>
+        <li class="nav-item" data-screen="settings">
+          <span class="icon">⚙️</span>
+          <span>Paramètres</span>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <button id="sidebar-quick-backup" class="backup-quick-btn" title="Créer un instantané horodaté de toutes les données">
+          <span>💾</span>
+          <span>Sauvegarder</span>
+        </button>
+        <div class="theme-toggle">
+          <span>Apparence</span>
+          <button id="theme-toggle-btn" class="btn btn-secondary btn-sm">☀️ Mode clair</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Zone principale -->
+    <main id="main-content">
+      
+      <!-- Barre supérieure -->
+      <header class="top-bar">
+        <div class="top-bar-title" style="display: flex; align-items: center; gap: 10px;">
+          <button type="button" id="btn-toggle-sidebar" class="btn-icon" title="Ouvrir / Fermer le volet latéral (Ctrl+B)" style="font-size: 1.1rem; padding: 4px 8px; border-radius: var(--radius-sm);">☰</button>
+          <h2 id="current-screen-title">Tableau de bord</h2>
+        </div>
+        <div class="top-bar-actions">
+          <button id="btn-global-quick-add" class="btn btn-primary">
+            <span>➕</span>
+            <span>Nouvelle tâche</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Barre de transition lumineuse entre les pages -->
+      <div id="page-transition-bar" class="page-transition-bar"></div>
+
+      <!-- ÉCRAN 1 : ACCUEIL -->
+      <section id="screen-home" class="screen-view active">
+        <!-- Bannière d'accueil avec Horloge temps réel -->
+        <div class="dashboard-hero-card">
+          <div class="hero-welcome">
+            <h2 id="dashboard-greeting" class="hero-greeting">Bonjour ! Passez une excellente journée ✨</h2>
+            <p class="hero-subtitle">Espace personnel local &amp; souverain • Synthèse de votre journée</p>
+          </div>
+          <div class="hero-clock-box">
+            <div class="clock-time-wrapper">
+              <span id="dashboard-clock-time" class="clock-digits">12:00</span>
+              <span id="dashboard-clock-seconds" class="clock-seconds">:00</span>
+            </div>
+            <div id="dashboard-clock-date" class="clock-date-text">Lundi 1 janvier 2026</div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span>Prévues aujourd'hui</span>
+              <span>📅</span>
+            </div>
+            <div id="stat-planned-today" class="stat-card-value">0</div>
+            <div class="stat-card-hint">Tâches planifiées pour ce jour</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span>Échéances proches</span>
+              <span>⏳</span>
+            </div>
+            <div id="stat-deadlines-near" class="stat-card-value">0</div>
+            <div class="stat-card-hint">Dans les 72 prochaines heures</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span>Créneaux du jour</span>
+              <span>⏱️</span>
+            </div>
+            <div id="stat-events-today" class="stat-card-value">0</div>
+            <div class="stat-card-hint">Réservés dans l'agenda</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span>Projets actifs</span>
+              <span>📁</span>
+            </div>
+            <div id="stat-active-projects" class="stat-card-value">0</div>
+            <div class="stat-card-hint">Dossiers de travail en cours</div>
+          </div>
+        </div>
+
+        <div class="dashboard-sections">
+          <div class="dashboard-panel">
+            <div class="panel-header">
+              <span class="panel-title">Tâches prévues aujourd'hui</span>
+              <button class="btn btn-secondary btn-sm" onclick="App.navigate('tasks')">Voir tout</button>
+            </div>
+            <div id="dashboard-planned-tasks" style="display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
+
+          <div class="dashboard-panel">
+            <div class="panel-header">
+              <span class="panel-title">Créneaux du jour (Agenda)</span>
+              <button class="btn btn-secondary btn-sm" onclick="App.navigate('agenda')">Voir l'agenda</button>
+            </div>
+            <div id="dashboard-today-events" style="display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
+
+          <div class="dashboard-panel">
+            <div class="panel-header">
+              <span class="panel-title">📝 Dernières notes</span>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-secondary btn-sm" onclick="App.navigate('notes')" title="Consulter toutes les notes">Voir tout</button>
+                <button class="btn btn-primary btn-sm" onclick="App.navigate('notes'); if(window.NotesManager) NotesManager.createNewNote();" title="Créer une nouvelle note">➕</button>
+              </div>
+            </div>
+            <div id="dashboard-recent-notes" style="display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÉCRAN 2 : TÂCHES -->
+      <section id="screen-tasks" class="screen-view">
+        <div class="tasks-toolbar">
+          <div class="filter-group">
+            <button class="task-filter-chip filter-chip active" data-filter="all">Toutes</button>
+            <button class="task-filter-chip filter-chip" data-filter="active">À faire</button>
+            <button class="task-filter-chip filter-chip" data-filter="completed">Terminées</button>
+            <select id="task-project-filter" class="form-control" style="padding: 4px 8px; font-size: 0.82rem;">
+              <option value="all">Tous les projets</option>
+            </select>
+          </div>
+          <div class="tasks-toolbar-actions">
+            <button id="btn-tasks-expand-all" class="btn btn-secondary btn-sm" title="Tout déplier dans l'arborescence">⊞ Tout déplier</button>
+            <button id="btn-tasks-collapse-all" class="btn btn-secondary btn-sm" title="Tout replier au premier niveau">⊟ Tout replier</button>
+            <button id="btn-new-task" class="btn btn-primary btn-sm">➕ Ajouter une tâche</button>
+          </div>
+        </div>
+
+        <div id="tasks-tree-container" class="task-tree"></div>
+      </section>
+
+      <!-- ÉCRAN 3 : PROJETS -->
+      <section id="screen-projects" class="screen-view">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+          <p style="color:var(--text-muted); font-size:0.9rem;">Organisez vos activités personnelles par projet avec suivi d'avancement automatique.</p>
+          <button id="btn-new-project" class="btn btn-primary btn-sm">➕ Nouveau projet</button>
+        </div>
+        <div id="projects-grid-container" class="projects-grid"></div>
+      </section>
+
+      <!-- ÉCRAN 4 : AGENDA HEBDOMADAIRE -->
+      <section id="screen-agenda" class="screen-view">
+        <div class="agenda-header">
+          <div class="calendar-nav">
+            <button id="btn-prev-week" class="btn btn-secondary btn-sm">◀ Semaine précédente</button>
+            <button id="btn-today-week" class="btn btn-secondary btn-sm">Aujourd'hui</button>
+            <button id="btn-next-week" class="btn btn-secondary btn-sm">Semaine suivante ▶</button>
+            <span id="calendar-week-label" style="font-weight: 600; font-size: 1rem; margin-left: 10px;"></span>
+          </div>
+
+          <!-- Légende du code couleur des sources d'événements -->
+          <div class="agenda-color-legend" title="Code couleur des événements selon leur provenance">
+            <span class="legend-pill legend-antigravite"><img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité</span>
+            <span class="legend-pill legend-google">🌐 Google Agenda</span>
+          </div>
+
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div id="agenda-google-indicator" class="google-sync-indicator disconnected" title="Statut de connexion Google Agenda (cliquez pour gérer)">
+              <span class="sync-dot"></span>
+              <span class="sync-label">Google Agenda</span>
+            </div>
+            <button id="btn-sync-calendar" class="btn btn-secondary btn-sm" title="Synchroniser immédiatement avec Google Agenda">
+              <span>🔄</span>
+              <span>Actualiser</span>
+            </button>
+            <button id="btn-new-event" class="btn btn-primary btn-sm">➕ Réserver un créneau</button>
+          </div>
+        </div>
+
+        <div class="calendar-container">
+          <div id="calendar-weekdays-container" class="calendar-weekdays"></div>
+          <div id="calendar-body-container" class="calendar-body"></div>
+        </div>
+      </section>
+
+      <!-- ÉCRAN 5 : NOTES -->
+      <section id="screen-notes" class="screen-view">
+        <div class="notes-layout">
+          <div class="notes-sidebar">
+            <div class="notes-search">
+              <input type="text" id="notes-search-input" placeholder="🔍 Rechercher dans les notes...">
+            </div>
+            <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.78rem; color:var(--text-dim); font-weight:600; letter-spacing:0.04em;">MES NOTES</span>
+              <button id="btn-new-note" class="btn-icon" title="Nouvelle note">➕</button>
+            </div>
+            <div id="notes-list-container" class="notes-list"></div>
+          </div>
+
+          <div class="notes-editor-container">
+            <div class="notes-toolbar">
+              <input type="text" id="note-title-editor" class="note-title-input" placeholder="Titre de la note">
+              <div style="display:flex; gap:8px;">
+                <button id="btn-export-note" class="btn btn-secondary btn-sm" title="Télécharger le fichier .md (compatible Obsidian)">📥 Exporter .md</button>
+                <button id="btn-delete-note" class="btn btn-danger btn-sm" title="Supprimer la note">🗑️</button>
+              </div>
+            </div>
+            <!-- Barre de liaison avec l'Agenda -->
+            <div class="note-agenda-bar" style="display:flex; align-items:center; gap:8px; padding:8px 16px; background-color:var(--bg-secondary); border-bottom:1px solid var(--border-color); flex-wrap:wrap; font-size:0.8rem;">
+              <span style="color:var(--text-muted); font-weight:500; display:flex; align-items:center; gap:5px;"><span>📅</span> <span>Lier à l'Agenda :</span></span>
+              <select id="note-input-event" class="form-control" style="font-size:0.78rem; padding:3px 8px; height:30px; max-width:280px;"></select>
+              <button type="button" id="btn-note-view-event" class="btn btn-secondary btn-sm" style="display:none; font-size:0.75rem; padding:3px 8px;" title="Consulter ce créneau dans l'Agenda">↗ Voir dans l'Agenda</button>
+              <button type="button" id="btn-note-schedule-event" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:3px 8px;" title="Créer un nouveau créneau d'agenda pour cette note">➕ Créer un créneau</button>
+            </div>
+            <div class="notes-panes">
+              <textarea id="note-body-editor" class="notes-textarea" placeholder="Rédigez votre note ici..."></textarea>
+              <div id="notes-preview-container" class="notes-preview" style="display: none;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÉCRAN 6 : SAUVEGARDES LOCALES -->
+      <section id="screen-backups" class="screen-view">
+        <div class="backups-container">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 10px;">
+            <div>
+              <h3 style="font-size:1.1rem; margin-bottom:4px;">Système de Sauvegarde et Restauration Locale</h3>
+              <p style="color:var(--text-muted); font-size:0.86rem;" id="last-backup-info">Chargement...</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button id="btn-create-backup" class="btn btn-primary">💾 Sauvegarder maintenant</button>
+              <button id="btn-export-backup-file" class="btn btn-secondary">📥 Exporter archive JSON</button>
+            </div>
+          </div>
+
+          <div style="background-color:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:16px;">
+            <span style="font-size:0.9rem; font-weight:600;">Importer une sauvegarde existante</span>
+            <p style="color:var(--text-dim); font-size:0.8rem; margin:6px 0 12px 0;">Sélectionnez un fichier JSON de sauvegarde Antigravité sauvegardé sur votre PC pour restaurer vos données.</p>
+            <input type="file" id="backup-file-input" accept=".json" class="form-control" style="font-size:0.82rem;">
+          </div>
+
+          <div>
+            <h4 style="font-size:0.95rem; margin-bottom:12px; color:var(--text-muted);">Historique des instantanés locaux</h4>
+            <table class="backup-table">
+              <thead>
+                <tr>
+                  <th>Libellé / Fichier</th>
+                  <th>Date & Heure</th>
+                  <th>Contenu</th>
+                  <th>Taille</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="backups-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÉCRAN 7 : PARAMÈTRES & APPARENCE -->
+      <section id="screen-settings" class="screen-view">
+        <div class="settings-container">
+          <div class="settings-header">
+            <div>
+              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 4px; color: var(--text-main);">Personnalisation & Apparence</h3>
+              <p style="color: var(--text-muted); font-size: 0.88rem;">Adaptez l'atmosphère visuelle et l'ergonomie d'Antigravité selon vos préférences.</p>
+            </div>
+            <button id="btn-reset-appearance" class="btn btn-secondary btn-sm" title="Rétablir les réglages initiaux">
+              <span>↺</span>
+              <span>Rétablir par défaut</span>
+            </button>
+          </div>
+
+          <!-- 1. Thème d'affichage -->
+          <div class="settings-section">
+            <h4 class="settings-section-title">Thème d'affichage</h4>
+            <p class="settings-section-desc">Choisissez l'ambiance lumineuse générale de l'interface.</p>
+            <div class="theme-options-grid">
+              <div class="theme-option-card active" data-theme-val="dark">
+                <div class="theme-card-preview theme-preview-dark">
+                  <div class="preview-sidebar"></div>
+                  <div class="preview-content">
+                    <div class="preview-line-title"></div>
+                    <div class="preview-card-item"></div>
+                  </div>
+                </div>
+                <div class="theme-card-info">
+                  <span class="theme-card-name">Sombre Élégant</span>
+                  <span class="theme-card-sub">Ardoise nuit équilibrée (par défaut)</span>
+                </div>
+              </div>
+
+              <div class="theme-option-card" data-theme-val="oled">
+                <div class="theme-card-preview theme-preview-oled">
+                  <div class="preview-sidebar"></div>
+                  <div class="preview-content">
+                    <div class="preview-line-title"></div>
+                    <div class="preview-card-item"></div>
+                  </div>
+                </div>
+                <div class="theme-card-info">
+                  <span class="theme-card-name">Sombre Profond (OLED)</span>
+                  <span class="theme-card-sub">Noir absolu, contraste maximal</span>
+                </div>
+              </div>
+
+              <div class="theme-option-card" data-theme-val="light">
+                <div class="theme-card-preview theme-preview-light">
+                  <div class="preview-sidebar"></div>
+                  <div class="preview-content">
+                    <div class="preview-line-title"></div>
+                    <div class="preview-card-item"></div>
+                  </div>
+                </div>
+                <div class="theme-card-info">
+                  <span class="theme-card-name">Clair Épuré</span>
+                  <span class="theme-card-sub">Luminosité douce, style papier blanc</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Couleur d'accentuation -->
+          <div class="settings-section">
+            <h4 class="settings-section-title">Couleur d'accentuation</h4>
+            <p class="settings-section-desc">Définissez la teinte dominante pour les boutons, puces actives et indicateurs visuels.</p>
+            <div class="accent-options-list">
+              <div class="accent-option-bubble active" data-accent-val="blue" style="--bubble-color: #38bdf8;">
+                <span class="bubble-dot"></span>
+                <span class="bubble-label">Bleu Ciel</span>
+                <span class="bubble-check">✓</span>
+              </div>
+              <div class="accent-option-bubble" data-accent-val="emerald" style="--bubble-color: #10b981;">
+                <span class="bubble-dot"></span>
+                <span class="bubble-label">Émeraude</span>
+                <span class="bubble-check">✓</span>
+              </div>
+              <div class="accent-option-bubble" data-accent-val="purple" style="--bubble-color: #a855f7;">
+                <span class="bubble-dot"></span>
+                <span class="bubble-label">Violet Astral</span>
+                <span class="bubble-check">✓</span>
+              </div>
+              <div class="accent-option-bubble" data-accent-val="amber" style="--bubble-color: #f59e0b;">
+                <span class="bubble-dot"></span>
+                <span class="bubble-label">Ambre Chaud</span>
+                <span class="bubble-check">✓</span>
+              </div>
+              <div class="accent-option-bubble" data-accent-val="rose" style="--bubble-color: #f43f5e;">
+                <span class="bubble-dot"></span>
+                <span class="bubble-label">Rose Framboise</span>
+                <span class="bubble-check">✓</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Densité d'affichage & Échelle typographique -->
+          <div class="settings-grid-duo">
+            <div class="settings-section">
+              <h4 class="settings-section-title">Densité d'affichage</h4>
+              <p class="settings-section-desc">Ajustez l'aération des listes et l'espacement des cartes.</p>
+              <div class="segmented-control">
+                <button class="segmented-btn density-option-btn active" data-density-val="comfortable">
+                  <span>Confortable</span>
+                </button>
+                <button class="segmented-btn density-option-btn" data-density-val="compact">
+                  <span>Compacte</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h4 class="settings-section-title">Taille du texte</h4>
+              <p class="settings-section-desc">Échelle de lisibilité globale de l'interface.</p>
+              <div class="segmented-control">
+                <button class="segmented-btn font-size-option-btn" data-size-val="small">
+                  <span>Petite (90%)</span>
+                </button>
+                <button class="segmented-btn font-size-option-btn active" data-size-val="normal">
+                  <span>Normale</span>
+                </button>
+                <button class="segmented-btn font-size-option-btn" data-size-val="large">
+                  <span>Grande (110%)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Style des angles (Bordures arrondies) -->
+          <div class="settings-section">
+            <h4 class="settings-section-title">Style des angles</h4>
+            <p class="settings-section-desc">Rayon de courbure appliqué aux cartes, boutons et fenêtres.</p>
+            <div class="segmented-control" style="max-width: 480px;">
+              <button class="segmented-btn radius-option-btn" data-radius-val="minimal">
+                <span>Épuré (4px)</span>
+              </button>
+              <button class="segmented-btn radius-option-btn active" data-radius-val="modern">
+                <span>Moderne (10px)</span>
+              </button>
+              <button class="segmented-btn radius-option-btn" data-radius-val="soft">
+                <span>Doux (16px)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 5. Fond d'écran (Image derrière les panneaux) -->
+          <div class="settings-section" id="settings-section-wallpaper">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+              <div>
+                <h4 class="settings-section-title">Image d'arrière-plan (Fond d'écran)</h4>
+                <p class="settings-section-desc">Affichez une ambiance ou une image personnalisée derrière les panneaux de l'application.</p>
+              </div>
+              <button type="button" id="btn-remove-wallpaper" class="btn btn-secondary btn-sm" style="display: none;">
+                <span>🗑️</span>
+                <span>Retirer le fond d'écran</span>
+              </button>
+            </div>
+
+            <!-- Grille de sélection des fonds prédéfinis et image personnalisée -->
+            <div class="wallpaper-presets-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin: 14px 0;">
+              <!-- Option : Aucun fond (par défaut) -->
+              <div class="wallpaper-card active" data-wallpaper="none" title="Aucun fond d'écran (couleur unie du thème)">
+                <div class="wallpaper-thumb wallpaper-thumb-none">
+                  <span>🚫</span>
+                </div>
+                <span class="wallpaper-name">Aucun</span>
+              </div>
+
+              <!-- Preset 1 : Cosmos / Nébuleuse -->
+              <div class="wallpaper-card" data-wallpaper="nebula" title="Ambiance cosmique violette & bleue">
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #0f172a, #312e81, #1e1b4b, #0c4a6e);"></div>
+                <span class="wallpaper-name">Cosmos</span>
+              </div>
+
+              <!-- Preset 2 : Aurore Boréale -->
+              <div class="wallpaper-card" data-wallpaper="aurora" title="Ambiance aurore émeraude & cyan">
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #022c22, #065f46, #0e7490, #1e1b4b);"></div>
+                <span class="wallpaper-name">Aurore</span>
+              </div>
+
+              <!-- Preset 3 : Minéral / Sombre -->
+              <div class="wallpaper-card" data-wallpaper="mineral" title="Nuances ardoise et carbone discrètes">
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #18181b, #27272a, #3f3f46, #09090b);"></div>
+                <span class="wallpaper-name">Minéral</span>
+              </div>
+
+              <!-- Preset 4 : Crépuscule Ambré -->
+              <div class="wallpaper-card" data-wallpaper="sunset" title="Chaleur crépusculaire ambrée & rubis">
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #451a03, #78350f, #831843, #311042);"></div>
+                <span class="wallpaper-name">Crépuscule</span>
+              </div>
+
+              <!-- Option : Image personnalisée depuis le PC -->
+              <label class="wallpaper-card wallpaper-card-upload" for="wallpaper-file-input" title="Sélectionnez une image de votre choix sur votre ordinateur (JPG, PNG, WebP)">
+                <div class="wallpaper-thumb wallpaper-thumb-upload" id="wallpaper-custom-thumb">
+                  <span>🖼️ ➕</span>
+                </div>
+                <span class="wallpaper-name">Image perso...</span>
+              </label>
+              <input type="file" id="wallpaper-file-input" accept="image/*" style="display: none;">
+            </div>
+
+            <!-- Contrôles avancés (Opacité & Flou de l'image) -->
+            <div id="wallpaper-controls" style="display: none; background: var(--bg-primary); border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 10px; border: 1px solid var(--border-color);">
+              <div class="form-row" style="margin-bottom: 0; gap: 16px;">
+                <div class="form-group" style="flex: 1;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label for="wallpaper-opacity-slider" style="font-size: 0.8rem; font-weight: 500; margin-bottom: 0;">Opacité de l'image :</label>
+                    <span id="wallpaper-opacity-val" style="font-size: 0.82rem; color: var(--accent); font-weight: 600;">25%</span>
+                  </div>
+                  <input type="range" id="wallpaper-opacity-slider" min="5" max="80" step="5" value="25" style="width: 100%; accent-color: var(--accent); cursor: pointer;">
+                  <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">Permet de voir l'image tout en gardant une excellente lisibilité de vos tâches.</span>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label for="wallpaper-blur-slider" style="font-size: 0.8rem; font-weight: 500; margin-bottom: 0;">Flou d'arrière-plan (Adoucissement) :</label>
+                    <span id="wallpaper-blur-val" style="font-size: 0.82rem; color: var(--accent); font-weight: 600;">0 px</span>
+                  </div>
+                  <input type="range" id="wallpaper-blur-slider" min="0" max="20" step="2" value="0" style="width: 100%; accent-color: var(--accent); cursor: pointer;">
+                  <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">Floute doucement les détails pour un rendu plus artistique et zen.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6. Aperçu interactif en direct -->
+          <div class="settings-section preview-live-section" id="appearance-live-preview">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 class="settings-section-title" style="margin: 0;">Aperçu interactif en direct</h4>
+              <span id="preview-summary-desc" style="font-size: 0.78rem; color: var(--text-dim);">Configuration en direct</span>
+            </div>
+            
+            <div class="preview-box-card">
+              <div class="preview-box-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span class="task-checkbox checked">✓</span>
+                  <span style="font-weight: 500; font-size: 0.92rem; color: var(--text-main);">Finaliser la présentation du projet</span>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                  <span class="badge badge-priority-urgent">🔥 Urgent</span>
+                  <span class="badge badge-planned">📅 Aujourd'hui</span>
+                </div>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">Progression du projet : 85%</span>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-secondary btn-sm" title="Exemple d'action secondaire">Action secondaire</button>
+                  <button class="btn btn-primary btn-sm" title="Exemple de bouton principal">Bouton accentué</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6. Intégration Sécurisée Google Agenda (Phase 2) -->
+          <div class="settings-section" id="settings-section-google">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+              <div>
+                <h4 class="settings-section-title">Connexion & Synchronisation Google Agenda</h4>
+                <p class="settings-section-desc">Connectez votre compte Google pour synchroniser vos événements avec Antigravité.</p>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span id="google-offline-queue-badge" class="status-chip" style="display: none; background: rgba(245,158,11,0.15); border: 1px solid #f59e0b; color: #f59e0b; font-size: 0.75rem;"></span>
+                <div id="google-connection-badge" class="status-chip status-disconnected">
+                  <span>⚪</span> <span>Non connecté</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Résumé compte & actions principales -->
+            <div class="google-auth-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div>
+                  <div id="google-user-email" style="font-size: 0.92rem; font-weight: 600; color: var(--text-main);"></div>
+                  <div id="google-creds-summary" style="font-size: 0.8rem; color: var(--text-dim); margin-top: 2px;">Vérification des identifiants...</div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                  <button id="btn-toggle-google-creds" class="btn btn-secondary btn-sm">Configurer Client ID / Secret</button>
+                  <button id="btn-google-login" class="btn btn-primary btn-sm" disabled>
+                    <span>🌐</span>
+                    <span>Se connecter avec Google</span>
+                  </button>
+                  <button id="btn-google-logout" class="btn btn-danger btn-sm" style="display: none;">
+                    <span>🔌</span>
+                    <span>Déconnecter le compte</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Formulaire pliable Client ID & Secret -->
+              <div id="google-creds-form" style="display: none; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <div style="background: var(--bg-primary); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 14px; font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;">
+                  ℹ️ <strong>Configuration requise (Google Cloud) :</strong> Créez un ID client OAuth 2.0 de type <em>Application de bureau</em> dans la Google Cloud Console avec l'API <em>Google Calendar API</em> activée.
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                  <label for="google-input-client-id" style="font-size: 0.82rem; font-weight: 500; color: var(--text-main); margin-bottom: 4px; display: block;">Client ID OAuth 2.0 *</label>
+                  <input type="text" id="google-input-client-id" class="form-control" placeholder="ex: 123456789-xxxx.apps.googleusercontent.com" style="width: 100%;">
+                </div>
+                <div class="form-group" style="margin-bottom: 14px;">
+                  <label for="google-input-client-secret" style="font-size: 0.82rem; font-weight: 500; color: var(--text-main); margin-bottom: 4px; display: block;">Client Secret OAuth 2.0 *</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input type="password" id="google-input-client-secret" class="form-control" placeholder="ex: GOCSPX-xxxxxx" style="flex: 1;">
+                    <button type="button" id="btn-toggle-secret-visibility" class="btn btn-secondary btn-sm" title="Afficher/Masquer le secret">👁️</button>
+                  </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                  <button id="btn-save-google-creds" class="btn btn-primary btn-sm">Enregistrer les identifiants</button>
+                </div>
+              </div>
+
+              <!-- Ligne choix calendrier -->
+              <div id="google-calendar-selection-row" style="display: none; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color); align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                <div>
+                  <label for="google-calendar-select" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 2px;">Calendrier synchronisé :</label>
+                  <span style="font-size: 0.78rem; color: var(--text-dim);">Choisissez le calendrier Google à synchroniser avec Antigravité</span>
+                </div>
+                <select id="google-calendar-select" class="form-control" style="min-width: 240px; max-width: 320px;"></select>
+              </div>
+
+              <!-- Section Test Lecture Seule (Phase 2) -->
+              <div id="google-test-fetch-section" style="display: none; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                  <div>
+                    <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Vérification de la lecture (Phase 2)</span>
+                    <p style="font-size: 0.78rem; color: var(--text-dim); margin: 0;">Interroge l'API en lecture seule sans modifier aucune donnée dans Google.</p>
+                  </div>
+                  <button id="btn-google-test-fetch" class="btn btn-secondary btn-sm">
+                    <span>🔍</span>
+                    <span>Tester la lecture des événements</span>
+                  </button>
+                </div>
+                <div id="google-test-fetch-results" style="display: none; margin-top: 12px;"></div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODALE TÂCHE -->
+  <div id="task-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="task-modal-title">Tâche</h3>
+        <button class="btn-icon" onclick="TasksManager.closeTaskModal()">✖</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="task-input-title">Titre de la tâche *</label>
+          <input type="text" id="task-input-title" class="form-control" placeholder="ex: Finaliser la relecture">
+        </div>
+        <div class="form-group">
+          <label for="task-input-desc">Description détaillée</label>
+          <textarea id="task-input-desc" class="form-control" rows="3" placeholder="Notes, liens, sous-objectifs..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="task-input-project">Projet (facultatif)</label>
+            <select id="task-input-project" class="form-control"></select>
+          </div>
+          <div class="form-group">
+            <label for="task-input-priority">Priorité</label>
+            <select id="task-input-priority" class="form-control">
+              <option value="none">Aucune</option>
+              <option value="low">Basse</option>
+              <option value="medium" selected>Normale</option>
+              <option value="high">Élevée</option>
+              <option value="urgent">Urgente 🔥</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="task-input-planned">📅 Date prévue de réalisation</label>
+            <input type="date" id="task-input-planned" class="form-control" title="Le jour où vous avez prévu de travailler dessus">
+            <span style="font-size: 0.72rem; color: var(--accent); margin-top: 3px; display: block;">⚡ Ajoute automatiquement un créneau dans votre agenda Antigravité</span>
+          </div>
+          <div class="form-group">
+            <label for="task-input-deadline">⏳ Échéance limite (Deadline)</label>
+            <input type="datetime-local" id="task-input-deadline" class="form-control" title="Date et heure limites impératives">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="TasksManager.closeTaskModal()">Annuler</button>
+        <button id="task-modal-save" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE PROJET -->
+  <div id="project-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="project-modal-title">Nouveau Projet</h3>
+        <button class="btn-icon" onclick="ProjectsManager.closeProjectModal()">✖</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="project-input-title">Nom du projet *</label>
+          <input type="text" id="project-input-title" class="form-control" placeholder="ex: Développement Antigravité">
+        </div>
+        <div class="form-group">
+          <label for="project-input-desc">Description</label>
+          <textarea id="project-input-desc" class="form-control" rows="3" placeholder="Objectif général du projet..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="project-input-color">Couleur d'identification</label>
+          <input type="color" id="project-input-color" class="form-control" style="height:40px; padding:2px;" value="#3b82f6">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="ProjectsManager.closeProjectModal()">Annuler</button>
+        <button id="project-modal-save" class="btn btn-primary">Enregistrer le projet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE CRÉNEAU AGENDA -->
+  <div id="event-modal" class="modal-overlay">
+    <div class="modal-content modal-content-lg">
+      <div class="modal-header">
+        <h3 id="event-modal-title">Créneau d'agenda</h3>
+        <button class="btn-icon" onclick="AgendaManager.closeEventModal()">✖</button>
+      </div>
+      <div class="modal-body">
+        <!-- Bannière d'information pour événement Google -->
+        <div id="event-modal-google-info" style="display: none; background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.25); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.82rem; color: var(--text-main); justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.1rem;">🌐</span>
+            <span><strong>Événement Google Agenda</strong> (Synchronisation bidirectionnelle active)</span>
+          </div>
+          <button type="button" id="btn-event-open-google" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 10px;" title="Consulter dans Google Agenda en ligne">Ouvrir en ligne ↗</button>
+        </div>
+
+        <!-- Sélecteur de destination (Créneau local vs Google Agenda) -->
+        <div class="form-group" id="event-group-destination" style="display: none;">
+          <label style="font-size: 0.82rem; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; display: block;">Enregistrer dans :</label>
+          <div class="segmented-control" style="max-width: 360px;">
+            <button type="button" class="segmented-btn active" id="event-dest-local" data-dest="local">
+              <span>📍 Local Antigravité</span>
+            </button>
+            <button type="button" class="segmented-btn" id="event-dest-google" data-dest="google">
+              <span>🌐 Google Agenda</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Titre principal de l'événement -->
+        <div class="form-group">
+          <label for="event-input-title">Titre de l'événement / créneau *</label>
+          <input type="text" id="event-input-title" class="form-control" placeholder="ex: Session de travail concentré, Rendez-vous...">
+        </div>
+
+        <!-- Horaires et Journée entière dans un bloc ergonomique -->
+        <div class="modal-form-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">Horaires du créneau</span>
+            <label for="event-input-allday" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-muted); cursor: pointer; user-select: none;">
+              <input type="checkbox" id="event-input-allday" style="cursor: pointer; width: 15px; height: 15px;">
+              <span>Journée entière</span>
+            </label>
+          </div>
+          <div class="form-row" style="margin-bottom: 0;">
+            <div class="form-group" style="flex: 1;">
+              <label for="event-input-start">Début *</label>
+              <input type="datetime-local" id="event-input-start" class="form-control">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label for="event-input-end">Fin *</label>
+              <input type="datetime-local" id="event-input-end" class="form-control">
+            </div>
+          </div>
+        </div>
+
+        <!-- Lieu et Couleur côte à côte -->
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" id="event-group-location" style="flex: 3;">
+            <label for="event-input-location">📍 Lieu / Visioconférence (facultatif)</label>
+            <input type="text" id="event-input-location" class="form-control" placeholder="ex: Bureau, Google Meet, Salle 12...">
+          </div>
+          <div class="form-group" style="flex: 1; min-width: 140px;">
+            <label for="event-input-color">🎨 Couleur d'affichage</label>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="color" id="event-input-color" class="form-control" style="height: 38px; padding: 2px; width: 100%; cursor: pointer;" value="#3b82f6">
+            </div>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label for="event-input-desc">📝 Description / Notes du créneau</label>
+          <textarea id="event-input-desc" class="form-control" rows="2" placeholder="Détails du créneau, ordre du jour, informations utiles..." style="resize: vertical;"></textarea>
+        </div>
+
+        <!-- Section des Liaisons Antigravité (Tâche & Note) -->
+        <div class="modal-form-section">
+          <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">
+            Liaisons avec vos éléments Antigravité
+          </div>
+          <div class="form-row" style="margin-bottom: 0; gap: 16px;">
+            <div class="form-group" style="flex: 1;">
+              <label for="event-input-task">📌 Tâche rattachée (facultative)</label>
+              <select id="event-input-task" class="form-control" style="font-size: 0.82rem;"></select>
+              <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px; display: block;">La suppression du créneau n'affectera jamais la tâche.</span>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label for="event-input-note" style="margin-bottom: 0;">📄 Note associée (facultative)</label>
+                <button type="button" id="btn-event-open-note" class="btn btn-secondary btn-sm" style="display: none; padding: 2px 8px; font-size: 0.74rem; height: 22px;" title="Ouvrir cette note dans l'éditeur de notes">↗ Ouvrir la note</button>
+              </div>
+              <select id="event-input-note" class="form-control" style="font-size: 0.82rem;"></select>
+              <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px; display: block;">Liez ou rédigez un compte-rendu pour ce créneau.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button id="event-modal-delete" class="btn btn-danger">Supprimer le créneau</button>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" onclick="AgendaManager.closeEventModal()">Annuler</button>
+          <button id="event-modal-save" class="btn btn-primary" style="min-width: 170px;">Enregistrer le créneau</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MENU CONTEXTUEL AGENDA (CLIC DROIT) -->
+  <div id="agenda-context-menu" class="context-menu" style="display: none;">
+    <div id="context-menu-header" class="context-menu-header"></div>
+    <div class="context-menu-divider"></div>
+    <div id="context-menu-items" class="context-menu-items"></div>
+  </div>
+
+  <!-- Conteneur de Toasts -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts JavaScript modulaires -->
+  <script src="./js/storage.js"></script>
+  <script src="./js/tasks.js"></script>
+  <script src="./js/projects.js"></script>
+  <script src="./js/agenda.js"></script>
+  <script src="./js/notes.js"></script>
+  <script src="./js/backups.js"></script>
+  <script src="./js/google-sync.js"></script>
+  <script src="./js/settings.js"></script>
+  <script src="./js/notifications.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

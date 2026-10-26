@@ -1,0 +1,31 @@
+# ==============================================================================
+# .gitattributes - Projet Electron Antigravité
+# ==============================================================================
+
+# Normalisation automatique des fins de ligne par défaut
+* text=auto
+
+# Fichiers sources et documentation : forcer LF (compatible multiplateforme / web)
+*.js text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+
+# Scripts Windows : forcer CRLF (requis pour les interpréteurs cmd.exe et PowerShell)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Fichiers binaires (images, exécutables, polices, bibliothèques compilées)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.svg text
+*.exe binary
+*.dll binary
+*.node binary
+*.zip binary

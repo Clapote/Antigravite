@@ -1,0 +1,9 @@
+{
+  "theme": "dark",
+  "startOfWeek": 1,
+  "defaultView": "home",
+  "autoBackupOnLaunch": true,
+  "backupRetentionDays": 30,
+  "notificationsEnabled": true,
+  "userName": "Utilisateur"
+}

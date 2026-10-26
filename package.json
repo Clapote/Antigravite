@@ -1,0 +1,47 @@
+{
+  "name": "antigravite",
+  "version": "1.0.0",
+  "description": "Application personnelle de gestion des tâches",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "fr.antigravite.app",
+    "productName": "Antigravite",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "assets/**/*",
+      "!assets/originals/**/*",
+      "css/**/*",
+      "js/**/*",
+      "services/**/*",
+      "data/**/*",
+      "package.json",
+      "!**/*.bak*",
+      "!**/*.backup*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

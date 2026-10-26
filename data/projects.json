@@ -1,0 +1,26 @@
+[
+  {
+    "id": "proj-1",
+    "title": "Développement Antigravité",
+    "description": "Conception et évolution de l'application personnelle de gestion pour Windows.",
+    "color": "#3b82f6",
+    "status": "in_progress",
+    "createdAt": "2026-10-20T09:00:00Z"
+  },
+  {
+    "id": "proj-2",
+    "title": "Organisation & Routine",
+    "description": "Mise en place des habitudes quotidiennes, révisions hebdomadaires et sauvegardes.",
+    "color": "#10b981",
+    "status": "in_progress",
+    "createdAt": "2026-10-21T10:30:00Z"
+  },
+  {
+    "id": "proj-3",
+    "title": "Recherche & Rédaction",
+    "description": "Notes de lecture, synthèses et préparation des fiches Obsidian.",
+    "color": "#8b5cf6",
+    "status": "planned",
+    "createdAt": "2026-10-22T14:00:00Z"
+  }
+]
