@@ -9,11 +9,17 @@
 
 const AgendaManager = {
   currentWeekStart: null,
+  currentView: 'week', // 'day', 'week', 'month'
   dayHoursStart: 7, // 07:00
   dayHoursEnd: 23,  // 23:00
   slotHeight: 50,   // 50px par heure
 
   init() {
+    if (this.initialized) {
+      this.render();
+      return;
+    }
+    this.initialized = true;
     this.initWeek();
     this.render();
     this.bindEvents();
@@ -31,28 +37,104 @@ const AgendaManager = {
     this.currentWeekStart = monday;
   },
 
+  navigatePrev() {
+    if (!this.currentWeekStart) this.initWeek();
+    if (this.currentView === 'day') {
+      this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 1);
+    } else if (this.currentView === 'month') {
+      this.currentWeekStart.setMonth(this.currentWeekStart.getMonth() - 1);
+    } else {
+      this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 7);
+    }
+    this.render();
+  },
+
+  navigateNext() {
+    if (!this.currentWeekStart) this.initWeek();
+    if (this.currentView === 'day') {
+      this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 1);
+    } else if (this.currentView === 'month') {
+      this.currentWeekStart.setMonth(this.currentWeekStart.getMonth() + 1);
+    } else {
+      this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 7);
+    }
+    this.render();
+  },
+
+  navigateToday() {
+    const now = new Date();
+    if (this.currentView === 'day') {
+      now.setHours(0, 0, 0, 0);
+      this.currentWeekStart = now;
+    } else if (this.currentView === 'month') {
+      now.setDate(1);
+      now.setHours(0, 0, 0, 0);
+      this.currentWeekStart = now;
+    } else {
+      this.initWeek();
+    }
+    this.render();
+  },
+
+  setView(view) {
+    if (!['day', 'week', 'month'].includes(view)) view = 'week';
+    this.currentView = view;
+    if (typeof document !== 'undefined') {
+      const viewButtons = document.querySelectorAll('.btn-agenda-view');
+      viewButtons.forEach(b => {
+        b.classList.toggle('active', b.dataset.view === view);
+      });
+    }
+    this.render();
+  },
+
   bindEvents() {
     const btnPrev = document.getElementById('btn-prev-week');
     if (btnPrev) {
-      btnPrev.addEventListener('click', () => {
-        this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 7);
-        this.render();
-      });
+      btnPrev.addEventListener('click', () => this.navigatePrev());
     }
 
     const btnNext = document.getElementById('btn-next-week');
     if (btnNext) {
-      btnNext.addEventListener('click', () => {
-        this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 7);
-        this.render();
-      });
+      btnNext.addEventListener('click', () => this.navigateNext());
     }
 
     const btnToday = document.getElementById('btn-today-week');
     if (btnToday) {
-      btnToday.addEventListener('click', () => {
-        this.initWeek();
-        this.render();
+      btnToday.addEventListener('click', () => this.navigateToday());
+    }
+
+    // Bascule des vues Jour / Semaine / Mois
+    const viewButtons = document.querySelectorAll('.btn-agenda-view');
+    viewButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.view) {
+          this.setView(btn.dataset.view);
+        }
+      });
+    });
+
+    // Calendrier de saut direct vers une date
+    const jumpInput = document.getElementById('agenda-jump-date');
+    if (jumpInput) {
+      jumpInput.addEventListener('change', (e) => {
+        if (!e.target.value) return;
+        const picked = new Date(e.target.value + 'T00:00:00');
+        if (!isNaN(picked.getTime())) {
+          if (this.currentView === 'day') {
+            this.currentWeekStart = picked;
+          } else if (this.currentView === 'month') {
+            picked.setDate(1);
+            this.currentWeekStart = picked;
+          } else {
+            const day = picked.getDay();
+            const diff = picked.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(picked.setDate(diff));
+            monday.setHours(0, 0, 0, 0);
+            this.currentWeekStart = monday;
+          }
+          this.render();
+        }
       });
     }
 
@@ -73,6 +155,47 @@ const AgendaManager = {
             window.App.showToast("Service Google non connecté ou indisponible", "info");
           }
         }
+      });
+    }
+
+    // Clic direct sur un créneau libre de la grille pour créer un événement
+    const calendarBody = document.getElementById('calendar-body-container');
+    if (calendarBody && !this._gridClickBound) {
+      this._gridClickBound = true;
+      calendarBody.addEventListener('click', (e) => {
+        // Ignorer si on a cliqué sur un événement ou si un drag vient de se terminer
+        if (e.target.closest('.calendar-event')) return;
+        if (this._suppressNextClick) {
+          this._suppressNextClick = false;
+          return;
+        }
+
+        const dayCol = e.target.closest('.day-column');
+        if (!dayCol) return;
+
+        const dateStr = dayCol.dataset.date;
+        if (!dateStr) return;
+
+        const rect = dayCol.getBoundingClientRect();
+        const relY = Math.max(0, e.clientY - rect.top);
+        const hoursOffset = relY / this.slotHeight;
+        const clickedHour = Math.floor(this.dayHoursStart + hoursOffset);
+
+        // Arrondir par pas de 15 minutes (00, 15, 30, 45)
+        const rawMinutes = Math.floor((hoursOffset % 1) * 60);
+        const roundedMinutes = Math.min(45, Math.floor(rawMinutes / 15) * 15);
+        const startHourStr = String(Math.min(23, Math.max(0, clickedHour))).padStart(2, '0');
+        const startMinStr = String(roundedMinutes).padStart(2, '0');
+        const startTime = `${startHourStr}:${startMinStr}`;
+
+        const endHour = Math.min(23, clickedHour + 1);
+        const endHourStr = String(endHour).padStart(2, '0');
+        const endTime = `${endHourStr}:${startMinStr}`;
+
+        this.openEventModal(null, {
+          start: `${dateStr}T${startTime}`,
+          end: `${dateStr}T${endTime}`
+        });
       });
     }
 
@@ -107,6 +230,25 @@ const AgendaManager = {
 
   addEvent(eventData) {
     const events = this.getAll();
+
+    let taskId = eventData.taskId || null;
+    if (eventData.createTask && !taskId) {
+      if (typeof TasksManager !== 'undefined' && typeof TasksManager.addTask === 'function') {
+        const startDateStr = (eventData.start || '').slice(0, 10);
+        const startTimeStr = eventData.start && eventData.start.length >= 16 ? eventData.start.slice(11, 16) : '09:00';
+        const newTask = TasksManager.addTask({
+          title: eventData.title.trim(),
+          description: eventData.description ? eventData.description.trim() : '',
+          projectId: eventData.taskProject || null,
+          priority: eventData.taskPriority || 'medium',
+          plannedDate: startDateStr || null,
+          plannedTime: startTimeStr,
+          skipEventCreation: true
+        });
+        if (newTask && newTask.id) taskId = newTask.id;
+      }
+    }
+
     const newEvent = {
       id: 'evt-' + Date.now(),
       title: eventData.title.trim(),
@@ -116,16 +258,62 @@ const AgendaManager = {
       end: eventData.end,
       isAllDay: !!eventData.isAllDay,
       color: eventData.color || '#3b82f6',
-      taskId: eventData.taskId || null,
+      taskId: taskId,
       noteId: eventData.noteId || null,
+      recurrence: eventData.recurrence || 'none',
       externalId: null,
       source: 'local',
       createdAt: new Date().toISOString()
     };
     events.push(newEvent);
     this.saveAll(events);
+
+    // Si lié à une tâche, synchroniser la date planifiée de la tâche
+    if (newEvent.taskId && newEvent.start) {
+      this.syncEventDateToTask(newEvent.taskId, newEvent.start.slice(0, 10));
+    }
+
     if (window.App) window.App.showToast("Créneau ajouté dans l'agenda", "success");
     return newEvent;
+  },
+
+  // Synchroniser la date d'un événement vers sa tâche liée
+  syncEventDateToTask(taskId, newDateStr) {
+    if (!taskId || !newDateStr) return;
+    if (typeof StorageManager === 'undefined' || typeof StorageManager.getTasks !== 'function') return;
+
+    try {
+      const tasks = StorageManager.getTasks();
+      let modified = false;
+
+      const updateRecursive = (list) => {
+        for (const t of list) {
+          if (t.id === taskId) {
+            if (t.plannedDate !== newDateStr) {
+              t.plannedDate = newDateStr;
+              t.updatedAt = new Date().toISOString();
+              modified = true;
+            }
+            return true;
+          }
+          if (t.subtasks && t.subtasks.length > 0) {
+            if (updateRecursive(t.subtasks)) return true;
+          }
+        }
+        return false;
+      };
+
+      updateRecursive(tasks);
+
+      if (modified) {
+        StorageManager.saveTasks(tasks);
+        if (typeof window !== 'undefined' && window.TasksManager && typeof window.TasksManager.render === 'function') {
+          window.TasksManager.render();
+        }
+      }
+    } catch (err) {
+      console.warn("[AgendaManager] Erreur lors de la synchronisation de l'événement vers la tâche :", err);
+    }
   },
 
   updateEvent(id, updatedData) {
@@ -142,9 +330,17 @@ const AgendaManager = {
     evt.color = updatedData.color || evt.color;
     evt.taskId = updatedData.taskId !== undefined ? updatedData.taskId : evt.taskId;
     if (updatedData.noteId !== undefined) evt.noteId = updatedData.noteId;
+    if (updatedData.recurrence !== undefined) evt.recurrence = updatedData.recurrence;
     evt.updatedAt = new Date().toISOString();
 
     this.saveAll(events);
+
+    // Synchronisation bidirectionnelle : si l'événement est lié à une tâche,
+    // synchroniser la date prévue de la tâche selon le créneau dans l'agenda
+    if (evt.taskId && evt.start) {
+      this.syncEventDateToTask(evt.taskId, evt.start.slice(0, 10));
+    }
+
     if (window.App) window.App.showToast("Créneau mis à jour", "info");
     return true;
   },
@@ -186,12 +382,32 @@ const AgendaManager = {
     return `${year}-${month}-${day}`;
   },
 
-  // Détermine si un événement (mono-jour, multi-jours, all-day ou minuté) est actif à la date dateStr (YYYY-MM-DD)
+  // Détermine si un événement (mono-jour, multi-jours, all-day, minuté ou récurrent) est actif à la date dateStr (YYYY-MM-DD)
   isEventOnDate(evt, dateStr) {
     if (!evt || !evt.start) return false;
     const startDay = evt.start.slice(0, 10);
     const endDay = evt.end ? evt.end.slice(0, 10) : startDay;
     const effectiveEndDay = endDay >= startDay ? endDay : startDay;
+
+    // Prise en charge de la récurrence (daily, weekly, monthly)
+    if (evt.recurrence && evt.recurrence !== 'none') {
+      if (dateStr < startDay) return false; // Avant la date de création
+      if (evt.recurrenceEnd && dateStr > evt.recurrenceEnd) return false;
+
+      if (evt.recurrence === 'daily') {
+        return true;
+      }
+      if (evt.recurrence === 'weekly') {
+        const targetD = new Date(`${dateStr}T00:00:00`);
+        const startD = new Date(`${startDay}T00:00:00`);
+        return targetD.getDay() === startD.getDay();
+      }
+      if (evt.recurrence === 'monthly') {
+        const targetD = new Date(`${dateStr}T00:00:00`);
+        const startD = new Date(`${startDay}T00:00:00`);
+        return targetD.getDate() === startD.getDate();
+      }
+    }
 
     // Si la date est en dehors de la plage d'inclusion [startDay, effectiveEndDay]
     if (dateStr < startDay || dateStr > effectiveEndDay) {
@@ -244,8 +460,8 @@ const AgendaManager = {
         const rawStartMin = fastParseMinutes(evt.start, 8 * 60);
         const rawEndMin = fastParseMinutes(evt.end, rawStartMin + 60);
 
-        if (!dateStr || startDay === effectiveEndDay) {
-          // Événement mono-jour ou pas de dateStr fourni
+        if (!dateStr || startDay === effectiveEndDay || (evt.recurrence && evt.recurrence !== 'none')) {
+          // Événement mono-jour, récurrent ou pas de dateStr fourni
           startMin = rawStartMin;
           endMin = Math.max(startMin + 20, rawEndMin);
         } else {
@@ -332,38 +548,162 @@ const AgendaManager = {
     return layout;
   },
 
+  renderMonthView(allEvents, taskMap, noteById, noteByEventId) {
+    if (!this.currentWeekStart) this.initWeek();
+    const gridEl = document.getElementById('calendar-month-grid');
+    if (!gridEl) return;
+
+    const currentYear = this.currentWeekStart.getFullYear();
+    const currentMonth = this.currentWeekStart.getMonth();
+    const firstOfMonth = new Date(currentYear, currentMonth, 1);
+
+    const firstDayIndex = firstOfMonth.getDay(); // 0 = Dim, 1 = Lun, ...
+    const diffToMonday = firstDayIndex === 0 ? -6 : 1 - firstDayIndex;
+    const startCalendarDate = new Date(currentYear, currentMonth, 1 + diffToMonday);
+    startCalendarDate.setHours(0, 0, 0, 0);
+
+    const todayStr = this.formatDateIso(new Date());
+    const lastOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const cellsToRender = (startCalendarDate.getTime() + 35 * 86400000) <= lastOfMonth.getTime() ? 42 : 35;
+
+    let gridHtml = '';
+    const iterDate = new Date(startCalendarDate);
+
+    for (let c = 0; c < cellsToRender; c++) {
+      const dateIso = this.formatDateIso(iterDate);
+      const isOtherMonth = iterDate.getMonth() !== currentMonth;
+      const isToday = dateIso === todayStr;
+
+      const dayEvents = allEvents.filter(e => this.isEventOnDate(e, dateIso));
+
+      let pillsHtml = '';
+      dayEvents.forEach(e => {
+        const eventColor = e.color || (e.source === 'google' ? '#2563eb' : '#7c3aed');
+        const startTimeStr = e.start && e.start.length >= 16 ? e.start.slice(11, 16) : '';
+        const titleSafe = this.escapeHtml(e.title || '(Sans titre)');
+        pillsHtml += `
+          <div class="month-event-pill" 
+               style="background: ${eventColor};" 
+               data-event-id="${e.id}"
+               onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}');"
+               title="${titleSafe} (${e.isAllDay ? 'Journée' : startTimeStr})">
+            ${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${titleSafe}
+          </div>
+        `;
+      });
+
+      gridHtml += `
+        <div class="month-day-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}" 
+             data-date="${dateIso}"
+             onclick="AgendaManager.openEventModal(null, { start: '${dateIso}T09:00', end: '${dateIso}T10:00' });">
+          <div class="month-day-header">
+            <span class="month-day-number">${iterDate.getDate()}</span>
+          </div>
+          <div class="month-day-events" style="display:flex; flex-direction:column; gap:2px; overflow-y:auto; max-height:85px;">
+            ${pillsHtml}
+          </div>
+        </div>
+      `;
+
+      iterDate.setDate(iterDate.getDate() + 1);
+    }
+
+    gridEl.innerHTML = gridHtml;
+  },
+
   render() {
     if (typeof document === 'undefined') return;
     const weekdaysEl = document.getElementById('calendar-weekdays-container');
     const bodyEl = document.getElementById('calendar-body-container');
     const labelEl = document.getElementById('calendar-week-label');
+    const weekViewContainer = document.getElementById('calendar-week-view');
+    const monthViewContainer = document.getElementById('calendar-month-view');
     if (!weekdaysEl || !bodyEl) return;
+    if (!this.currentWeekStart) this.initWeek();
+
+    const allEvents = this.getAll();
+    const tasks = StorageManager.getTasks();
+    const allNotes = StorageManager.getNotes();
+
+    // Indexation O(1) des tâches
+    const taskMap = new Map();
+    const indexTasksRecursive = (list) => {
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i];
+        taskMap.set(t.id, { task: t, parentList: list });
+        if (t.subtasks && t.subtasks.length > 0) indexTasksRecursive(t.subtasks);
+      }
+    };
+    indexTasksRecursive(tasks);
+
+    // Indexation O(1) des notes
+    const noteById = new Map();
+    const noteByEventId = new Map();
+    for (let i = 0; i < allNotes.length; i++) {
+      const n = allNotes[i];
+      noteById.set(n.id, n);
+      if (n.linkedEventId) noteByEventId.set(n.linkedEventId, n);
+    }
+
+    // Gestion de la vue Mois
+    if (this.currentView === 'month') {
+      if (weekViewContainer) weekViewContainer.style.display = 'none';
+      if (monthViewContainer) monthViewContainer.style.display = 'flex';
+
+      const monthDate = new Date(this.currentWeekStart);
+      const monthTitle = monthDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      if (labelEl) labelEl.textContent = monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1);
+
+      this.renderMonthView(allEvents, taskMap, noteById, noteByEventId);
+      return;
+    }
+
+    // Vues Jour et Semaine
+    if (weekViewContainer) weekViewContainer.style.display = 'flex';
+    if (monthViewContainer) monthViewContainer.style.display = 'none';
 
     // Calcul dynamique de la hauteur des créneaux horaires
-    // pour occuper exactement l'intégralité de l'espace vertical sans barres de défilement
     const availableHeight = bodyEl.clientHeight || (typeof window !== 'undefined' ? (window.innerHeight - 170) : 800);
     const totalHours = this.dayHoursEnd - this.dayHoursStart; // 23 - 7 = 16
     this.slotHeight = Math.max(34, Math.floor(availableHeight / totalHours));
     const totalGridHeight = this.slotHeight * totalHours;
 
-    const days = this.getWeekDays();
+    let days = [];
     const todayStr = this.formatDateIso(new Date());
 
-    // Mettre à jour le titre de la semaine
-    const options = { day: 'numeric', month: 'short' };
-    const firstDayStr = days[0].toLocaleDateString('fr-FR', options);
-    const lastDayStr = days[6].toLocaleDateString('fr-FR', { ...options, year: 'numeric' });
-    if (labelEl) labelEl.textContent = `${firstDayStr} - ${lastDayStr}`;
+    if (this.currentView === 'day') {
+      const singleDay = new Date(this.currentWeekStart);
+      days = [singleDay];
+      const dayTitle = singleDay.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      if (labelEl) labelEl.textContent = dayTitle.charAt(0).toUpperCase() + dayTitle.slice(1);
 
-    // 1. En-têtes des jours de la semaine
+      weekdaysEl.style.gridTemplateColumns = '55px 1fr';
+      weekdaysEl.style.minWidth = 'auto';
+      bodyEl.style.gridTemplateColumns = '55px 1fr';
+      bodyEl.style.minWidth = 'auto';
+    } else {
+      days = this.getWeekDays();
+      const options = { day: 'numeric', month: 'short' };
+      const firstDayStr = days[0].toLocaleDateString('fr-FR', options);
+      const lastDayStr = days[6].toLocaleDateString('fr-FR', { ...options, year: 'numeric' });
+      if (labelEl) labelEl.textContent = `${firstDayStr} - ${lastDayStr}`;
+
+      weekdaysEl.style.gridTemplateColumns = '55px repeat(7, 1fr)';
+      weekdaysEl.style.minWidth = '680px';
+      bodyEl.style.gridTemplateColumns = '55px repeat(7, 1fr)';
+      bodyEl.style.minWidth = '680px';
+    }
+
+    // 1. En-têtes des jours
     const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
     let weekdaysHtml = `<div class="weekday-header" style="border-right: 1px solid var(--border-color);"></div>`;
-    days.forEach((d, idx) => {
+    days.forEach((d) => {
       const iso = this.formatDateIso(d);
       const isToday = iso === todayStr;
+      const dayIdx = (d.getDay() + 6) % 7;
       weekdaysHtml += `
         <div class="weekday-header ${isToday ? 'today' : ''}">
-          <span class="weekday-name">${dayNames[idx]}</span>
+          <span class="weekday-name">${dayNames[dayIdx]}</span>
           <span class="weekday-num">${d.getDate()}</span>
         </div>
       `;
@@ -378,48 +718,21 @@ const AgendaManager = {
     }
     bodyHtml += `</div>`;
 
-    // 3. Colonnes des 7 jours
-    const allEvents = this.getAll();
-    const tasks = StorageManager.getTasks();
-    const allNotes = StorageManager.getNotes();
-
-    // Indexation O(1) des tâches pour éviter les recherches récursives répétées
-    const taskMap = new Map();
-    const indexTasksRecursive = (list) => {
-      for (let i = 0; i < list.length; i++) {
-        const t = list[i];
-        taskMap.set(t.id, { task: t, parentList: list });
-        if (t.subtasks && t.subtasks.length > 0) indexTasksRecursive(t.subtasks);
-      }
-    };
-    indexTasksRecursive(tasks);
-
-    // Indexation O(1) des notes pour éviter les scans linéaires
-    const noteById = new Map();
-    const noteByEventId = new Map();
-    for (let i = 0; i < allNotes.length; i++) {
-      const n = allNotes[i];
-      noteById.set(n.id, n);
-      if (n.linkedEventId) noteByEventId.set(n.linkedEventId, n);
-    }
-
-    // Pré-filtrage des événements chevauchant la semaine affichée
-    const weekStartIso = this.formatDateIso(days[0]);
-    const weekEndIso = this.formatDateIso(days[6]);
-    const weekEvents = allEvents.filter(e => {
+    // 3. Colonnes des jours
+    const startRangeIso = this.formatDateIso(days[0]);
+    const endRangeIso = this.formatDateIso(days[days.length - 1]);
+    const rangeEvents = allEvents.filter(e => {
       if (!e || !e.start) return false;
+      if (e.recurrence && e.recurrence !== 'none') return true;
       const sDay = e.start.slice(0, 10);
       const eDay = e.end ? e.end.slice(0, 10) : sDay;
       const effEnd = eDay >= sDay ? eDay : sDay;
-      return effEnd >= weekStartIso && sDay <= weekEndIso;
+      return effEnd >= startRangeIso && sDay <= endRangeIso;
     });
 
     days.forEach(d => {
       const dateStr = this.formatDateIso(d);
-      // Filtrer les événements de ce jour (horodatés ou all-day, mono ou multi-jours)
-      const dayEvents = weekEvents.filter(e => this.isEventOnDate(e, dateStr));
-
-      // Calcul de la disposition en colonnes pour les chevauchements
+      const dayEvents = rangeEvents.filter(e => this.isEventOnDate(e, dateStr));
       const layoutEvents = this.computeOverlappingLayout(dayEvents, dateStr);
 
       bodyHtml += `<div class="day-column" data-date="${dateStr}" style="height: ${totalGridHeight}px; background-size: 100% ${this.slotHeight}px;">`;
@@ -428,14 +741,14 @@ const AgendaManager = {
         const e = item.event;
         const startH = item.startMin / 60;
         const endH = item.endMin / 60;
-        
+
         // Position relative à 07h00
         const top = Math.max(0, (startH - this.dayHoursStart) * this.slotHeight);
         const durationH = Math.max(0.35, endH - startH);
         const height = Math.max(26, durationH * this.slotHeight - 2);
 
         // Position horizontale en colonnes virtuelles pour chevauchements
-        const widthPct = (100 / item.totalCols) - 1;
+        const widthPct = item.totalCols > 1 ? (100 / item.totalCols) - 1.5 : 99;
         const leftPct = (item.colIndex * (100 / item.totalCols)) + 0.5;
 
         const isGoogle = e.source === 'google';
@@ -448,7 +761,7 @@ const AgendaManager = {
 
         let timeDisplay = '';
         if (e.isAllDay) {
-          timeDisplay = isMultiDay ? 'Journée entière (multi-jours)' : 'Journée entière';
+          timeDisplay = isMultiDay ? 'Journée (multi-j)' : 'Journée entière';
         } else if (isMultiDay) {
           if (dateStr === startDay) {
             timeDisplay = `${startTimeStr} ➔`;
@@ -461,47 +774,44 @@ const AgendaManager = {
           timeDisplay = `${startTimeStr} - ${endTimeStr}`;
         }
 
-        // Vérifier si lié à une tâche ou une note (Lookups O(1))
         const linkedTask = e.taskId ? taskMap.get(e.taskId) : null;
         const linkedNote = (e.noteId ? noteById.get(e.noteId) : null) || noteByEventId.get(e.id);
-
         const isCompact = height < 44;
+
+        // Code couleur validé par l'utilisateur (dynamique inline)
+        const eventColor = e.color || (isGoogle ? '#2563eb' : '#7c3aed');
 
         bodyHtml += `
           <div class="calendar-event ${isGoogle ? 'google-event' : 'antigravite-event'} ${isCompact ? 'compact' : ''}" 
                data-event-id="${e.id}"
-               style="top: ${top}px; height: ${height}px; left: ${leftPct}%; width: ${widthPct}%;"
+               style="top: ${top}px; height: ${height}px; left: ${leftPct}%; width: ${widthPct}%; background: linear-gradient(135deg, ${eventColor} 0%, ${eventColor}ee 100%) !important; border: 1px solid rgba(255, 255, 255, 0.25) !important; border-left: 4px solid rgba(255, 255, 255, 0.8) !important; color: #ffffff !important; box-shadow: 0 2px 6px rgba(0,0,0,0.35);"
                onmousedown="AgendaManager.onEventMouseDown(event, '${e.id}')"
                onclick="AgendaManager.onEventClick(event, '${e.id}')"
                title="${this.escapeHtml(e.title)} (${timeDisplay}${isMultiDay ? ' • du ' + startDay + ' au ' + endDay : ''})${isGoogle ? ' [Google Agenda]' : ' [Antigravité]'}${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
             
-            <!-- Limite supérieure pour étirer/réduire l'heure de début -->
-            <div class="event-resize-handle handle-top" data-action="resize-top" title="Maintenir le clic gauche pour ajuster l'heure de début"></div>
+            <div class="event-resize-handle handle-top" data-action="resize-top" title="Ajuster l'heure de début"></div>
 
             ${isCompact ? `
-              <!-- Affichage compact créneaux courts (< 45 min) : Titre mis en vedette -->
               <div class="event-compact-row">
-                <span class="event-source-dot ${isGoogle ? 'dot-google' : 'dot-antigravite'}" title="${isGoogle ? 'Google Agenda' : 'Antigravité'}"></span>
-                <span class="event-title compact">${this.escapeHtml(e.title || '(Sans titre)')}</span>
-                <span class="event-time-compact">${e.isAllDay ? 'Journée' : (isMultiDay && dateStr !== startDay ? '➔ ' + endTimeStr : startTimeStr)}</span>
+                ${isGoogle ? '<span class="event-origin-tag google" style="font-size:0.55rem; padding:0 3px;">G</span>' : ''}
+                <span class="event-title compact" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</span>
+                <span class="event-time-compact" style="color: rgba(255,255,255,0.95); margin-left: auto;">${e.isAllDay ? 'Jour' : (isMultiDay && dateStr !== startDay ? '➔ ' + endTimeStr : startTimeStr)}</span>
               </div>
             ` : `
-              <!-- Affichage standard : Titre visible du premier coup d'œil + pastille temps + badge source -->
               <div class="event-header-row">
                 ${isGoogle ? (e.syncStatus && e.syncStatus.startsWith('pending')
-                  ? '<span class="event-source-badge badge-pending"><span>⏳</span> En attente</span>'
-                  : '<span class="event-source-badge badge-google"><span>🌐</span> Google</span>') 
-                  : '<span class="event-source-badge badge-antigravite"><img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité</span>'}
-                <span class="event-time-pill">${timeDisplay}</span>
+                  ? '<span class="event-origin-tag" style="background:rgba(245,158,11,0.35); color:#fbbf24; border:1px solid rgba(245,158,11,0.5);">⏳ Sync</span>'
+                  : '<span class="event-origin-tag google">Google</span>') 
+                  : '<span class="event-time-pill" style="margin-left:0;">' + timeDisplay + '</span>'}
+                ${isGoogle ? '<span class="event-time-pill">' + timeDisplay + '</span>' : ''}
               </div>
-              <div class="event-title">${this.escapeHtml(e.title || '(Sans titre)')}</div>
+              <div class="event-title" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '<span title="Créneau récurrent">🔁</span> ' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</div>
               ${e.location ? `<div class="event-location" title="${this.escapeHtml(e.location)}">📍 ${this.escapeHtml(e.location)}</div>` : ''}
-              ${linkedTask ? `<div class="event-linked-info">📌 ${this.escapeHtml(linkedTask.task.title)}</div>` : ''}
-              ${linkedNote ? `<div class="event-linked-info">📝 ${this.escapeHtml(linkedNote.title)}</div>` : ''}
+              ${linkedTask ? `<div class="event-linked-info" title="Tâche : ${this.escapeHtml(linkedTask.task.title)}">📌 ${this.escapeHtml(linkedTask.task.title)}</div>` : ''}
+              ${linkedNote ? `<div class="event-linked-info" title="Note : ${this.escapeHtml(linkedNote.title)}">📝 ${this.escapeHtml(linkedNote.title)}</div>` : ''}
             `}
 
-            <!-- Limite inférieure pour étirer/réduire l'heure de fin -->
-            <div class="event-resize-handle handle-bottom" data-action="resize-bottom" title="Maintenir le clic gauche pour ajuster l'heure de fin"></div>
+            <div class="event-resize-handle handle-bottom" data-action="resize-bottom" title="Ajuster l'heure de fin"></div>
           </div>
         `;
       });
@@ -536,32 +846,190 @@ const AgendaManager = {
     const btnDestLocal = document.getElementById('event-dest-local');
     const btnDestGoogle = document.getElementById('event-dest-google');
     const inputAllDay = document.getElementById('event-input-allday');
+    const inputRecurrence = document.getElementById('event-input-recurrence');
+    const checkCreateTask = document.getElementById('event-check-create-task');
+    const containerCreateTask = document.getElementById('event-create-task-container');
+    const detailsNewTask = document.getElementById('event-new-task-details');
+    const selectTaskProject = document.getElementById('event-task-project');
+    const selectTaskPriority = document.getElementById('event-task-priority');
+    const btnOpenTask = document.getElementById('btn-event-open-task');
 
     let selectedDest = 'local';
 
-    // Remplir les tâches pour la liaison facultative
+    // Remplir les projets pour la création directe de tâche
+    if (selectTaskProject) {
+      selectTaskProject.innerHTML = '<option value="">(Aucun projet)</option>';
+      const allProjects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects() : [];
+      allProjects.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.title;
+        selectTaskProject.appendChild(opt);
+      });
+    }
+
+    const updateTaskButtonVisibility = (taskId) => {
+      if (btnOpenTask) {
+        btnOpenTask.style.display = taskId ? 'inline-flex' : 'none';
+        btnOpenTask.onclick = (e) => {
+          e.preventDefault();
+          this.closeEventModal();
+          if (window.App && typeof window.App.navigate === 'function') {
+            window.App.navigate('tasks');
+          }
+          if (window.TasksManager && typeof window.TasksManager.openTaskModal === 'function') {
+            window.TasksManager.openTaskModal(taskId);
+          }
+        };
+      }
+    };
+
+    if (checkCreateTask) {
+      checkCreateTask.checked = false;
+      if (detailsNewTask) detailsNewTask.style.display = 'none';
+      checkCreateTask.onchange = () => {
+        if (checkCreateTask.checked) {
+          if (detailsNewTask) detailsNewTask.style.display = 'block';
+          inputTask.value = '';
+          updateTaskButtonVisibility(null);
+          inputTask.disabled = true;
+        } else {
+          if (detailsNewTask) detailsNewTask.style.display = 'none';
+          inputTask.disabled = false;
+        }
+      };
+    }
+
+    // Palette de sélection de couleurs pré-définies et nuance sur mesure
+    const presetSwatches = modal.querySelectorAll('.color-swatch:not(.color-swatch-custom)');
+    const customSwatch = modal.querySelector('.color-swatch-custom');
+
+    const updateActiveSwatch = (chosenColor) => {
+      const targetColor = (chosenColor || '').toLowerCase();
+      let matchedPreset = false;
+      presetSwatches.forEach(sw => {
+        const swColor = (sw.dataset.color || '').toLowerCase();
+        const isMatch = swColor === targetColor;
+        sw.classList.toggle('active', isMatch);
+        if (isMatch) matchedPreset = true;
+      });
+
+      if (customSwatch) {
+        if (!matchedPreset && targetColor) {
+          customSwatch.classList.add('active');
+          customSwatch.style.background = targetColor;
+          customSwatch.title = `Couleur personnalisée (${targetColor})`;
+        } else {
+          customSwatch.classList.remove('active');
+          customSwatch.style.background = '';
+          customSwatch.title = 'Nuance sur mesure (palette complète)';
+        }
+      }
+    };
+
+    presetSwatches.forEach(sw => {
+      sw.onclick = () => {
+        if (inputColor) inputColor.value = sw.dataset.color;
+        updateActiveSwatch(sw.dataset.color);
+      };
+    });
+
+    if (inputColor) {
+      inputColor.oninput = () => updateActiveSwatch(inputColor.value);
+      inputColor.onchange = () => updateActiveSwatch(inputColor.value);
+    }
+
+    // Remplir les tâches pour la liaison facultative (regroupées par projet)
     const tasks = StorageManager.getTasks();
+    const allProjects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects() : [];
+    const projectMap = new Map();
+    allProjects.forEach(p => projectMap.set(p.id, p.title));
+
     inputTask.innerHTML = '<option value="">(Aucune tâche associée)</option>';
+    const personalTasks = [];
+    const tasksByProj = new Map();
+
     const flattenTasks = (list, prefix = '') => {
       list.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = prefix + t.title;
-        inputTask.appendChild(opt);
+        const item = { id: t.id, title: prefix + t.title, completed: !!t.completed, projectId: t.projectId };
+        if (t.projectId && projectMap.has(t.projectId)) {
+          if (!tasksByProj.has(t.projectId)) tasksByProj.set(t.projectId, []);
+          tasksByProj.get(t.projectId).push(item);
+        } else {
+          personalTasks.push(item);
+        }
         if (t.subtasks && t.subtasks.length > 0) flattenTasks(t.subtasks, prefix + '— ');
       });
     };
     flattenTasks(tasks);
 
-    // Remplir les notes pour la liaison facultative
+    if (personalTasks.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = "👤 Tâches personnelles (sans projet)";
+      personalTasks.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = (t.completed ? '✓ ' : '') + t.title;
+        grp.appendChild(opt);
+      });
+      inputTask.appendChild(grp);
+    }
+
+    tasksByProj.forEach((tList, pId) => {
+      const grp = document.createElement('optgroup');
+      grp.label = "📁 Projet : " + (projectMap.get(pId) || 'Projet');
+      tList.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = (t.completed ? '✓ ' : '') + t.title;
+        grp.appendChild(opt);
+      });
+      inputTask.appendChild(grp);
+    });
+
+    inputTask.onchange = () => {
+      updateTaskButtonVisibility(inputTask.value);
+      if (checkCreateTask && inputTask.value) {
+        checkCreateTask.checked = false;
+        if (detailsNewTask) detailsNewTask.style.display = 'none';
+      }
+    };
+
+    // Remplir les notes pour la liaison facultative (regroupées par projet)
     const allNotes = StorageManager.getNotes();
     if (inputNote) {
       inputNote.innerHTML = '<option value="">(Aucune note associée)</option>';
+      const personalNotes = allNotes.filter(n => !n.projectId || !projectMap.has(n.projectId));
+      const notesByProj = new Map();
       allNotes.forEach(n => {
-        const opt = document.createElement('option');
-        opt.value = n.id;
-        opt.textContent = n.title;
-        inputNote.appendChild(opt);
+        if (n.projectId && projectMap.has(n.projectId)) {
+          if (!notesByProj.has(n.projectId)) notesByProj.set(n.projectId, []);
+          notesByProj.get(n.projectId).push(n);
+        }
+      });
+
+      if (personalNotes.length > 0) {
+        const grp = document.createElement('optgroup');
+        grp.label = "📝 Notes personnelles (sans projet)";
+        personalNotes.forEach(n => {
+          const opt = document.createElement('option');
+          opt.value = n.id;
+          opt.textContent = n.title;
+          grp.appendChild(opt);
+        });
+        inputNote.appendChild(grp);
+      }
+
+      notesByProj.forEach((nList, pId) => {
+        const grp = document.createElement('optgroup');
+        grp.label = "📁 Projet : " + (projectMap.get(pId) || 'Projet');
+        nList.forEach(n => {
+          const opt = document.createElement('option');
+          opt.value = n.id;
+          opt.textContent = n.title;
+          grp.appendChild(opt);
+        });
+        inputNote.appendChild(grp);
       });
     }
 
@@ -671,6 +1139,7 @@ const AgendaManager = {
         inputEnd.readOnly = false;
 
         inputColor.value = evt.color || '#3b82f6';
+        updateActiveSwatch(inputColor.value);
         inputColor.disabled = false;
 
         inputTask.value = evt.taskId || '';
@@ -802,7 +1271,11 @@ const AgendaManager = {
         }
 
         inputColor.value = evt.color || '#3b82f6';
+        updateActiveSwatch(inputColor.value);
         inputTask.value = evt.taskId || '';
+        updateTaskButtonVisibility(evt.taskId);
+        if (containerCreateTask) containerCreateTask.style.display = evt.taskId ? 'none' : 'block';
+        if (inputRecurrence) inputRecurrence.value = evt.recurrence || 'none';
 
         if (inputNote) {
           inputNote.value = evt.noteId || '';
@@ -835,6 +1308,24 @@ const AgendaManager = {
             endVal = `${endDateStr}T19:00`;
           }
 
+          let taskId = inputTask.value || null;
+          if (checkCreateTask && checkCreateTask.checked && !taskId) {
+            if (typeof TasksManager !== 'undefined' && typeof TasksManager.addTask === 'function') {
+              const startTimeStr = startVal && startVal.length >= 16 ? startVal.slice(11, 16) : '09:00';
+              const newTask = TasksManager.addTask({
+                title: inputTitle.value.trim(),
+                description: inputDesc.value.trim(),
+                projectId: selectTaskProject ? (selectTaskProject.value || null) : null,
+                priority: selectTaskPriority ? selectTaskPriority.value : 'medium',
+                plannedDate: startVal.slice(0, 10),
+                plannedTime: startTimeStr,
+                skipEventCreation: true
+              });
+              if (newTask && newTask.id) taskId = newTask.id;
+            }
+          }
+          const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
+
           const noteId = inputNote ? (inputNote.value || null) : null;
           this.updateEvent(eventId, {
             title: inputTitle.value.trim(),
@@ -844,8 +1335,9 @@ const AgendaManager = {
             end: endVal,
             isAllDay,
             color: inputColor.value,
-            taskId: inputTask.value || null,
-            noteId
+            taskId,
+            noteId,
+            recurrence
           });
           this.syncNoteEventLink(eventId, noteId);
           this.closeEventModal();
@@ -917,7 +1409,11 @@ const AgendaManager = {
       inputStart.value = (defaultValues && defaultValues.start) ? defaultValues.start : startStr;
       inputEnd.value = (defaultValues && defaultValues.end) ? defaultValues.end : endStr;
       inputColor.value = (defaultValues && defaultValues.color) ? defaultValues.color : '#8b5cf6';
+      updateActiveSwatch(inputColor.value);
       inputTask.value = (defaultValues && defaultValues.taskId) ? defaultValues.taskId : '';
+      updateTaskButtonVisibility(inputTask.value);
+      if (containerCreateTask) containerCreateTask.style.display = 'block';
+      if (inputRecurrence) inputRecurrence.value = (defaultValues && defaultValues.recurrence) || 'none';
 
       if (inputNote) {
         inputNote.value = (defaultValues && defaultValues.noteId) ? defaultValues.noteId : '';
@@ -946,6 +1442,24 @@ const AgendaManager = {
           endVal = `${endDateStr}T19:00`;
         }
 
+        let taskId = inputTask.value || null;
+        if (checkCreateTask && checkCreateTask.checked && !taskId) {
+          if (typeof TasksManager !== 'undefined' && typeof TasksManager.addTask === 'function') {
+            const startTimeStr = startVal && startVal.length >= 16 ? startVal.slice(11, 16) : '09:00';
+            const newTask = TasksManager.addTask({
+              title: inputTitle.value.trim(),
+              description: inputDesc.value.trim(),
+              projectId: selectTaskProject ? (selectTaskProject.value || null) : null,
+              priority: selectTaskPriority ? selectTaskPriority.value : 'medium',
+              plannedDate: startVal.slice(0, 10),
+              plannedTime: startTimeStr,
+              skipEventCreation: true
+            });
+            if (newTask && newTask.id) taskId = newTask.id;
+          }
+        }
+        const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
+
         const noteId = inputNote ? (inputNote.value || null) : null;
         const eventData = {
           title: inputTitle.value.trim(),
@@ -955,8 +1469,9 @@ const AgendaManager = {
           end: endVal,
           isAllDay,
           color: inputColor.value || '#3b82f6',
-          taskId: inputTask.value || null,
-          noteId
+          taskId,
+          noteId,
+          recurrence
         };
 
         if (selectedDest === 'google') {
@@ -1551,6 +2066,9 @@ const AgendaManager = {
     if (isGoogle && window.GoogleSyncManager && typeof window.GoogleSyncManager.updateGoogleEvent === 'function') {
       try {
         await window.GoogleSyncManager.updateGoogleEvent(evt, updatedData);
+        if (evt.taskId) {
+          this.syncEventDateToTask(evt.taskId, newDateStr);
+        }
       } catch (err) {
         console.warn("[Agenda] Erreur synchro Google au déplacement :", err);
         this.updateEvent(eventId, updatedData);

@@ -11,6 +11,9 @@ const SettingsManager = {
       this.initialized = true;
     }
     this.render();
+    if (this.updater && typeof this.updater.init === 'function') {
+      this.updater.init();
+    }
   },
 
   bindEvents() {
@@ -248,6 +251,11 @@ const SettingsManager = {
 
     // 7. Mise à jour de l'aperçu en direct
     this.updatePreviewBox(settings);
+
+    // 8. Mise à jour de la section Mises à jour
+    if (this.updater && typeof this.updater.render === 'function') {
+      this.updater.render();
+    }
   },
 
   // Mettre à jour un paramètre et l'appliquer immédiatement
@@ -322,14 +330,394 @@ const SettingsManager = {
   }
 };
 
+/**
+ * Gestionnaire d'Interface pour les Mises à Jour Automatiques (Settings)
+ */
+const UpdateManager = {
+  initialized: false,
+  isBusy: false,
+  currentVersion: '1.0.0',
+  isPackaged: false,
+  status: 'idle',
+  updateInfo: null,
+  downloadProgress: null,
+  lastError: null,
+  _unsubscribe: null,
+
+  async init() {
+    this.bindEvents();
+    await this.refreshStatus();
+    this.initialized = true;
+  },
+
+  bindEvents() {
+    if (typeof document === 'undefined') return;
+
+    // Bouton de recherche manuelle
+    const btnCheck = document.getElementById('btn-check-updates');
+    if (btnCheck && !btnCheck._hasUpdaterListener) {
+      btnCheck.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.checkForUpdates();
+      });
+      btnCheck._hasUpdaterListener = true;
+    }
+
+    // Bouton de téléchargement
+    const btnDownload = document.getElementById('btn-download-update');
+    if (btnDownload && !btnDownload._hasUpdaterListener) {
+      btnDownload.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.downloadUpdate();
+      });
+      btnDownload._hasUpdaterListener = true;
+    }
+
+    // Bouton d'installation
+    const btnInstall = document.getElementById('btn-install-update');
+    if (btnInstall && !btnInstall._hasUpdaterListener) {
+      btnInstall.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.installUpdate();
+      });
+      btnInstall._hasUpdaterListener = true;
+    }
+
+    // Écoute des événements IPC temps réel (via preload.js)
+    const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
+    if (updaterApi && typeof updaterApi.onStatusChanged === 'function') {
+      if (typeof this._unsubscribe === 'function') {
+        this._unsubscribe();
+      }
+      this._unsubscribe = updaterApi.onStatusChanged((data) => {
+        if (!data) return;
+        this.status = data.status || this.status;
+        if (data.updateInfo) this.updateInfo = data.updateInfo;
+        if (data.progress) this.downloadProgress = data.progress;
+        if (data.error) this.lastError = data.error;
+        this.render();
+      });
+    }
+  },
+
+  cleanup() {
+    if (typeof this._unsubscribe === 'function') {
+      this._unsubscribe();
+      this._unsubscribe = null;
+    }
+  },
+
+  async refreshStatus() {
+    const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
+    if (!updaterApi) {
+      this.currentVersion = '1.1.2';
+      this.isPackaged = false;
+      this.render();
+      return;
+    }
+
+    try {
+      if (typeof updaterApi.getVersion === 'function') {
+        const ver = await updaterApi.getVersion();
+        if (ver) this.currentVersion = ver;
+      }
+
+      if (typeof updaterApi.getStatus === 'function') {
+        const statusObj = await updaterApi.getStatus();
+        if (statusObj) {
+          this.status = statusObj.status || 'idle';
+          this.isPackaged = !!statusObj.isPackaged;
+          this.updateInfo = statusObj.updateInfo || null;
+          this.downloadProgress = statusObj.downloadProgress || null;
+          this.lastError = statusObj.lastError || null;
+          if (statusObj.currentVersion) this.currentVersion = statusObj.currentVersion;
+        }
+      }
+    } catch (err) {
+      console.warn("[UpdateManager] Erreur récupération statut:", err);
+    }
+
+    this.render();
+  },
+
+  async checkForUpdates() {
+    if (this.isBusy) return;
+    this.isBusy = true;
+    this.lastError = null;
+    this.status = 'checking';
+    this.render();
+
+    const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
+    if (!updaterApi) {
+      this.isBusy = false;
+      this.status = 'dev-mode';
+      this.render();
+      return;
+    }
+
+    try {
+      const res = await updaterApi.checkForUpdates(false);
+      if (res && res.reason === 'dev-mode') {
+        this.status = 'dev-mode';
+      }
+    } catch (err) {
+      this.status = 'error';
+      this.lastError = err ? err.message : 'Erreur inconnue';
+    } finally {
+      this.isBusy = false;
+      this.render();
+    }
+  },
+
+  async downloadUpdate() {
+    if (this.isBusy) return;
+    this.isBusy = true;
+    this.lastError = null;
+    this.status = 'downloading';
+    this.render();
+
+    const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
+    if (!updaterApi) {
+      this.isBusy = false;
+      this.status = 'error';
+      this.lastError = "API de mise à jour indisponible.";
+      this.render();
+      return;
+    }
+
+    try {
+      await updaterApi.downloadUpdate();
+    } catch (err) {
+      this.status = 'error';
+      this.lastError = err ? err.message : 'Erreur inconnue';
+    } finally {
+      this.isBusy = false;
+      this.render();
+    }
+  },
+
+  async installUpdate() {
+    if (this.isBusy) return;
+    this.isBusy = true;
+
+    const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
+    if (!updaterApi) {
+      this.isBusy = false;
+      return;
+    }
+
+    try {
+      await updaterApi.installUpdate();
+    } catch (err) {
+      this.status = 'error';
+      this.lastError = err ? err.message : 'Erreur inconnue';
+      this.isBusy = false;
+      this.render();
+    }
+  },
+
+  render() {
+    if (typeof document === 'undefined') return;
+
+    // 1. Version courante
+    const versionLabel = document.getElementById('updater-current-version-label');
+    if (versionLabel) {
+      versionLabel.textContent = this.currentVersion || '1.0.0';
+    }
+
+    // 2. Éléments DOM
+    const chip = document.getElementById('updater-version-chip');
+    const dot = document.getElementById('updater-version-dot');
+    const icon = document.getElementById('updater-status-icon');
+    const title = document.getElementById('updater-status-title');
+    const desc = document.getElementById('updater-status-desc');
+
+    const btnCheck = document.getElementById('btn-check-updates');
+    const btnCheckText = document.getElementById('btn-check-updates-text');
+    const btnCheckIcon = document.getElementById('btn-check-updates-icon');
+    const btnDownload = document.getElementById('btn-download-update');
+    const btnDownloadText = document.getElementById('btn-download-update-text');
+    const btnInstall = document.getElementById('btn-install-update');
+
+    const progressContainer = document.getElementById('updater-progress-container');
+    const progressBar = document.getElementById('updater-progress-bar');
+    const progressPercent = document.getElementById('updater-progress-percent');
+    const progressLabel = document.getElementById('updater-progress-label');
+
+    if (!title || !desc || !btnCheck) return;
+
+    // Masquage initial des boutons contextuels et conteneurs
+    if (btnDownload) btnDownload.style.display = 'none';
+    if (btnInstall) btnInstall.style.display = 'none';
+    if (progressContainer) progressContainer.style.display = 'none';
+
+    // Réinitialisation des styles de puce
+    if (chip) {
+      chip.classList.remove('status-connected', 'status-configured', 'status-disconnected');
+    }
+
+    const availableVersion = this.updateInfo?.version || '';
+
+    switch (this.status) {
+      case 'checking':
+        if (icon) icon.textContent = '⏳';
+        title.textContent = 'Recherche en cours...';
+        desc.textContent = 'Vérification des versions disponibles sur GitHub Releases...';
+        if (chip) chip.classList.add('status-configured');
+        if (dot) dot.style.backgroundColor = '#f59e0b';
+
+        btnCheck.disabled = true;
+        btnCheck.style.display = 'inline-flex';
+        if (btnCheckText) btnCheckText.textContent = 'Recherche en cours...';
+        if (btnCheckIcon) btnCheckIcon.textContent = '⏳';
+        break;
+
+      case 'available':
+        if (icon) icon.textContent = '🎁';
+        title.textContent = availableVersion
+          ? `Nouvelle version disponible : v${availableVersion}`
+          : 'Nouvelle version disponible !';
+        desc.textContent = 'Une mise à jour est prête à être téléchargée. Vous pouvez lancer le téléchargement dès maintenant.';
+        if (chip) chip.classList.add('status-configured');
+        if (dot) dot.style.backgroundColor = '#f59e0b';
+
+        btnCheck.disabled = this.isBusy;
+        btnCheck.style.display = 'inline-flex';
+        if (btnCheckText) btnCheckText.textContent = 'Vérifier à nouveau';
+        if (btnCheckIcon) btnCheckIcon.textContent = '🔄';
+
+        if (btnDownload) {
+          btnDownload.style.display = 'inline-flex';
+          btnDownload.disabled = this.isBusy;
+          if (btnDownloadText) {
+            btnDownloadText.textContent = availableVersion
+              ? `Télécharger la version ${availableVersion}`
+              : 'Télécharger la mise à jour';
+          }
+        }
+        break;
+
+      case 'downloading':
+        const percentNum = this.downloadProgress && typeof this.downloadProgress.percent === 'number'
+          ? Math.round(this.downloadProgress.percent)
+          : 0;
+
+        if (icon) icon.textContent = '📥';
+        title.textContent = 'Téléchargement en cours...';
+        desc.textContent = `Téléchargement du paquet de mise à jour (${percentNum}%). Veuillez patienter...`;
+        if (chip) chip.classList.add('status-configured');
+        if (dot) dot.style.backgroundColor = '#f59e0b';
+
+        btnCheck.disabled = true;
+        btnCheck.style.display = 'inline-flex';
+        if (btnCheckText) btnCheckText.textContent = 'Téléchargement...';
+        if (btnCheckIcon) btnCheckIcon.textContent = '📥';
+
+        if (btnDownload) {
+          btnDownload.style.display = 'inline-flex';
+          btnDownload.disabled = true;
+          if (btnDownloadText) btnDownloadText.textContent = `Téléchargement (${percentNum} %)`;
+        }
+
+        if (progressContainer) {
+          progressContainer.style.display = 'block';
+          if (progressBar) progressBar.style.width = `${percentNum}%`;
+          if (progressPercent) progressPercent.textContent = `${percentNum} %`;
+          if (progressLabel) progressLabel.textContent = `Téléchargement du paquet v${availableVersion || ''}...`;
+        }
+        break;
+
+      case 'downloaded':
+        if (icon) icon.textContent = '🎉';
+        title.textContent = 'Téléchargement terminé !';
+        desc.textContent = 'La mise à jour a été téléchargée avec succès. Cliquez sur Redémarrer pour finaliser l\'installation.';
+        if (chip) chip.classList.add('status-connected');
+        if (dot) dot.style.backgroundColor = '#10b981';
+
+        btnCheck.style.display = 'none';
+        if (btnInstall) {
+          btnInstall.style.display = 'inline-flex';
+          btnInstall.disabled = this.isBusy;
+        }
+        break;
+
+      case 'not-available':
+        if (icon) icon.textContent = '✅';
+        title.textContent = 'Aucune mise à jour disponible';
+        desc.textContent = `Votre application est à jour (la version ${this.currentVersion} est la plus récente).`;
+        if (chip) chip.classList.add('status-connected');
+        if (dot) dot.style.backgroundColor = '#10b981';
+
+        btnCheck.disabled = false;
+        btnCheck.style.display = 'inline-flex';
+        if (btnCheckText) btnCheckText.textContent = 'Rechercher une mise à jour';
+        if (btnCheckIcon) btnCheckIcon.textContent = '🔄';
+        break;
+
+      case 'dev-mode':
+        if (icon) icon.textContent = '🛠️';
+        title.textContent = 'Mode développement';
+        desc.textContent = 'L\'application s\'exécute en mode développement (non empaquetée). La recherche automatique de mises à jour est désactivée.';
+        if (chip) chip.classList.add('status-disconnected');
+        if (dot) dot.style.backgroundColor = '#94a3b8';
+
+        btnCheck.disabled = false;
+        btnCheck.style.display = 'inline-flex';
+        if (btnCheckText) btnCheckText.textContent = 'Rechercher une mise à jour';
+        if (btnCheckIcon) btnCheckIcon.textContent = '🔄';
+        break;
+
+      case 'error':
+        if (icon) icon.textContent = '⚠️';
+        title.textContent = 'Erreur lors de la mise à jour';
+        desc.textContent = this.lastError
+          ? `Détail : ${this.lastError}`
+          : 'Impossible de contacter le serveur de mise à jour. Vérifiez votre connexion Internet.';
+        if (chip) chip.classList.add('status-disconnected');
+        if (dot) dot.style.backgroundColor = '#ef4444';
+
+        btnCheck.disabled = false;
+        btnCheck.style.display = 'inline-flex';
+        if (btnCheckText) btnCheckText.textContent = 'Réessayer';
+        if (btnCheckIcon) btnCheckIcon.textContent = '🔄';
+        break;
+
+      case 'idle':
+      default:
+        if (icon) icon.textContent = '✨';
+        title.textContent = 'Prêt à vérifier';
+        desc.textContent = 'Cliquez sur le bouton pour rechercher une nouvelle version sur GitHub Releases.';
+        if (chip) chip.classList.add('status-disconnected');
+        if (dot) dot.style.backgroundColor = '#94a3b8';
+
+        btnCheck.disabled = false;
+        btnCheck.style.display = 'inline-flex';
+        if (btnCheckText) btnCheckText.textContent = 'Rechercher une mise à jour';
+        if (btnCheckIcon) btnCheckIcon.textContent = '🔄';
+        break;
+    }
+  }
+};
+
+SettingsManager.updater = UpdateManager;
+
 // Exposer globalement pour compatibilité
-window.SettingsManager = SettingsManager;
+if (typeof window !== 'undefined') {
+  window.SettingsManager = SettingsManager;
+  window.UpdateManager = UpdateManager;
+}
 
 // Auto-initialisation au chargement du DOM si disponible
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      SettingsManager.init();
+    });
+  } else {
     SettingsManager.init();
-  });
-} else {
-  SettingsManager.init();
+  }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { SettingsManager, UpdateManager };
 }

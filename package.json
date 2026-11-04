@@ -1,11 +1,12 @@
 {
   "name": "antigravite",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "Application personnelle de gestion des tâches",
   "private": true,
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "powershell -ExecutionPolicy Bypass -File tests/run_tests.ps1",
     "dist": "electron-builder"
   },
   "devDependencies": {
@@ -17,6 +18,13 @@
     "productName": "Antigravite",
     "directories": {
       "output": "dist"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Clapote",
+      "repo": "Antigravite-releases",
+      "releaseType": "release",
+      "private": false
     },
     "files": [
       "main.js",
@@ -35,13 +43,18 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}.Setup.${version}.${ext}"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

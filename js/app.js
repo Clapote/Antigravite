@@ -130,6 +130,9 @@ const App = {
   },
 
   navigate(screenId) {
+    if (typeof window !== 'undefined' && window.NotesManager && typeof window.NotesManager.flushPendingSave === 'function') {
+      window.NotesManager.flushPendingSave();
+    }
     this.currentScreen = screenId;
 
     // Mettre à jour la barre latérale
@@ -283,21 +286,45 @@ const App = {
     if (btnToggleSidebar) {
       btnToggleSidebar.addEventListener('click', () => this.toggleSidebar());
     }
-    const btnCollapseSidebar = document.getElementById('btn-collapse-sidebar');
-    if (btnCollapseSidebar) {
-      btnCollapseSidebar.addEventListener('click', () => this.toggleSidebar());
-    }
 
-    // Raccourcis clavier globaux (Échap pour modales, Ctrl+B pour volet latéral)
+    // Raccourcis clavier globaux (Échap pour modales, Entrée pour validation, Ctrl+B pour volet latéral)
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
       }
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        const activeModal = document.querySelector('.modal-overlay.active');
+        if (activeModal) {
+          const tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toUpperCase() : '';
+          // Ne soumettre que depuis un champ INPUT (laissant libre saisie aux TEXTAREA multilignes)
+          if (tag === 'INPUT' && activeModal.contains(document.activeElement)) {
+            const primaryBtn = activeModal.querySelector('.modal-footer .btn-primary:not(:disabled)');
+            if (primaryBtn) {
+              e.preventDefault();
+              primaryBtn.click();
+            }
+          }
+        }
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        // Ne pas intercepter si l'utilisateur est en train de taper dans un champ de saisie (ex: Ctrl+B = Gras dans les notes)
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+        if (tag === 'TEXTAREA' || tag === 'INPUT' || (e.target && e.target.isContentEditable)) {
+          return;
+        }
         e.preventDefault();
         this.toggleSidebar();
       }
     });
+
+    // Sauvegarde immédiate lors de la fermeture ou du rechargement
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('beforeunload', () => {
+        if (window.NotesManager && typeof window.NotesManager.flushPendingSave === 'function') {
+          window.NotesManager.flushPendingSave();
+        }
+      });
+    }
 
     // Fermeture des modales par clic sur le fond
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -312,14 +339,25 @@ const App = {
     if (!container) return;
     const isCollapsed = container.classList.toggle('sidebar-collapsed');
     localStorage.setItem('antigravite_sidebar_collapsed', isCollapsed ? '1' : '0');
+    this.updateSidebarToggleButton(isCollapsed);
+  },
+
+  updateSidebarToggleButton(isCollapsed) {
+    const btn = document.getElementById('btn-toggle-sidebar');
+    if (btn) {
+      btn.textContent = isCollapsed ? '▶' : '◀';
+      btn.setAttribute('title', isCollapsed ? 'Ouvrir le volet latéral (Ctrl+B)' : 'Fermer le volet latéral (Ctrl+B)');
+    }
   },
 
   initSidebarState() {
     const saved = localStorage.getItem('antigravite_sidebar_collapsed');
-    if (saved === '1') {
+    const isCollapsed = saved === '1';
+    if (isCollapsed) {
       const container = document.getElementById('app-container');
       if (container) container.classList.add('sidebar-collapsed');
     }
+    this.updateSidebarToggleButton(isCollapsed);
   },
 
   updateThemeButtonLabel(theme) {
@@ -457,15 +495,17 @@ const App = {
     const panelPlanned = document.getElementById('dashboard-planned-tasks');
     if (panelPlanned) {
       if (plannedTodayList.length === 0) {
-        panelPlanned.innerHTML = `<div style="color:var(--text-dim); font-size:0.86rem; padding:10px 0;">Aucune tâche planifiée pour aujourd'hui.</div>`;
+        panelPlanned.innerHTML = `<div class="dashboard-empty-hint">Aucune tâche planifiée pour aujourd'hui.</div>`;
       } else {
         panelPlanned.innerHTML = plannedTodayList.slice(0, 5).map(t => `
-          <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color); font-size:0.88rem;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="color:var(--accent);">📌</span>
-              <span style="cursor:pointer;" onclick="TasksManager.openTaskModal('${t.id}')">${this.escapeHtml(t.title)}</span>
+          <div class="dashboard-item dashboard-task-item">
+            <div class="dashboard-item-main">
+              <span class="dashboard-item-icon">📌</span>
+              <span class="dashboard-item-title" onclick="TasksManager.openTaskModal('${t.id}')" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
             </div>
-            ${TasksManager.getPriorityBadge(t.priority)}
+            <div class="dashboard-item-meta">
+              ${TasksManager.getPriorityBadge(t.priority)}
+            </div>
           </div>
         `).join('');
       }
@@ -475,7 +515,7 @@ const App = {
     const panelEvents = document.getElementById('dashboard-today-events');
     if (panelEvents) {
       if (todayEvents.length === 0) {
-        panelEvents.innerHTML = `<div style="color:var(--text-dim); font-size:0.86rem; padding:10px 0;">Aucun créneau réservé pour aujourd'hui.</div>`;
+        panelEvents.innerHTML = `<div class="dashboard-empty-hint">Aucun créneau réservé pour aujourd'hui.</div>`;
       } else {
         panelEvents.innerHTML = todayEvents.map(e => {
           const isGoogle = e.source === 'google';
@@ -487,31 +527,31 @@ const App = {
 
           let timeBadge = '';
           if (e.isAllDay) {
-            timeBadge = isMultiDay ? 'Journée (multi-jours)' : 'Journée';
+            timeBadge = isMultiDay ? 'Journée (multi-j)' : 'Journée';
           } else if (isMultiDay) {
             if (todayStr === startDay) {
               timeBadge = `${startTime} ➔`;
             } else if (todayStr === endDay) {
               timeBadge = `➔ ${endTime}`;
             } else {
-              timeBadge = 'Journée continue';
+              timeBadge = 'Journée cont.';
             }
           } else {
-            timeBadge = `${startTime} - ${endTime}`;
+            timeBadge = startTime && endTime ? `${startTime} - ${endTime}` : (startTime || 'Journée');
           }
           const dotColor = isGoogle ? '#3b82f6' : '#8b5cf6';
 
           return `
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color); font-size:0.88rem;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span style="width:10px; height:10px; border-radius:50%; background-color:${dotColor}; box-shadow:0 0 6px ${dotColor};"></span>
-                <span style="cursor:pointer; font-weight:500;" onclick="AgendaManager.openEventModal('${e.id}')">${this.escapeHtml(e.title)}</span>
+            <div class="dashboard-item dashboard-event-item">
+              <div class="dashboard-item-main">
+                <span class="dashboard-item-dot" style="background-color:${dotColor}; box-shadow:0 0 6px ${dotColor};"></span>
+                <span class="dashboard-item-title" onclick="AgendaManager.openEventModal('${e.id}')" title="${this.escapeHtml(e.title)}">${this.escapeHtml(e.title)}</span>
               </div>
-              <div style="display:flex; align-items:center; gap:6px;">
+              <div class="dashboard-item-meta">
                 <span class="dashboard-source-pill ${isGoogle ? 'pill-google' : 'pill-antigravite'}">
                   ${isGoogle ? '🌐 Google' : '<img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité'}
                 </span>
-                <span style="font-size:0.75rem; color:var(--text-muted);">${timeBadge}</span>
+                <span class="dashboard-time-badge" title="Créneau horaire : ${timeBadge}">⏱️ ${timeBadge}</span>
               </div>
             </div>
           `;
@@ -523,7 +563,7 @@ const App = {
     const panelNotes = document.getElementById('dashboard-recent-notes');
     if (panelNotes) {
       if (!notes || notes.length === 0) {
-        panelNotes.innerHTML = `<div style="color:var(--text-dim); font-size:0.86rem; padding:10px 0;">Aucune note enregistrée pour le moment.</div>`;
+        panelNotes.innerHTML = `<div class="dashboard-empty-hint">Aucune note enregistrée pour le moment.</div>`;
       } else {
         // Trier par date de mise à jour (ou création) décroissante
         const sortedNotes = [...notes].sort((a, b) => {
@@ -542,18 +582,20 @@ const App = {
             : '';
 
           return `
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color); font-size:0.88rem;">
-              <div style="display:flex; flex-direction:column; gap:2px; overflow:hidden; padding-right:8px;">
-                <div style="display:flex; align-items:center; gap:6px;">
-                  <span style="color:var(--accent); font-size:0.85rem;">📝</span>
-                  <span style="cursor:pointer; font-weight:600; color:var(--text-main);" onclick="App.openNoteFromDashboard('${n.id}')">
+            <div class="dashboard-item dashboard-note-item">
+              <div class="dashboard-item-main" style="flex-direction:column; align-items:flex-start; gap:2px;">
+                <div style="display:flex; align-items:center; gap:6px; width:100%; min-width:0;">
+                  <span class="dashboard-item-icon">📝</span>
+                  <span class="dashboard-item-title" onclick="App.openNoteFromDashboard('${n.id}')" title="${this.escapeHtml(n.title || 'Note sans titre')}">
                     ${this.escapeHtml(n.title || 'Note sans titre')}
                   </span>
-                  ${n.linkedEventId ? '<span title="Liée à un créneau d\'agenda" style="font-size:0.7rem; color:var(--accent);">📅</span>' : ''}
+                  ${n.linkedEventId ? '<span title="Liée à un créneau d\'agenda" style="font-size:0.7rem; color:var(--accent); flex-shrink:0;">📅</span>' : ''}
                 </div>
-                ${preview ? `<div style="font-size:0.76rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${this.escapeHtml(preview)}</div>` : ''}
+                ${preview ? `<div class="dashboard-note-preview" style="font-size:0.76rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${this.escapeHtml(preview)}</div>` : ''}
               </div>
-              <span style="font-size:0.72rem; color:var(--text-muted); flex-shrink:0;">${timeFormatted}</span>
+              <div class="dashboard-item-meta">
+                <span class="dashboard-note-date">${timeFormatted}</span>
+              </div>
             </div>
           `;
         }).join('');

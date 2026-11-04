@@ -723,9 +723,16 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   font-size: 1.1rem;
   width: 22px;
   display: inline-flex;
+  align-items: center;
   justify-content: center;
   opacity: 0.85;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.nav-item .icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .nav-item:hover .icon {
@@ -1175,9 +1182,41 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   gap: 20px;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1380px) {
+  .dashboard-sections {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-sections .dashboard-panel:nth-child(3) {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 880px) {
   .dashboard-sections {
     grid-template-columns: 1fr;
+  }
+  .dashboard-sections .dashboard-panel:nth-child(3) {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-hero-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .hero-clock-box {
+    align-self: stretch;
+    align-items: center;
   }
 }
 
@@ -1190,6 +1229,8 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   flex-direction: column;
   gap: 14px;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .panel-header {
@@ -1198,6 +1239,7 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   align-items: center;
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 12px;
+  gap: 8px;
 }
 
 .panel-title {
@@ -1205,6 +1247,112 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Éléments du tableau de bord (Dashboard Items & Responsive) */
+.dashboard-empty-hint {
+  color: var(--text-dim);
+  font-size: 0.86rem;
+  padding: 10px 0;
+  font-style: italic;
+}
+
+.dashboard-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.88rem;
+  min-width: 0;
+  transition: background-color var(--transition-fast);
+}
+
+.dashboard-item:last-child {
+  border-bottom: none;
+}
+
+.dashboard-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dashboard-item-icon {
+  flex-shrink: 0;
+  font-size: 0.88rem;
+  line-height: 1;
+}
+
+.dashboard-item-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.dashboard-item-title {
+  color: var(--text-main);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+  transition: color var(--transition-fast);
+}
+
+.dashboard-item-title:hover {
+  color: var(--accent);
+}
+
+.dashboard-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Badge des horaires sur le tableau de bord */
+.dashboard-time-badge {
+  font-size: 0.76rem;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  letter-spacing: -0.01em;
+}
+
+[data-theme="light"] .dashboard-time-badge {
+  background-color: rgba(0, 0, 0, 0.04);
+  color: var(--text-main);
+}
+
+.dashboard-note-date {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* Pastilles de source dans le tableau de bord */
@@ -1627,11 +1775,12 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
 .task-title {
   font-size: 0.92rem;
   font-weight: 500;
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 120px;
   word-break: break-word;
   color: var(--text-main);
   transition: color var(--transition-fast);
+  line-height: 1.4;
 }
 
 .task-tree-node.is-root > .task-item .task-title {
@@ -1647,9 +1796,9 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
 .task-badges {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
 }
 
 .badge {
@@ -1846,6 +1995,43 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   color: var(--accent);
 }
 
+/* Responsive des lignes et titres de tâches */
+@media (max-width: 900px) {
+  .task-badges {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .task-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px 8px;
+  }
+  .task-title {
+    flex: 1 1 50%;
+    min-width: 100px;
+  }
+  .task-actions {
+    opacity: 1;
+    transform: none;
+    margin-left: auto;
+  }
+  .task-badges {
+    width: 100%;
+    margin-left: 32px;
+    gap: 4px;
+  }
+  .tasks-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .tasks-toolbar-actions {
+    justify-content: flex-end;
+  }
+}
+
 /* ==========================================================
    Écran 3 : Gestion des Projets
    ========================================================== */
@@ -2021,7 +2207,8 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -2039,6 +2226,7 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   font-weight: 600;
   text-align: center;
   flex-shrink: 0;
+  min-width: 680px;
 }
 
 .weekday-header {
@@ -2091,18 +2279,23 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
 .calendar-body {
   flex: 1;
   min-height: 0;
+  min-width: 680px;
   position: relative;
   display: grid;
   grid-template-columns: 55px repeat(7, 1fr);
   background-color: var(--bg-primary);
   overflow-y: auto;
-  /* Aucune barre de défilement visible */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .calendar-body::-webkit-scrollbar {
-  display: none;
+  width: 5px;
+}
+
+.calendar-body::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
 }
 
 .time-gutter {
@@ -2126,6 +2319,7 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   position: relative;
   background-image: linear-gradient(to bottom, var(--border-subtle) 1px, transparent 1px);
   box-sizing: border-box;
+  cursor: pointer;
 }
 
 .day-column:last-child {
@@ -2160,28 +2354,152 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
 }
 
-/* 1. CODE COULEUR : ANTIGRAVITÉ (Local) */
+/* Couleurs par défaut (si aucune couleur personnalisée n'est fournie) */
 .calendar-event.antigravite-event {
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.95) 0%, rgba(99, 102, 241, 0.95) 100%);
   border-left: 4px solid #c084fc;
-  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.35);
 }
 
-.calendar-event.antigravite-event:hover {
-  box-shadow: 0 8px 22px rgba(124, 58, 237, 0.6);
-  border-left-color: #f3e8ff;
-}
-
-/* 2. CODE COULEUR : GOOGLE AGENDA */
 .calendar-event.google-event {
   background: linear-gradient(135deg, rgba(26, 115, 232, 0.95) 0%, rgba(37, 99, 235, 0.95) 100%);
   border-left: 4px solid #60a5fa;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
 }
 
-.calendar-event.google-event:hover {
-  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.6);
-  border-left-color: #eff6ff;
+/* Pastilles de couleurs pré-définies dans la modale d'événement */
+.color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+  display: inline-block;
+  box-sizing: border-box;
+}
+.color-swatch:hover {
+  transform: scale(1.18);
+}
+.color-swatch.active {
+  border-color: #ffffff;
+  transform: scale(1.22);
+  box-shadow: 0 0 0 2px var(--bg-card), 0 0 8px rgba(255, 255, 255, 0.6);
+}
+
+/* Bouton de couleur personnalisée avec dégradé chromatique circulaire fluide */
+.color-swatch.color-swatch-custom {
+  position: relative;
+  background: conic-gradient(from 180deg at 50% 50%, #f43f5e 0deg, #eab308 60deg, #10b981 120deg, #06b6d4 180deg, #6366f1 240deg, #ec4899 300deg, #f43f5e 360deg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.color-swatch.color-swatch-custom input[type="color"] {
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Bascule des vues d'agenda (Jour, Semaine, Mois) */
+.btn-agenda-view {
+  transition: all 0.15s ease;
+}
+.btn-agenda-view:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+.btn-agenda-view.active {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+/* Grille Vue Mois */
+.calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: minmax(95px, 1fr);
+  gap: 1px;
+  background-color: var(--border-color);
+  flex: 1;
+  min-height: 480px;
+}
+.month-day-cell {
+  background-color: var(--bg-primary);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  min-height: 85px;
+  transition: background-color 0.15s ease;
+  position: relative;
+}
+.month-day-cell:hover {
+  background-color: var(--bg-secondary);
+}
+.month-day-cell.other-month {
+  opacity: 0.35;
+}
+.month-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+.month-day-number {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.month-day-cell.today .month-day-number {
+  background-color: var(--primary);
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.month-event-pill {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  color: #ffffff;
+  font-weight: 500;
+  line-height: 1.25;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+.month-event-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.15);
+}
+
+/* Tag discret d'origine de créneau (remplaçant les logos encombrants) */
+.event-origin-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 /* En-tête de l'événement (Badge Source + Pastille Temps) */
@@ -2442,13 +2760,143 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   letter-spacing: -0.01em;
 }
 
+/* Barre d'outils Markdown Obsidian */
+.notes-format-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  user-select: none;
+}
+
+.notes-format-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.notes-format-divider {
+  width: 1px;
+  height: 18px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+}
+
+.notes-format-spacer {
+  flex: 1;
+}
+
+.btn-format {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 3px 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  line-height: 1.2;
+}
+
+.btn-format:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+
+.btn-format-highlight mark {
+  background-color: rgba(234, 179, 8, 0.4);
+  color: var(--text-main);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.notes-view-mode-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  border: 1px solid var(--border-color);
+}
+
+.btn-view-mode {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-view-mode:hover {
+  color: var(--text-main);
+}
+
+.btn-view-mode.active {
+  background-color: var(--accent);
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+
+/* Panes : Split, Edit, Preview */
 .notes-panes {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   overflow: hidden;
   background-color: var(--bg-card);
   min-height: 0;
+  position: relative;
+}
+
+.notes-panes.mode-split #note-body-editor {
+  display: block;
+  flex: 1 1 50%;
+  width: 50%;
+  border-right: 1px solid var(--border-color);
+}
+
+.notes-panes.mode-split #notes-preview-container {
+  display: block;
+  flex: 1 1 50%;
+  width: 50%;
+}
+
+.notes-panes.mode-edit #note-body-editor {
+  display: block;
+  flex: 1 1 100%;
+  width: 100%;
+  border-right: none;
+}
+
+.notes-panes.mode-edit #notes-preview-container {
+  display: none !important;
+}
+
+.notes-panes.mode-preview #note-body-editor {
+  display: none !important;
+}
+
+.notes-panes.mode-preview #notes-preview-container {
+  display: block;
+  flex: 1 1 100%;
+  width: 100%;
+  border-right: none;
 }
 
 .notes-textarea {
@@ -2469,8 +2917,265 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   box-sizing: border-box;
 }
 
+/* Conteneur d'Aperçu Markdown */
 .notes-preview {
-  display: none !important;
+  display: block;
+  height: 100%;
+  padding: 24px 32px;
+  overflow-y: auto;
+  color: var(--text-main);
+  line-height: 1.75;
+  font-size: 0.96rem;
+  box-sizing: border-box;
+}
+
+.notes-preview-empty {
+  color: var(--text-dim);
+  font-style: italic;
+  text-align: center;
+  padding: 40px 0;
+  font-size: 0.9rem;
+}
+
+/* Typographie & Éléments Markdown Obsidian dans l'aperçu */
+.notes-preview h1,
+.notes-preview h2,
+.notes-preview h3,
+.notes-preview h4,
+.notes-preview h5,
+.notes-preview h6 {
+  color: var(--text-main);
+  font-weight: 700;
+  margin-top: 1.3em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+
+.notes-preview h1:first-child,
+.notes-preview h2:first-child,
+.notes-preview h3:first-child {
+  margin-top: 0;
+}
+
+.notes-preview h1 { font-size: 1.6rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
+.notes-preview h2 { font-size: 1.35rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.2em; }
+.notes-preview h3 { font-size: 1.15rem; }
+.notes-preview h4 { font-size: 1.05rem; }
+.notes-preview h5 { font-size: 0.95rem; }
+.notes-preview h6 { font-size: 0.85rem; color: var(--text-muted); }
+
+.notes-preview p {
+  margin: 0.8em 0;
+}
+
+.notes-preview strong {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.notes-preview em {
+  font-style: italic;
+}
+
+.obsidian-highlight {
+  background-color: rgba(234, 179, 8, 0.32);
+  color: inherit;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  border-bottom: 1px solid rgba(234, 179, 8, 0.5);
+}
+
+.obsidian-del {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
+.obsidian-wikilink {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: default;
+  transition: color 0.15s ease;
+}
+
+.obsidian-wikilink:hover {
+  color: var(--accent-hover);
+  text-decoration-style: dotted;
+}
+
+.obsidian-tag {
+  display: inline-block;
+  background-color: rgba(56, 189, 248, 0.14);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin: 0 2px;
+}
+
+/* Callouts Obsidian */
+.obsidian-callout {
+  border-left: 4px solid var(--accent);
+  background-color: var(--bg-secondary);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 12px 16px;
+  margin: 14px 0;
+}
+
+.obsidian-callout-title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.obsidian-callout-body {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.obsidian-callout-warning,
+.obsidian-callout-caution {
+  border-left-color: var(--warning);
+}
+.obsidian-callout-warning .obsidian-callout-title,
+.obsidian-callout-caution .obsidian-callout-title {
+  color: var(--warning);
+}
+
+.obsidian-callout-danger,
+.obsidian-callout-error {
+  border-left-color: var(--danger);
+}
+.obsidian-callout-danger .obsidian-callout-title,
+.obsidian-callout-error .obsidian-callout-title {
+  color: var(--danger);
+}
+
+.obsidian-callout-success,
+.obsidian-callout-tip {
+  border-left-color: var(--success);
+}
+.obsidian-callout-success .obsidian-callout-title,
+.obsidian-callout-tip .obsidian-callout-title {
+  color: var(--success);
+}
+
+.notes-preview blockquote {
+  border-left: 3px solid var(--border-strong);
+  margin: 12px 0;
+  padding: 6px 16px;
+  color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Listes de tâches et cases à cocher */
+.obsidian-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.obsidian-task-checkbox {
+  margin-top: 5px;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.obsidian-task-item .task-text {
+  flex: 1;
+}
+
+.obsidian-task-item .task-completed {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
+/* Listes */
+.obsidian-list {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.obsidian-bullet-item,
+.obsidian-number-item {
+  margin: 4px 0;
+}
+
+/* Code et blocs de code */
+.obsidian-code-block {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin: 14px 0;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.obsidian-code-block .code-header {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+  font-family: var(--font-sans);
+}
+
+.obsidian-inline-code {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.88em;
+  color: var(--accent);
+}
+
+/* Métadonnées Frontmatter */
+.obsidian-frontmatter {
+  background-color: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.obsidian-frontmatter-title {
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  color: var(--text-dim);
+}
+
+.obsidian-hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 20px 0;
+}
+
+.notes-preview a {
+  color: var(--accent);
+  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+.notes-preview a:hover {
+  color: var(--accent-hover);
 }
 
 /* ==========================================================
@@ -2530,6 +3235,9 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   pointer-events: none;
   transition: opacity 0.2s ease;
   backdrop-filter: blur(4px);
+  padding: 16px;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .modal-overlay.active {
@@ -2543,6 +3251,7 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   border-radius: var(--radius-lg);
   width: 90%;
   max-width: 520px;
+  max-height: calc(100vh - 32px);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
@@ -2561,6 +3270,47 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.modal-form-section .form-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-form-section .form-group {
+  min-width: 0;
+  overflow: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-form-section select.form-control {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  text-overflow: ellipsis !important;
+}
+
+.modal-form-section span {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+@media (max-width: 620px) {
+  .modal-form-section .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+[data-theme="light"] .modal-form-section {
+  background-color: var(--bg-tertiary);
 }
 
 .modal-overlay.active .modal-content {
@@ -2574,6 +3324,7 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   justify-content: space-between;
   align-items: center;
   background-color: var(--bg-secondary);
+  flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -2587,7 +3338,9 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   display: flex;
   flex-direction: column;
   gap: 13px;
-  max-height: 82vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
 }
 
@@ -2598,6 +3351,7 @@ body.has-custom-wallpaper[data-theme="oled"] .notes-editor-container {
   justify-content: flex-end;
   gap: 10px;
   background-color: var(--bg-secondary);
+  flex-shrink: 0;
 }
 
 .form-group {

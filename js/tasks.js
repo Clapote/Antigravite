@@ -17,6 +17,11 @@ const TasksManager = {
   draggedTaskId: null,
 
   init() {
+    if (this.initialized) {
+      this.render();
+      return;
+    }
+    this.initialized = true;
     this.render();
     this.bindEvents();
   },
@@ -127,6 +132,9 @@ const TasksManager = {
   saveAll(tasks) {
     StorageManager.saveTasks(tasks);
     this.render();
+    if (typeof window !== 'undefined' && window.ProjectsManager && typeof window.ProjectsManager.render === 'function') {
+      window.ProjectsManager.render();
+    }
     if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
       window.App.updateDashboard();
     }
@@ -312,7 +320,8 @@ const TasksManager = {
       priority: taskData.priority || 'medium',
       completed: false,
       deadline: taskData.deadline || null,
-      plannedDate: taskData.plannedDate || null,
+      plannedDate: taskData.plannedDate ? taskData.plannedDate.slice(0, 10) : null,
+      plannedTime: taskData.plannedTime || (taskData.plannedDate && taskData.plannedDate.length >= 16 ? taskData.plannedDate.slice(11, 16) : '09:00'),
       createdAt: new Date().toISOString(),
       order: 999, // positionné à la suite
       subtasks: []
@@ -335,8 +344,8 @@ const TasksManager = {
 
     this.saveAll(tasks);
 
-    // EXIGENCE : Si la tâche est programmée, créer obligatoirement un créneau dans l'agenda Antigravité
-    if (newTask.plannedDate) {
+    // EXIGENCE : Si la tâche est programmée, créer un créneau dans l'agenda sauf si la tâche provient déjà d'un créneau existant
+    if (newTask.plannedDate && !taskData.skipEventCreation) {
       this.syncPlannedDateToAgenda(newTask);
     }
 
@@ -350,19 +359,26 @@ const TasksManager = {
     const found = this.findTaskRecursive(tasks, id);
     if (!found) return false;
 
+    const oldPlannedDate = found.task.plannedDate;
+    const oldPlannedTime = found.task.plannedTime;
+
     found.task.title = updatedData.title.trim();
     found.task.description = updatedData.description !== undefined ? updatedData.description.trim() : found.task.description;
     found.task.projectId = updatedData.projectId !== undefined ? updatedData.projectId : found.task.projectId;
     found.task.priority = updatedData.priority || found.task.priority;
     found.task.deadline = updatedData.deadline !== undefined ? updatedData.deadline : found.task.deadline;
-    found.task.plannedDate = updatedData.plannedDate !== undefined ? updatedData.plannedDate : found.task.plannedDate;
+    found.task.plannedDate = updatedData.plannedDate !== undefined ? (updatedData.plannedDate ? updatedData.plannedDate.slice(0, 10) : null) : found.task.plannedDate;
+    if (updatedData.plannedTime !== undefined) found.task.plannedTime = updatedData.plannedTime;
     found.task.updatedAt = new Date().toISOString();
 
     this.saveAll(tasks);
 
-    // EXIGENCE : Si la tâche est programmée, créer ou actualiser obligatoirement le créneau dans l'agenda
-    if (found.task.plannedDate) {
-      this.syncPlannedDateToAgenda(found.task);
+    // EXIGENCE : Si la tâche est programmée, synchroniser l'agenda en préservant horaires et durées
+    if (found.task.plannedDate && !updatedData.skipEventCreation) {
+      this.syncPlannedDateToAgenda(found.task, oldPlannedDate, oldPlannedTime);
+    } else if (oldPlannedDate && !found.task.plannedDate) {
+      // Si la date prévue a été retirée, détacher le créneau sans le supprimer
+      this.detachPlannedDateFromAgenda(found.task.id);
     }
 
     this._showToast("Tâche mise à jour", "info");
@@ -370,39 +386,74 @@ const TasksManager = {
   },
 
   // Synchronisation obligatoire : programmer une tâche ajoute un créneau dans l'agenda Antigravité de base
-  syncPlannedDateToAgenda(task) {
+  syncPlannedDateToAgenda(task, oldPlannedDate = null, oldPlannedTime = null) {
     if (!task || !task.plannedDate) return;
     if (typeof StorageManager === 'undefined' || typeof StorageManager.getEvents !== 'function') return;
 
     const events = StorageManager.getEvents();
     let linkedEvent = events.find(e => e.taskId === task.id);
 
-    const dateOnly = task.plannedDate.slice(0, 10);
+    const newDateOnly = task.plannedDate.slice(0, 10);
     const hasSpecificTime = task.plannedDate.length >= 16;
-    const startTime = hasSpecificTime ? task.plannedDate.slice(11, 16) : '09:00';
-    
-    // Calculer heure de fin (+1 heure par défaut)
-    const [h, m] = startTime.split(':').map(Number);
-    const endH = Math.min(23, (h || 9) + 1);
-    const endTime = `${String(endH).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+    const specifiedStartTime = task.plannedTime || (hasSpecificTime ? task.plannedDate.slice(11, 16) : '09:00');
 
     if (linkedEvent) {
-      // Mettre à jour l'événement existant dans l'agenda
+      // Mettre à jour les informations textuelles
       linkedEvent.title = task.title;
-      if (task.description) linkedEvent.description = task.description;
-      linkedEvent.start = `${dateOnly}T${startTime}`;
-      linkedEvent.end = `${dateOnly}T${endTime}`;
+      if (task.description !== undefined) linkedEvent.description = task.description;
+
+      const dateHasChanged = oldPlannedDate !== null && oldPlannedDate.slice(0, 10) !== newDateOnly;
+      const timeHasChanged = oldPlannedTime !== null && task.plannedTime && oldPlannedTime !== task.plannedTime;
+
+      if (!dateHasChanged && !timeHasChanged) {
+        // La date et l'heure prévues n'ont pas changé : conserver STRICTEMENT les horaires et durées existants
+      } else {
+        // La date ou l'heure a été modifiée
+        let startTime = specifiedStartTime;
+        let durationMinutes = 60; // Durée par défaut
+
+        if (!timeHasChanged && linkedEvent.start && linkedEvent.start.length >= 16) {
+          startTime = linkedEvent.start.slice(11, 16);
+        }
+        if (!startTime) {
+          startTime = '09:00';
+        }
+
+        if (linkedEvent.start && linkedEvent.end) {
+          const prevStartMs = new Date(linkedEvent.start).getTime();
+          const prevEndMs = new Date(linkedEvent.end).getTime();
+          if (!isNaN(prevStartMs) && !isNaN(prevEndMs) && prevEndMs > prevStartMs) {
+            durationMinutes = Math.round((prevEndMs - prevStartMs) / (60 * 1000));
+          }
+        }
+
+        const [sh, sm] = startTime.split(':').map(Number);
+        const startTotalMinutes = (sh || 0) * 60 + (sm || 0);
+        const endTotalMinutes = Math.min(23 * 60 + 59, startTotalMinutes + durationMinutes);
+        const endH = Math.floor(endTotalMinutes / 60);
+        const endM = endTotalMinutes % 60;
+        const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+        linkedEvent.start = `${newDateOnly}T${startTime}`;
+        linkedEvent.end = `${newDateOnly}T${endTime}`;
+      }
+
       linkedEvent.updatedAt = new Date().toISOString();
       StorageManager.saveEvents(events);
     } else {
-      // Créer obligatoirement le créneau dans l'agenda Antigravité de base (source: 'local')
+      // Créer le créneau dans l'agenda Antigravité de base (source: 'local')
+      const startTime = specifiedStartTime || '09:00';
+      const [h, m] = startTime.split(':').map(Number);
+      const endH = Math.min(23, (h || 9) + 1);
+      const endTime = `${String(endH).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+
       const newEvent = {
         id: 'evt-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         title: task.title,
         description: task.description || '',
         location: '',
-        start: `${dateOnly}T${startTime}`,
-        end: `${dateOnly}T${endTime}`,
+        start: `${newDateOnly}T${startTime}`,
+        end: `${newDateOnly}T${endTime}`,
         isAllDay: false,
         color: '#8b5cf6', // Violet signature Antigravité
         taskId: task.id,
@@ -420,6 +471,32 @@ const TasksManager = {
     }
   },
 
+  // Détacher une tâche d'un événement d'agenda sans supprimer l'événement
+  detachPlannedDateFromAgenda(taskId) {
+    if (!taskId) return;
+    if (typeof StorageManager === 'undefined' || typeof StorageManager.getEvents !== 'function') return;
+
+    try {
+      const events = StorageManager.getEvents();
+      let modified = false;
+      for (const evt of events) {
+        if (evt.taskId === taskId) {
+          evt.taskId = null;
+          evt.updatedAt = new Date().toISOString();
+          modified = true;
+        }
+      }
+      if (modified) {
+        StorageManager.saveEvents(events);
+        if (typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.render === 'function') {
+          window.AgendaManager.render();
+        }
+      }
+    } catch (e) {
+      console.warn("[TasksManager] Erreur lors du détachement de l'événement :", e);
+    }
+  },
+
   // Valider / Invalider une tâche
   toggleCompleted(id) {
     const tasks = this.getAll();
@@ -434,12 +511,34 @@ const TasksManager = {
     this._showToast(msg, "info");
   },
 
-  // Supprimer une tâche (et toutes ses sous-tâches récursivement)
+  // Alias pratique pour compatibilité
+  toggleTask(id) {
+    return this.toggleCompleted(id);
+  },
+
+  // Supprimer une tâche (et toutes ses sous-tâches récursivement) sans supprimer les créneaux d'agenda associés
   deleteTask(id) {
     if (typeof confirm === 'function' && !confirm("Voulez-vous vraiment supprimer cette tâche et ses éventuelles sous-tâches ?")) return;
     const tasks = this.getAll();
-    
-    // Fonction récursive de suppression
+
+    // Collecter récursivement tous les IDs supprimés (tâche parente et sous-tâches)
+    const deletedIds = new Set();
+    const collectIdsRecursive = (t) => {
+      if (!t) return;
+      deletedIds.add(t.id);
+      if (t.subtasks && Array.isArray(t.subtasks)) {
+        t.subtasks.forEach(collectIdsRecursive);
+      }
+    };
+
+    const targetFound = this.findTaskRecursive(tasks, id);
+    if (targetFound && targetFound.task) {
+      collectIdsRecursive(targetFound.task);
+    } else {
+      deletedIds.add(id);
+    }
+
+    // Fonction récursive de suppression dans l'arborescence des tâches
     const removeRecursive = (list) => {
       const idx = list.findIndex(t => t.id === id);
       if (idx !== -1) {
@@ -456,6 +555,31 @@ const TasksManager = {
 
     removeRecursive(tasks);
     this.saveAll(tasks);
+
+    // RÈGLE IMPÉRATIVE N°3 :
+    // Nettoyer les références orphelines (taskId = null) sans JAMAIS supprimer les événements de l'agenda
+    if (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function') {
+      try {
+        const events = StorageManager.getEvents();
+        let eventsModified = false;
+        for (const evt of events) {
+          if (evt.taskId && deletedIds.has(evt.taskId)) {
+            evt.taskId = null;
+            evt.updatedAt = new Date().toISOString();
+            eventsModified = true;
+          }
+        }
+        if (eventsModified) {
+          StorageManager.saveEvents(events);
+          if (typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.render === 'function') {
+            window.AgendaManager.render();
+          }
+        }
+      } catch (err) {
+        console.warn("[TasksManager] Erreur lors du nettoyage des liaisons d'agenda :", err);
+      }
+    }
+
     this._showToast("Tâche supprimée", "info");
   },
 
@@ -667,7 +791,7 @@ const TasksManager = {
               ${task.completed ? '✓' : ''}
             </div>
 
-            <div class="task-title" onclick="TasksManager.openTaskModal('${task.id}')" title="Cliquer pour modifier" style="cursor: pointer;">
+            <div class="task-title" onclick="TasksManager.openTaskModal('${task.id}')" title="${this.escapeHtml(task.title)}" style="cursor: pointer;">
               ${this.escapeHtml(task.title)}
             </div>
 
@@ -784,6 +908,7 @@ const TasksManager = {
     const inputProject = document.getElementById('task-input-project');
     const inputPriority = document.getElementById('task-input-priority');
     const inputPlanned = document.getElementById('task-input-planned');
+    const inputPlannedTime = document.getElementById('task-input-planned-time');
     const inputDeadline = document.getElementById('task-input-deadline');
     const btnSave = document.getElementById('task-modal-save');
 
@@ -807,7 +932,10 @@ const TasksManager = {
       inputDesc.value = t.description || '';
       inputProject.value = t.projectId || '';
       inputPriority.value = t.priority || 'medium';
-      inputPlanned.value = t.plannedDate || '';
+      inputPlanned.value = t.plannedDate ? t.plannedDate.slice(0, 10) : '';
+      if (inputPlannedTime) {
+        inputPlannedTime.value = t.plannedTime || (t.plannedDate && t.plannedDate.length >= 16 ? t.plannedDate.slice(11, 16) : '09:00');
+      }
       inputDeadline.value = t.deadline || '';
 
       btnSave.onclick = () => {
@@ -818,6 +946,7 @@ const TasksManager = {
           projectId: inputProject.value || null,
           priority: inputPriority.value,
           plannedDate: inputPlanned.value || null,
+          plannedTime: inputPlannedTime ? (inputPlannedTime.value || '09:00') : '09:00',
           deadline: inputDeadline.value || null
         });
         this.closeTaskModal();
@@ -830,6 +959,7 @@ const TasksManager = {
       inputProject.value = '';
       inputPriority.value = 'medium';
       inputPlanned.value = '';
+      if (inputPlannedTime) inputPlannedTime.value = '09:00';
       inputDeadline.value = '';
 
       // Si c'est une sous-tâche, hériter facultativement du projet parent
@@ -848,6 +978,7 @@ const TasksManager = {
           projectId: inputProject.value || null,
           priority: inputPriority.value,
           plannedDate: inputPlanned.value || null,
+          plannedTime: inputPlannedTime ? (inputPlannedTime.value || '09:00') : '09:00',
           deadline: inputDeadline.value || null
         }, parentId);
         this.closeTaskModal();

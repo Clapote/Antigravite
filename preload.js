@@ -1,7 +1,24 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
-  getAppVersion: () => '1.0.0',
+  getAppVersion: () => ipcRenderer.invoke('antigravite:get-app-version'),
+
+  // Mises à jour automatiques (Services / electron-updater)
+  updater: Object.freeze({
+    getVersion: () => ipcRenderer.invoke('antigravite:get-app-version'),
+    getStatus: () => ipcRenderer.invoke('antigravite:updater-get-status'),
+    checkForUpdates: (force) => ipcRenderer.invoke('antigravite:updater-check', !!force),
+    downloadUpdate: () => ipcRenderer.invoke('antigravite:updater-download'),
+    installUpdate: () => ipcRenderer.invoke('antigravite:updater-install'),
+    onStatusChanged: (callback) => {
+      if (typeof callback !== 'function') return () => {};
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('antigravite:updater-status-changed', handler);
+      return () => {
+        ipcRenderer.removeListener('antigravite:updater-status-changed', handler);
+      };
+    }
+  }),
 
   // Sauvegardes locales physiques
   saveBackup: (data) => {

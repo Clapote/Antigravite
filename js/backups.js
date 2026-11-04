@@ -11,6 +11,11 @@
 
 const BackupManager = {
   init() {
+    if (this.initialized) {
+      this.render();
+      return;
+    }
+    this.initialized = true;
     this.render();
     this.bindEvents();
     this.migrateLegacyBackups();
@@ -119,23 +124,31 @@ const BackupManager = {
     };
 
     let physicalSaved = false;
+    let diskErrorMsg = null;
     const api = (typeof window !== 'undefined' && window.AntigraviteAPI) ? window.AntigraviteAPI : null;
     try {
       if (api && typeof api.saveBackup === 'function') {
         const result = await api.saveBackup(fullData);
-        backupRecord.diskPath = result.path;
-        backupRecord.hasPhysicalBackup = true;
-        physicalSaved = true;
+        if (result && result.path) {
+          backupRecord.diskPath = result.path;
+          backupRecord.hasPhysicalBackup = true;
+          physicalSaved = true;
+        } else {
+          throw new Error((result && result.error) || "Chemin de sauvegarde manquant dans la réponse.");
+        }
       }
     } catch (diskErr) {
       console.warn("[BackupManager] Échec de sauvegarde physique sur le disque :", diskErr);
+      diskErrorMsg = diskErr && diskErr.message ? diskErr.message : String(diskErr);
       // Fallback : si l'écriture disque échoue, conserver le payload dans localStorage pour éviter toute perte
       backupRecord.payload = fullData;
+      backupRecord.hasPhysicalBackup = false;
     }
 
-    // Si nous ne sommes pas dans Electron (mode navigateur sans IPC), conserver le payload en secours
+    // Si nous ne sommes pas dans Electron ou si la sauvegarde physique a échoué, conserver le payload en secours
     if (!physicalSaved) {
       backupRecord.payload = fullData;
+      backupRecord.hasPhysicalBackup = false;
     }
 
     try {
@@ -148,10 +161,17 @@ const BackupManager = {
       this.saveAll(backups);
 
       if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
-        window.App.showToast(
-          `Sauvegarde "${filename}" créée avec succès (${sizeKb} Ko)`,
-          "success"
-        );
+        if (physicalSaved) {
+          window.App.showToast(
+            `Sauvegarde "${filename}" créée avec succès (${sizeKb} Ko)`,
+            "success"
+          );
+        } else {
+          window.App.showToast(
+            `Avertissement : la sauvegarde physique sur le disque a échoué${diskErrorMsg ? ` (${diskErrorMsg})` : ''}. Les données restent préservées en mémoire locale.`,
+            "warning"
+          );
+        }
       }
 
       return backupRecord;
@@ -335,7 +355,11 @@ const BackupManager = {
       let modified = false;
       const updated = backups.map(b => {
         if (!b) return b;
-        const hasDiskConfirmation = b.hasPhysicalBackup || (b.diskPath && diskFilenames.size === 0) || (b.filename && diskFilenames.has(b.filename));
+        const hasDiskConfirmation = b.hasPhysicalBackup || 
+          (diskFilenames.size > 0 && (
+            (b.filename && diskFilenames.has(b.filename)) ||
+            (b.diskPath && Array.from(diskFilenames).some(fn => b.diskPath.endsWith(fn)))
+          ));
         if (b.payload && hasDiskConfirmation) {
           const copy = Object.assign({}, b);
           copy.hasPhysicalBackup = true;
@@ -357,22 +381,50 @@ const BackupManager = {
 
   async checkAutoBackup() {
     try {
-      const localBackups = this.getAll();
+      const storage = this.getStorage();
+      const settings = storage && typeof storage.getSettings === 'function' ? storage.getSettings() : {};
+      const autoBackupOnLaunch = settings.autoBackupOnLaunch !== false;
 
       // Vérifier les sauvegardes réellement présentes sur le disque.
       let diskBackups = [];
       const api = (typeof window !== 'undefined' && window.AntigraviteAPI) ? window.AntigraviteAPI : null;
 
       if (api && typeof api.listBackups === 'function') {
-        diskBackups = await api.listBackups();
-      } else {
-        throw new Error("Impossible de vérifier les sauvegardes sur le disque.");
-      }
+        try {
+          diskBackups = await api.listBackups();
+        } catch (e) {
+          console.warn("[BackupManager] Erreur lors de la vérification des sauvegardes sur disque :", e);
+        }
 
-      // Créer une sauvegarde initiale uniquement si aucun fichier
-      // physique n'existe et qu'aucun instantané local n'est disponible.
-      if (diskBackups.length === 0 && localBackups.length === 0) {
-        await this.createManualBackup("Sauvegarde initiale automatique");
+        // RÈGLE IMPÉRATIVE : Si aucune sauvegarde physique n'existe sur le disque,
+        // déclencher immédiatement la sauvegarde initiale complète, même si des métadonnées
+        // locales existent déjà.
+        if (!Array.isArray(diskBackups) || diskBackups.length === 0) {
+          await this.createManualBackup("Sauvegarde initiale automatique");
+          return;
+        }
+
+        // Si autoBackupOnLaunch est activé et des sauvegardes physiques existent,
+        // vérifier si une sauvegarde a déjà été réalisée aujourd'hui
+        if (autoBackupOnLaunch && diskBackups.length > 0) {
+          const latestBackup = diskBackups[0];
+          const latestDate = new Date(latestBackup.createdAt);
+          const today = new Date();
+          const isSameDay = !isNaN(latestDate.getTime()) &&
+            latestDate.getFullYear() === today.getFullYear() &&
+            latestDate.getMonth() === today.getMonth() &&
+            latestDate.getDate() === today.getDate();
+
+          if (!isSameDay) {
+            await this.createManualBackup("Sauvegarde quotidienne automatique");
+          }
+        }
+      } else {
+        // Hors environnement Electron / IPC disque (ex: mode web direct)
+        const localBackups = this.getAll();
+        if (localBackups.length === 0) {
+          await this.createManualBackup("Sauvegarde initiale automatique");
+        }
       }
     } catch (err) {
       console.error("Erreur lors de la vérification des sauvegardes :", err);

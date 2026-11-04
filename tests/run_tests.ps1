@@ -304,6 +304,102 @@ if (Test-Path $nodePath) {
 Assert-Test "Arborescence structurée des tâches, boutons déplier/replier et micro-animations de catégories" $tasksTreePass
 
 # -----------------------------------------------------------------------------
+# TEST 19 : Service de mise à jour automatique (electron-updater & Dépôt Public)
+# -----------------------------------------------------------------------------
+Write-Host "`n19. Vérification du service de mise à jour automatique (electron-updater)..." -ForegroundColor Yellow
+
+$updaterPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_update_service.js")
+    $updaterPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Service de mise à jour automatique (electron-updater & Dépôt Public de Releases)" $updaterPass
+
+# -----------------------------------------------------------------------------
+# TEST 20 : Interface utilisateur des mises à jour (Onglet Paramètres)
+# -----------------------------------------------------------------------------
+Write-Host "`n20. Vérification de l'interface des mises à jour (Onglet Paramètres)..." -ForegroundColor Yellow
+
+$updaterUIPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_update_ui.js")
+    $updaterUIPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Interface utilisateur des mises à jour (Onglet Paramètres, progression & sécurité)" $updaterUIPass
+
+# -----------------------------------------------------------------------------
+# TEST 21 : Système de Notes enrichi & Rendu Markdown Obsidian (Phase 1)
+# -----------------------------------------------------------------------------
+Write-Host "`n21. Vérification du système de notes enrichi et compatibilité Markdown Obsidian..." -ForegroundColor Yellow
+
+$notesMarkdownPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_notes_markdown.js")
+    $notesMarkdownPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Système de notes enrichi (Markdown Obsidian, barre d'outils, curseur & sécurité XSS)" $notesMarkdownPass
+
+# -----------------------------------------------------------------------------
+# TEST 22 : Responsive des Titres de Tâches & Horaires d'Accueil (Phase 2)
+# -----------------------------------------------------------------------------
+Write-Host "`n22. Vérification du responsive des titres de tâches et des horaires..." -ForegroundColor Yellow
+
+$responsiveUIPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_responsive_ui.js")
+    $responsiveUIPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Responsive des titres de tâches, affichage des horaires et fluidité de l'accueil" $responsiveUIPass
+
+# -----------------------------------------------------------------------------
+# TEST 23 : Validation globale de l'interface & non-chevauchement (Phase 3)
+# -----------------------------------------------------------------------------
+Write-Host "`n23. Vérification de la validation globale de l'interface et des modales..." -ForegroundColor Yellow
+
+$uiValidationPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_ui_validation.js")
+    $uiValidationPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Validation globale de l'interface (modales adaptatives, agenda non-chevauchant & contrastes)" $uiValidationPass
+
+# -----------------------------------------------------------------------------
+# TEST 24 : Intégrité des données, synchronisation Agenda et Sauvegardes (v1.1.1 Étape 1)
+# -----------------------------------------------------------------------------
+Write-Host "`n24. Vérification de l'intégrité des données, synchronisation et sauvegardes..." -ForegroundColor Yellow
+
+$dataIntegrityPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_data_integrity.js")
+    $dataIntegrityPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Intégrité des données, synchronisation des horaires agenda et gestion des sauvegardes" $dataIntegrityPass
+
+# -----------------------------------------------------------------------------
+# TEST 25 : Fonctionnalités Agenda, Récurrence & Ergonomie (v1.1.1 Étapes 2, 3 & 4)
+# -----------------------------------------------------------------------------
+Write-Host "`n25. Vérification des fonctionnalités Agenda, récurrence et ergonomie..." -ForegroundColor Yellow
+
+$agendaFeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_agenda_features.js")
+    $agendaFeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités Agenda (clic grille, récurrence, liaison note-projet et validation clavier)" $agendaFeaturesPass
+
+# -----------------------------------------------------------------------------
+# TEST 26 : Fonctionnalités v1.1.2 (Vues Agenda, Interconnexions, Raccourci, Tâches & Icône)
+# -----------------------------------------------------------------------------
+Write-Host "`n26. Vérification des nouvelles fonctionnalités v1.1.2..." -ForegroundColor Yellow
+
+$v112FeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v112_features.js")
+    $v112FeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités v1.1.2 (Vues Jour/Mois, Interconnexion Projets-Tâches-Notes, Raccourci, Heure tâche & Barre des tâches)" $v112FeaturesPass
+
+# -----------------------------------------------------------------------------
 # BILAN
 # -----------------------------------------------------------------------------
 Write-Host "`n==========================================================" -ForegroundColor Cyan

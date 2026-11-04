@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Antigravité - Gestion Personnelle</title>
+  <link rel="icon" type="image/png" href="./assets/icon.png">
   <link rel="stylesheet" href="./css/styles.css">
 </head>
 <body>
@@ -41,36 +42,49 @@
           <img src="./assets/logo-dark.png" alt="Antigravité" class="brand-logo-img logo-dark">
           <img src="./assets/logo-light.png" alt="Antigravité" class="brand-logo-img logo-light">
         </div>
-        <button type="button" id="btn-collapse-sidebar" class="btn-icon" title="Fermer le volet latéral (Ctrl+B)" style="margin-left: auto; font-size: 0.85rem; opacity: 0.75; padding: 4px 6px;">◀</button>
       </div>
 
       <ul class="nav-menu">
         <li class="nav-item active" data-screen="home">
-          <span class="icon">🏠</span>
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </span>
           <span>Accueil</span>
         </li>
         <li class="nav-item" data-screen="tasks">
-          <span class="icon">📋</span>
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+          </span>
           <span>Tâches</span>
         </li>
         <li class="nav-item" data-screen="projects">
-          <span class="icon">📁</span>
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          </span>
           <span>Projets</span>
         </li>
         <li class="nav-item" data-screen="agenda">
-          <span class="icon">📅</span>
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
+          </span>
           <span>Agenda</span>
         </li>
         <li class="nav-item" data-screen="notes">
-          <span class="icon">📝</span>
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+          </span>
           <span>Notes</span>
         </li>
         <li class="nav-item" data-screen="backups">
-          <span class="icon">💾</span>
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          </span>
           <span>Sauvegardes</span>
         </li>
         <li class="nav-item" data-screen="settings">
-          <span class="icon">⚙️</span>
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
           <span>Paramètres</span>
         </li>
       </ul>
@@ -93,7 +107,7 @@
       <!-- Barre supérieure -->
       <header class="top-bar">
         <div class="top-bar-title" style="display: flex; align-items: center; gap: 10px;">
-          <button type="button" id="btn-toggle-sidebar" class="btn-icon" title="Ouvrir / Fermer le volet latéral (Ctrl+B)" style="font-size: 1.1rem; padding: 4px 8px; border-radius: var(--radius-sm);">☰</button>
+          <button type="button" id="btn-toggle-sidebar" class="btn-icon" title="Ouvrir / Fermer le volet latéral (Ctrl+B)" style="font-size: 1.05rem; padding: 4px 8px; border-radius: var(--radius-sm); user-select: none;">◀</button>
           <h2 id="current-screen-title">Tableau de bord</h2>
         </div>
         <div class="top-bar-actions">
@@ -219,23 +233,32 @@
         <div id="projects-grid-container" class="projects-grid"></div>
       </section>
 
-      <!-- ÉCRAN 4 : AGENDA HEBDOMADAIRE -->
+      <!-- ÉCRAN 4 : AGENDA -->
       <section id="screen-agenda" class="screen-view">
         <div class="agenda-header">
-          <div class="calendar-nav">
-            <button id="btn-prev-week" class="btn btn-secondary btn-sm">◀ Semaine précédente</button>
+          <div class="calendar-nav" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <button id="btn-prev-week" class="btn btn-secondary btn-sm" title="Période précédente">◀</button>
             <button id="btn-today-week" class="btn btn-secondary btn-sm">Aujourd'hui</button>
-            <button id="btn-next-week" class="btn btn-secondary btn-sm">Semaine suivante ▶</button>
-            <span id="calendar-week-label" style="font-weight: 600; font-size: 1rem; margin-left: 10px;"></span>
+            <button id="btn-next-week" class="btn btn-secondary btn-sm" title="Période suivante">▶</button>
+            <span id="calendar-week-label" style="font-weight: 600; font-size: 0.95rem; margin-left: 6px; min-width: 170px;"></span>
+            <!-- Calendrier de navigation rapide pour sauter directement à une date -->
+            <input type="date" id="agenda-jump-date" class="form-control" style="height: 30px; padding: 2px 8px; font-size: 0.78rem; width: 130px; cursor: pointer;" title="Sauter directement à une date">
           </div>
 
-          <!-- Légende du code couleur des sources d'événements -->
-          <div class="agenda-color-legend" title="Code couleur des événements selon leur provenance">
-            <span class="legend-pill legend-antigravite"><img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité</span>
-            <span class="legend-pill legend-google">🌐 Google Agenda</span>
+          <!-- Bascule de vue Jour / Semaine / Mois -->
+          <div class="agenda-view-modes" style="display: inline-flex; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border-color); background: var(--bg-secondary);">
+            <button type="button" class="btn-agenda-view" data-view="day" style="padding: 5px 12px; font-size: 0.8rem; background: transparent; color: var(--text-main); border: none; cursor: pointer;">Jour</button>
+            <button type="button" class="btn-agenda-view active" data-view="week" style="padding: 5px 12px; font-size: 0.8rem; background: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600;">Semaine</button>
+            <button type="button" class="btn-agenda-view" data-view="month" style="padding: 5px 12px; font-size: 0.8rem; background: transparent; color: var(--text-main); border: none; cursor: pointer;">Mois</button>
           </div>
 
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <!-- Légende épurée sans logo -->
+          <div class="agenda-color-legend" style="display: flex; gap: 10px; align-items: center; font-size: 0.75rem;">
+            <span style="display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted);"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #8b5cf6;"></span> Local</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted);"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #1a73e8;"></span> Google</span>
+          </div>
+
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <div id="agenda-google-indicator" class="google-sync-indicator disconnected" title="Statut de connexion Google Agenda (cliquez pour gérer)">
               <span class="sync-dot"></span>
               <span class="sync-label">Google Agenda</span>
@@ -248,9 +271,17 @@
           </div>
         </div>
 
-        <div class="calendar-container">
-          <div id="calendar-weekdays-container" class="calendar-weekdays"></div>
-          <div id="calendar-body-container" class="calendar-body"></div>
+        <div class="calendar-container" id="agenda-main-container">
+          <div id="calendar-week-view" style="display: flex; flex-direction: column; flex: 1; height: 100%; min-height: 0;">
+            <div id="calendar-weekdays-container" class="calendar-weekdays"></div>
+            <div id="calendar-body-container" class="calendar-body"></div>
+          </div>
+          <div id="calendar-month-view" style="display: none; flex-direction: column; flex: 1; height: 100%; min-height: 0; overflow-y: auto;">
+            <div id="calendar-month-header" class="calendar-weekdays" style="grid-template-columns: repeat(7, 1fr);">
+              <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+            </div>
+            <div id="calendar-month-grid" class="calendar-month-grid"></div>
+          </div>
         </div>
       </section>
 
@@ -261,7 +292,14 @@
             <div class="notes-search">
               <input type="text" id="notes-search-input" placeholder="🔍 Rechercher dans les notes...">
             </div>
-            <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+            <!-- Filtre de classement des notes (Toutes, Personnelles, Par projet) -->
+            <div style="padding: 0 10px 8px 10px;">
+              <select id="notes-filter-project" class="form-control" style="font-size: 0.78rem; height: 30px; padding: 2px 8px; width: 100%; cursor: pointer;">
+                <option value="all">📂 Toutes les notes</option>
+                <option value="personal">👤 Notes personnelles (sans projet)</option>
+              </select>
+            </div>
+            <div style="padding: 6px 14px 10px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
               <span style="font-size:0.78rem; color:var(--text-dim); font-weight:600; letter-spacing:0.04em;">MES NOTES</span>
               <button id="btn-new-note" class="btn-icon" title="Nouvelle note">➕</button>
             </div>
@@ -276,16 +314,54 @@
                 <button id="btn-delete-note" class="btn btn-danger btn-sm" title="Supprimer la note">🗑️</button>
               </div>
             </div>
-            <!-- Barre de liaison avec l'Agenda -->
+            <!-- Barre de liaison Projet & Agenda -->
             <div class="note-agenda-bar" style="display:flex; align-items:center; gap:8px; padding:8px 16px; background-color:var(--bg-secondary); border-bottom:1px solid var(--border-color); flex-wrap:wrap; font-size:0.8rem;">
-              <span style="color:var(--text-muted); font-weight:500; display:flex; align-items:center; gap:5px;"><span>📅</span> <span>Lier à l'Agenda :</span></span>
-              <select id="note-input-event" class="form-control" style="font-size:0.78rem; padding:3px 8px; height:30px; max-width:280px;"></select>
+              <span style="color:var(--text-muted); font-weight:500; display:flex; align-items:center; gap:5px;"><span>📁</span> <span>Projet :</span></span>
+              <select id="note-input-project" class="form-control" style="font-size:0.78rem; padding:3px 8px; height:30px; max-width:200px;"></select>
+              <span style="color:var(--text-muted); font-weight:500; display:flex; align-items:center; gap:5px; margin-left:6px;"><span>📅</span> <span>Lier à l'Agenda :</span></span>
+              <select id="note-input-event" class="form-control" style="font-size:0.78rem; padding:3px 8px; height:30px; max-width:260px;"></select>
               <button type="button" id="btn-note-view-event" class="btn btn-secondary btn-sm" style="display:none; font-size:0.75rem; padding:3px 8px;" title="Consulter ce créneau dans l'Agenda">↗ Voir dans l'Agenda</button>
               <button type="button" id="btn-note-schedule-event" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:3px 8px;" title="Créer un nouveau créneau d'agenda pour cette note">➕ Créer un créneau</button>
             </div>
-            <div class="notes-panes">
-              <textarea id="note-body-editor" class="notes-textarea" placeholder="Rédigez votre note ici..."></textarea>
-              <div id="notes-preview-container" class="notes-preview" style="display: none;"></div>
+
+            <!-- Barre d'outils Markdown Obsidian & Affichage -->
+            <div class="notes-format-bar" id="notes-format-bar">
+              <div class="notes-format-group">
+                <button type="button" class="btn-format" data-action="h1" title="Titre de niveau 1 (# )">H1</button>
+                <button type="button" class="btn-format" data-action="h2" title="Titre de niveau 2 (## )">H2</button>
+                <button type="button" class="btn-format" data-action="h3" title="Titre de niveau 3 (### )">H3</button>
+              </div>
+              <div class="notes-format-divider"></div>
+              <div class="notes-format-group">
+                <button type="button" class="btn-format" data-action="bold" title="Gras (Ctrl+B)"><b>B</b></button>
+                <button type="button" class="btn-format" data-action="italic" title="Italique (Ctrl+I)"><i>I</i></button>
+                <button type="button" class="btn-format" data-action="strikethrough" title="Barré (Ctrl+Shift+X)"><s>S</s></button>
+                <button type="button" class="btn-format btn-format-highlight" data-action="highlight" title="Surlignage Obsidian ==texte== (Ctrl+Shift+H)"><mark>H</mark></button>
+              </div>
+              <div class="notes-format-divider"></div>
+              <div class="notes-format-group">
+                <button type="button" class="btn-format" data-action="bullet" title="Liste à puces (- )">• Liste</button>
+                <button type="button" class="btn-format" data-action="number" title="Liste numérotée (1. )">1. Liste</button>
+                <button type="button" class="btn-format" data-action="task" title="Case à cocher / Tâche (- [ ] )">☑ Tâche</button>
+              </div>
+              <div class="notes-format-divider"></div>
+              <div class="notes-format-group">
+                <button type="button" class="btn-format" data-action="quote" title="Citation (> )">❝ Citation</button>
+                <button type="button" class="btn-format" data-action="code" title="Code en ligne (`code`)">&lt;/&gt;</button>
+                <button type="button" class="btn-format" data-action="code-block" title="Bloc de code (```)">Bloc code</button>
+                <button type="button" class="btn-format" data-action="link" title="Lien Markdown (Ctrl+K)">🔗 Lien</button>
+              </div>
+              <div class="notes-format-spacer"></div>
+              <div class="notes-view-mode-group">
+                <button type="button" class="btn-view-mode" id="btn-view-edit" data-mode="edit" title="Mode Édition seule">✏️ Écrire</button>
+                <button type="button" class="btn-view-mode active" id="btn-view-split" data-mode="split" title="Mode Côte à côte (Split)">🌓 Partagé</button>
+                <button type="button" class="btn-view-mode" id="btn-view-preview" data-mode="preview" title="Mode Aperçu seul">👁️ Aperçu</button>
+              </div>
+            </div>
+
+            <div class="notes-panes mode-split" id="notes-panes">
+              <textarea id="note-body-editor" class="notes-textarea" placeholder="Rédigez votre note en Markdown..." spellcheck="true"></textarea>
+              <div id="notes-preview-container" class="notes-preview"></div>
             </div>
           </div>
         </div>
@@ -665,6 +741,64 @@
             </div>
           </div>
 
+          <!-- 7. Mises à jour d'Antigravité -->
+          <div class="settings-section" id="settings-section-updates">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h4 class="settings-section-title">Mises à jour d'Antigravité</h4>
+                <p class="settings-section-desc" style="margin-bottom: 0;">Vérifiez la disponibilité de nouvelles versions et mettez à jour votre application en toute sécurité.</p>
+              </div>
+              <div id="updater-version-chip" class="status-chip status-disconnected" style="font-size: 0.82rem; font-weight: 600;">
+                <span id="updater-version-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--text-dim);"></span>
+                <span>Version <strong id="updater-current-version-label">1.1.2</strong></span>
+              </div>
+            </div>
+
+            <!-- Bloc d'état et actions -->
+            <div style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 16px 18px; margin-top: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
+                  <div id="updater-status-icon" style="font-size: 1.25rem; line-height: 1;">✨</div>
+                  <div>
+                    <div id="updater-status-title" style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); margin-bottom: 2px;">
+                      Prêt à vérifier
+                    </div>
+                    <div id="updater-status-desc" style="font-size: 0.8rem; color: var(--text-dim); line-height: 1.4;">
+                      Cliquez sur le bouton pour rechercher une nouvelle version sur GitHub Releases.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Groupe de boutons d'action -->
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <button type="button" id="btn-check-updates" class="btn btn-secondary btn-sm">
+                    <span id="btn-check-updates-icon">🔄</span>
+                    <span id="btn-check-updates-text">Rechercher une mise à jour</span>
+                  </button>
+                  <button type="button" id="btn-download-update" class="btn btn-primary btn-sm" style="display: none;">
+                    <span>⬇️</span>
+                    <span id="btn-download-update-text">Télécharger la mise à jour</span>
+                  </button>
+                  <button type="button" id="btn-install-update" class="btn btn-primary btn-sm" style="display: none;">
+                    <span>🚀</span>
+                    <span>Redémarrer et installer</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Jauge de progression du téléchargement -->
+              <div id="updater-progress-container" style="display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 6px;">
+                  <span id="updater-progress-label">Téléchargement du paquet...</span>
+                  <span id="updater-progress-percent" style="font-weight: 600; color: var(--text-main);">0 %</span>
+                </div>
+                <div style="width: 100%; height: 7px; background-color: var(--bg-card); border-radius: var(--radius-pill); overflow: hidden; border: 1px solid var(--border-color);">
+                  <div id="updater-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: var(--radius-pill); transition: width 0.2s ease;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -685,7 +819,7 @@
         </div>
         <div class="form-group">
           <label for="task-input-desc">Description détaillée</label>
-          <textarea id="task-input-desc" class="form-control" rows="3" placeholder="Notes, liens, sous-objectifs..."></textarea>
+          <textarea id="task-input-desc" class="form-control" rows="3" placeholder="Notes, liens, sous-objectifs..." spellcheck="true"></textarea>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -705,12 +839,15 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="task-input-planned">📅 Date prévue de réalisation</label>
-            <input type="date" id="task-input-planned" class="form-control" title="Le jour où vous avez prévu de travailler dessus">
+            <label for="task-input-planned">📅 Date &amp; heure prévues</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="date" id="task-input-planned" class="form-control" style="flex: 3;" title="Le jour où vous avez prévu de travailler dessus">
+              <input type="time" id="task-input-planned-time" class="form-control" style="flex: 2;" value="09:00" title="Heure prévue (par défaut 09:00)">
+            </div>
             <span style="font-size: 0.72rem; color: var(--accent); margin-top: 3px; display: block;">⚡ Ajoute automatiquement un créneau dans votre agenda Antigravité</span>
           </div>
           <div class="form-group">
-            <label for="task-input-deadline">⏳ Échéance limite (Deadline)</label>
+            <label for="task-input-deadline">⏳ Échéance limite</label>
             <input type="datetime-local" id="task-input-deadline" class="form-control" title="Date et heure limites impératives">
           </div>
         </div>
@@ -736,7 +873,7 @@
         </div>
         <div class="form-group">
           <label for="project-input-desc">Description</label>
-          <textarea id="project-input-desc" class="form-control" rows="3" placeholder="Objectif général du projet..."></textarea>
+          <textarea id="project-input-desc" class="form-control" rows="3" placeholder="Objectif général du projet..." spellcheck="true"></textarea>
         </div>
         <div class="form-group">
           <label for="project-input-color">Couleur d'identification</label>
@@ -746,6 +883,61 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="ProjectsManager.closeProjectModal()">Annuler</button>
         <button id="project-modal-save" class="btn btn-primary">Enregistrer le projet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE DÉTAIL DU PROJET (Tâches & Notes interconnectées) -->
+  <div id="project-detail-modal" class="modal-overlay">
+    <div class="modal-content modal-content-lg" style="max-width: 720px; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span id="project-detail-color-dot" style="width: 14px; height: 14px; border-radius: 50%; display: inline-block;"></span>
+          <h3 id="project-detail-title" style="margin: 0;">Détail du projet</h3>
+        </div>
+        <button class="btn-icon" onclick="ProjectsManager.closeProjectDetailModal()">✖</button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; flex: 1; padding: 18px 24px;">
+        <div id="project-detail-desc" style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 16px; line-height: 1.5;"></div>
+
+        <!-- Statistiques de progression -->
+        <div id="project-detail-progress-box" style="margin-bottom: 20px; background: var(--bg-secondary); padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px;">
+            <span id="project-detail-progress-label">Tâches réalisées : 0 / 0</span>
+            <span id="project-detail-progress-pct" style="font-weight: 700;">0%</span>
+          </div>
+          <div class="progress-bar-bg" style="height: 6px;">
+            <div id="project-detail-progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Section 1 : Tâches associées -->
+        <div style="margin-bottom: 22px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="font-size: 0.92rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 6px;">
+              <span>✅</span> <span>Tâches associées</span>
+              <span id="project-detail-tasks-count" class="badge" style="background: rgba(99,102,241,0.15); color: var(--primary); font-size: 0.72rem;">0</span>
+            </h4>
+            <button type="button" id="btn-project-detail-add-task" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;">+ Ajouter une tâche</button>
+          </div>
+          <div id="project-detail-tasks-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+        </div>
+
+        <!-- Section 2 : Notes associées -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="font-size: 0.92rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 6px;">
+              <span>📝</span> <span>Notes documentaires associées</span>
+              <span id="project-detail-notes-count" class="badge" style="background: rgba(56,189,248,0.15); color: var(--accent); font-size: 0.72rem;">0</span>
+            </h4>
+            <button type="button" id="btn-project-detail-add-note" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;">+ Ajouter une note</button>
+          </div>
+          <div id="project-detail-notes-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between;">
+        <button id="btn-project-detail-edit" class="btn btn-secondary">✏️ Modifier le projet</button>
+        <button class="btn btn-primary" onclick="ProjectsManager.closeProjectDetailModal()">Fermer</button>
       </div>
     </div>
   </div>
@@ -807,16 +999,40 @@
           </div>
         </div>
 
-        <!-- Lieu et Couleur côte à côte -->
-        <div style="display: flex; gap: 12px;">
-          <div class="form-group" id="event-group-location" style="flex: 3;">
+        <!-- Lieu, Couleur et Récurrence -->
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <div class="form-group" id="event-group-location" style="flex: 2; min-width: 170px;">
             <label for="event-input-location">📍 Lieu / Visioconférence (facultatif)</label>
             <input type="text" id="event-input-location" class="form-control" placeholder="ex: Bureau, Google Meet, Salle 12...">
           </div>
-          <div class="form-group" style="flex: 1; min-width: 140px;">
-            <label for="event-input-color">🎨 Couleur d'affichage</label>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <input type="color" id="event-input-color" class="form-control" style="height: 38px; padding: 2px; width: 100%; cursor: pointer;" value="#3b82f6">
+          <div class="form-group" id="event-group-recurrence" style="flex: 1; min-width: 150px;">
+            <label for="event-input-recurrence">🔁 Récurrence</label>
+            <select id="event-input-recurrence" class="form-control" style="font-size: 0.82rem; height: 38px;">
+              <option value="none">Aucune (créneau unique)</option>
+              <option value="daily">Tous les jours</option>
+              <option value="weekly">Toutes les semaines</option>
+              <option value="monthly">Tous les mois</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 2; min-width: 220px;">
+            <label for="event-input-color">🎨 Couleur du créneau</label>
+            <div id="event-color-swatches" class="event-color-swatches" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 5px;">
+              <span class="color-swatch active" data-color="#8b5cf6" style="background:#8b5cf6;" title="Violet astral"></span>
+              <span class="color-swatch" data-color="#3b82f6" style="background:#3b82f6;" title="Bleu ciel"></span>
+              <span class="color-swatch" data-color="#06b6d4" style="background:#06b6d4;" title="Cyan océan"></span>
+              <span class="color-swatch" data-color="#10b981" style="background:#10b981;" title="Émeraude"></span>
+              <span class="color-swatch" data-color="#14b8a6" style="background:#14b8a6;" title="Sarcelle"></span>
+              <span class="color-swatch" data-color="#eab308" style="background:#eab308;" title="Or soleil"></span>
+              <span class="color-swatch" data-color="#f59e0b" style="background:#f59e0b;" title="Ambre chaud"></span>
+              <span class="color-swatch" data-color="#f43f5e" style="background:#f43f5e;" title="Rose framboise"></span>
+              <span class="color-swatch" data-color="#ec4899" style="background:#ec4899;" title="Rose bonbon"></span>
+              <span class="color-swatch" data-color="#6366f1" style="background:#6366f1;" title="Indigo profond"></span>
+              <span class="color-swatch" data-color="#ef4444" style="background:#ef4444;" title="Rouge vif"></span>
+              <span class="color-swatch" data-color="#64748b" style="background:#64748b;" title="Ardoise neutre"></span>
+              <label class="color-swatch color-swatch-custom" id="event-color-custom-btn" title="Nuance sur mesure (palette complète)">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));"><path d="M12 5v14M5 12h14"/></svg>
+                <input type="color" id="event-input-color" value="#8b5cf6">
+              </label>
             </div>
           </div>
         </div>
@@ -824,7 +1040,7 @@
         <!-- Description -->
         <div class="form-group">
           <label for="event-input-desc">📝 Description / Notes du créneau</label>
-          <textarea id="event-input-desc" class="form-control" rows="2" placeholder="Détails du créneau, ordre du jour, informations utiles..." style="resize: vertical;"></textarea>
+          <textarea id="event-input-desc" class="form-control" rows="2" placeholder="Détails du créneau, ordre du jour, informations utiles..." style="resize: vertical;" spellcheck="true"></textarea>
         </div>
 
         <!-- Section des Liaisons Antigravité (Tâche & Note) -->
@@ -832,19 +1048,47 @@
           <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">
             Liaisons avec vos éléments Antigravité
           </div>
-          <div class="form-row" style="margin-bottom: 0; gap: 16px;">
-            <div class="form-group" style="flex: 1;">
-              <label for="event-input-task">📌 Tâche rattachée (facultative)</label>
-              <select id="event-input-task" class="form-control" style="font-size: 0.82rem;"></select>
-              <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px; display: block;">La suppression du créneau n'affectera jamais la tâche.</span>
-            </div>
-            <div class="form-group" style="flex: 1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <label for="event-input-note" style="margin-bottom: 0;">📄 Note associée (facultative)</label>
-                <button type="button" id="btn-event-open-note" class="btn btn-secondary btn-sm" style="display: none; padding: 2px 8px; font-size: 0.74rem; height: 22px;" title="Ouvrir cette note dans l'éditeur de notes">↗ Ouvrir la note</button>
+          <div class="form-row" style="margin-bottom: 0; gap: 14px;">
+            <div class="form-group" style="min-width: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 4px;">
+                <label for="event-input-task" style="margin-bottom: 0; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📌 Tâche rattachée</label>
+                <button type="button" id="btn-event-open-task" class="btn btn-secondary btn-sm" style="display: none; padding: 1px 6px; font-size: 0.7rem; height: 20px; flex-shrink: 0;" title="Consulter cette tâche dans la liste">↗ Voir</button>
               </div>
-              <select id="event-input-note" class="form-control" style="font-size: 0.82rem;"></select>
-              <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px; display: block;">Liez ou rédigez un compte-rendu pour ce créneau.</span>
+              <select id="event-input-task" class="form-control" style="font-size: 0.8rem; width: 100%; max-width: 100%; box-sizing: border-box; text-overflow: ellipsis;"></select>
+
+              <!-- Option de création directe de tâche depuis la modale d'agenda -->
+              <div id="event-create-task-container" style="margin-top: 8px;">
+                <label for="event-check-create-task" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer; color: var(--text-main); user-select: none;">
+                  <input type="checkbox" id="event-check-create-task" style="cursor: pointer; width: 14px; height: 14px; flex-shrink: 0;">
+                  <span>Créer simultanément une tâche</span>
+                </label>
+                <div id="event-new-task-details" style="display: none; margin-top: 6px; padding: 8px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                  <div class="form-row" style="margin-bottom: 0; gap: 8px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0; min-width: 0;">
+                      <label for="event-task-project" style="font-size: 0.73rem;">Projet :</label>
+                      <select id="event-task-project" class="form-control" style="font-size: 0.73rem; height: 26px; padding: 2px 4px; width: 100%; max-width: 100%;"></select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0; min-width: 0;">
+                      <label for="event-task-priority" style="font-size: 0.73rem;">Priorité :</label>
+                      <select id="event-task-priority" class="form-control" style="font-size: 0.73rem; height: 26px; padding: 2px 4px; width: 100%; max-width: 100%;">
+                        <option value="low">Basse</option>
+                        <option value="medium" selected>Moyenne</option>
+                        <option value="high">Haute</option>
+                        <option value="urgent">Urgente</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <span style="font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; display: block; line-height: 1.3;">La suppression du créneau n'affectera jamais la tâche.</span>
+            </div>
+            <div class="form-group" style="min-width: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 4px;">
+                <label for="event-input-note" style="margin-bottom: 0; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📄 Note associée</label>
+                <button type="button" id="btn-event-open-note" class="btn btn-secondary btn-sm" style="display: none; padding: 1px 6px; font-size: 0.7rem; height: 20px; flex-shrink: 0;" title="Ouvrir cette note dans l'éditeur de notes">↗ Ouvrir</button>
+              </div>
+              <select id="event-input-note" class="form-control" style="font-size: 0.8rem; width: 100%; max-width: 100%; box-sizing: border-box; text-overflow: ellipsis;"></select>
+              <span style="font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; display: block; line-height: 1.3;">Liez ou rédigez un compte-rendu pour ce créneau.</span>
             </div>
           </div>
         </div>

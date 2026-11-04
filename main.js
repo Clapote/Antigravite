@@ -1,15 +1,22 @@
-const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, Notification, session, globalShortcut } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
 const googleAuth = require('./services/google-auth-service');
 const googleCalendar = require('./services/google-calendar-service');
+const updateService = require('./services/update-service');
 
 app.setName('Antigravite');
 
-// Définir l'AppUserModelId pour garantir la délivrance des notifications Windows
+// Définir l'AppUserModelId pour garantir la délivrance des notifications Windows et l'association de l'icône dans la barre des tâches
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.antigravite.app');
+  app.setAppUserModelId('fr.antigravite.app');
+}
+
+// Mode isolé pour les tests de développement sans conflit avec l'application installée
+if (process.argv.includes('--isolated') || process.env.ANTIGRAVITE_ISOLATED) {
+  const isolatedDir = path.join(app.getPath('temp'), 'antigravite-test-profile');
+  app.setPath('userData', isolatedDir);
 }
 
 // Instance unique (Single Instance Lock)
@@ -47,6 +54,33 @@ function restoreAndFocusWindow() {
 }
 
 /**
+ * Bascule l'affichage de l'application (Masquer / Afficher et focus)
+ * Déclenché notamment par le raccourci global Ctrl+Shift+A.
+ */
+function toggleAppVisibility() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (!mainWindow.isVisible() || mainWindow.isMinimized()) {
+    restoreAndFocusWindow();
+  } else if (mainWindow.isFocused()) {
+    mainWindow.hide();
+  } else {
+    mainWindow.focus();
+  }
+}
+
+function getAppIconPath() {
+  const fsSync = require('node:fs');
+  const icoPath = path.join(__dirname, 'assets', 'icon.ico');
+  if (process.platform === 'win32' && fsSync.existsSync(icoPath)) {
+    return icoPath;
+  }
+  return path.join(__dirname, 'assets', 'icon.png');
+}
+
+/**
  * Crée l'icône dans la zone de notification Windows (System Tray)
  * avec raccourci d'ouverture et commande de fermeture définitive.
  */
@@ -54,7 +88,7 @@ function createTray() {
   if (tray) return;
 
   try {
-    const iconPath = path.join(__dirname, 'assets', 'icon.png');
+    const iconPath = getAppIconPath();
     const trayImage = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
     tray = new Tray(trayImage);
     tray.setToolTip('Antigravité');
@@ -92,12 +126,15 @@ function createWindow() {
   // Supprimer définitivement la barre de menus par défaut (File, Edit, View...)
   Menu.setApplicationMenu(null);
 
+  const appIconPath = getAppIconPath();
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1000,
     minHeight: 650,
     title: 'Antigravité',
+    icon: appIconPath,
     backgroundColor: '#0b0f17',
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
@@ -110,9 +147,18 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
+      sandbox: true,
+      spellcheck: true
     }
   });
+
+  if (process.platform === 'win32') {
+    try {
+      mainWindow.setIcon(appIconPath);
+    } catch (e) {
+      console.warn('[Window] setIcon fallback:', e.message);
+    }
+  }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
@@ -311,6 +357,32 @@ ipcMain.handle('antigravite:show-notification', async (_event, options) => {
 });
 
 // =========================================================================
+// IPC MISES À JOUR AUTOMATIQUES (SERVICES/UPDATE-SERVICE)
+// =========================================================================
+
+ipcMain.handle('antigravite:get-app-version', () => {
+  return app.getVersion();
+});
+
+ipcMain.handle('antigravite:updater-get-status', () => {
+  return updateService.getStatus();
+});
+
+ipcMain.handle('antigravite:updater-check', async (_event, force = false) => {
+  return updateService.checkForUpdates(force);
+});
+
+ipcMain.handle('antigravite:updater-download', async () => {
+  return updateService.downloadUpdate();
+});
+
+ipcMain.handle('antigravite:updater-install', async () => {
+  isQuitting = true;
+  updateService.quitAndInstall(false, true);
+  return true;
+});
+
+// =========================================================================
 // CYCLE DE VIE DE L'APPLICATION
 // =========================================================================
 
@@ -327,18 +399,71 @@ app.on('before-quit', () => {
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return;
 
+  // Configuration du correcteur orthographique pour les saisies (Français et Anglais)
+  try {
+    if (session && session.defaultSession && typeof session.defaultSession.setSpellCheckerLanguages === 'function') {
+      session.defaultSession.setSpellCheckerLanguages(['fr', 'en-US']);
+    }
+  } catch (err) {
+    console.warn('[Spellcheck] Erreur de configuration de la langue orthographique:', err.message);
+  }
+
   try {
     await googleAuth.init();
   } catch (err) {
     console.error("Erreur initialisation Google Auth:", err);
   }
 
+  // Initialisation du service de mise à jour automatique sans blocage réseau au démarrage
+  try {
+    updateService.init({
+      app,
+      onBeforeQuitInstall: () => {
+        isQuitting = true;
+        if (tray && !tray.isDestroyed()) {
+          try { tray.destroy(); } catch (_) {}
+          tray = null;
+        }
+      }
+    });
+
+    updateService.on('status-changed', (data) => {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+        mainWindow.webContents.send('antigravite:updater-status-changed', data);
+      }
+    });
+  } catch (err) {
+    console.error("Erreur initialisation UpdateService:", err);
+  }
+
   createWindow();
   createTray();
+
+  // Enregistrement du raccourci global Ctrl+Shift+A pour afficher/masquer l'application
+  try {
+    if (globalShortcut && typeof globalShortcut.register === 'function') {
+      const registered = globalShortcut.register('CommandOrControl+Shift+A', () => {
+        toggleAppVisibility();
+      });
+      if (!registered) {
+        console.warn('[Shortcut] Impossible d\'enregistrer CommandOrControl+Shift+A');
+      }
+    }
+  } catch (err) {
+    console.warn('[Shortcut] Erreur configuration raccourci global :', err.message);
+  }
 
   app.on('activate', () => {
     restoreAndFocusWindow();
   });
+});
+
+app.on('will-quit', () => {
+  try {
+    if (globalShortcut && typeof globalShortcut.unregisterAll === 'function') {
+      globalShortcut.unregisterAll();
+    }
+  } catch (_) {}
 });
 
 app.on('window-all-closed', () => {
