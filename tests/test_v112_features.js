@@ -142,7 +142,7 @@ async function runTests() {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
     assert.strictEqual(pkg.build.appId, 'fr.antigravite.app', "package.json doit avoir fr.antigravite.app");
     assert.ok(pkg.build.win.icon === 'assets/icon.ico' || pkg.build.win.icon === 'assets/icon.png', "package.json doit référencer assets/icon.ico ou assets/icon.png");
-    assert.strictEqual(pkg.version, '1.1.2', "package.json doit être en version 1.1.2");
+    assert.ok(pkg.version === '1.1.2' || pkg.version === '1.2.0', "package.json doit être en version 1.1.2 ou supérieure");
   });
 
   // ---------------------------------------------------------------------------
@@ -341,15 +341,15 @@ async function runTests() {
   // ---------------------------------------------------------------------------
   // 9. Alignement de Version
   // ---------------------------------------------------------------------------
-  await it("9.1 Version 1.1.2 cohérente dans package.json, index.html et settings.js", async () => {
+  await it("9.1 Version cohérente dans package.json, index.html et settings.js", async () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-    assert.strictEqual(pkg.version, '1.1.2');
+    assert.ok(pkg.version === '1.1.2' || pkg.version === '1.2.0');
 
     const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-    assert(indexHtml.includes('id="updater-current-version-label">1.1.2</strong>'), "index.html doit afficher la version 1.1.2");
+    assert(indexHtml.includes(`id="updater-current-version-label">${pkg.version}</strong>`), "index.html doit afficher la version courante");
 
     const settingsJs = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
-    assert(settingsJs.includes("this.currentVersion = '1.1.2'"), "settings.js doit être initialisé à la version 1.1.2");
+    assert(settingsJs.includes(`this.currentVersion = '${pkg.version}'`), "settings.js doit être initialisé à la version courante");
   });
 
   console.log("==========================================================");

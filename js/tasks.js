@@ -11,7 +11,7 @@
  */
 
 const TasksManager = {
-  currentFilter: 'all',
+  currentFilter: 'active',
   currentProjectFilter: 'all',
   collapsedTasks: new Set(),
   draggedTaskId: null,
@@ -22,8 +22,19 @@ const TasksManager = {
       return;
     }
     this.initialized = true;
+    this.currentFilter = 'active';
     this.render();
     this.bindEvents();
+  },
+
+  setFilter(filterName) {
+    this.currentFilter = filterName || 'active';
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.task-filter-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.filter === this.currentFilter);
+      });
+    }
+    this.render();
   },
 
   bindEvents() {
@@ -516,9 +527,8 @@ const TasksManager = {
     return this.toggleCompleted(id);
   },
 
-  // Supprimer une tâche (et toutes ses sous-tâches récursivement) sans supprimer les créneaux d'agenda associés
-  deleteTask(id) {
-    if (typeof confirm === 'function' && !confirm("Voulez-vous vraiment supprimer cette tâche et ses éventuelles sous-tâches ?")) return;
+  // Supprimer une tâche (déplacée directement dans la corbeille avec sous-tâches, sans interruption modale)
+  async deleteTask(id) {
     const tasks = this.getAll();
 
     // Collecter récursivement tous les IDs supprimés (tâche parente et sous-tâches)
@@ -534,6 +544,10 @@ const TasksManager = {
     const targetFound = this.findTaskRecursive(tasks, id);
     if (targetFound && targetFound.task) {
       collectIdsRecursive(targetFound.task);
+      // Déplacement automatique dans la corbeille
+      if (typeof TrashManager !== 'undefined' && typeof TrashManager.moveToTrash === 'function') {
+        TrashManager.moveToTrash('task', targetFound.task);
+      }
     } else {
       deletedIds.add(id);
     }
@@ -580,7 +594,7 @@ const TasksManager = {
       }
     }
 
-    this._showToast("Tâche supprimée", "info");
+    this._showToast("Tâche déplacée dans la corbeille", "info");
   },
 
   // Réorganisation manuelle : Monter
@@ -615,10 +629,28 @@ const TasksManager = {
 
   // Basculer l'état déplié/replié
   toggleCollapse(id) {
-    if (this.collapsedTasks.has(id)) {
-      this.collapsedTasks.delete(id);
-    } else {
+    const isNowCollapsed = !this.collapsedTasks.has(id);
+    if (isNowCollapsed) {
       this.collapsedTasks.add(id);
+    } else {
+      this.collapsedTasks.delete(id);
+    }
+    // Optimisation UX : rotation fluide directe du chevron et masquage sans refonte DOM
+    if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+      const node = document.querySelector(`.task-tree-node[data-task-id="${id}"]`);
+      if (node) {
+        const toggleBtn = node.querySelector('.task-toggle');
+        const subContainer = node.querySelector('.subtasks-container');
+        if (toggleBtn) {
+          toggleBtn.classList.toggle('collapsed', isNowCollapsed);
+          toggleBtn.title = isNowCollapsed ? 'Déplier les sous-tâches' : 'Réduire les sous-tâches';
+        }
+        if (subContainer) {
+          subContainer.classList.toggle('collapsed', isNowCollapsed);
+          subContainer.style.display = isNowCollapsed ? 'none' : 'flex';
+        }
+        return;
+      }
     }
     this.render();
   },
@@ -641,16 +673,23 @@ const TasksManager = {
 
     if (tasks.length === 0) {
       container.innerHTML = `
-        <div style="text-align:center; padding: 40px; color: var(--text-dim);">
-          <div style="font-size: 2rem; margin-bottom: 10px;">📋</div>
-          <p>Aucune tâche pour le moment.</p>
-          <button class="btn btn-primary btn-sm" style="margin-top: 12px;" onclick="TasksManager.openTaskModal()">Créer une première tâche</button>
+        <div class="antigravite-empty-state tasks-empty-state">
+          <div class="empty-state-illustration">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3 class="empty-state-title">Esprit libre</h3>
+          <p class="empty-state-text">Toutes vos pensées sont ordonnées. Prenez un instant pour souffler ou définissez votre prochain objectif.</p>
+          <button class="btn btn-primary btn-sm" style="margin-top: 14px;" onclick="TasksManager.openTaskModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span>Créer une première tâche</span></button>
         </div>
       `;
       return;
     }
 
-    container.innerHTML = '';
+    const _frag = typeof document.createDocumentFragment === 'function' ? document.createDocumentFragment() : null;
+    const useFrag = !!(_frag && (_frag.nodeType === 11 || typeof DocumentFragment !== 'undefined'));
+    const rootTarget = useFrag ? _frag : container;
+    if (!useFrag) container.innerHTML = '';
+    const nowTime = Date.now();
     
     // Rendu récursif sous forme d'arborescence structurée
     const renderTaskList = (list, parentEl, level = 0) => {
@@ -673,14 +712,29 @@ const TasksManager = {
         node.dataset.taskId = task.id;
         node.dataset.level = level;
 
+        const project = task.projectId ? projectsMap.get(task.projectId) : null;
+
         const item = document.createElement('div');
         item.className = `task-item draggable-item ${task.completed ? 'completed' : ''}`;
         item.draggable = true;
         item.dataset.taskId = task.id;
         item.dataset.level = level;
 
+        // Signifier par la couleur l'appartenance au projet
+        if (project && project.color) {
+          item.style.borderLeft = `4.5px solid ${project.color}`;
+          item.dataset.hasProject = 'true';
+          if (item.style && typeof item.style.setProperty === 'function') {
+            item.style.setProperty('--task-project-color', project.color);
+          }
+        }
+
         // Événements Glisser-Déposer (Drag and Drop)
         item.addEventListener('dragstart', (e) => {
+          if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, .task-toggle, .task-checkbox, .task-actions, input, select')) {
+            e.preventDefault();
+            return;
+          }
           this.draggedTaskId = task.id;
           e.dataTransfer.setData('text/plain', task.id);
           e.dataTransfer.effectAllowed = 'move';
@@ -764,10 +818,8 @@ const TasksManager = {
           }
         }
 
-        const project = task.projectId ? projectsMap.get(task.projectId) : null;
-        const now = new Date();
         const deadlineDate = task.deadline ? new Date(task.deadline) : null;
-        const isOverdue = deadlineDate && deadlineDate < now && !task.completed;
+        const isOverdue = deadlineDate && deadlineDate.getTime() < nowTime && !task.completed;
 
         let subtasksBadge = '';
         if (hasSubtasks) {
@@ -782,8 +834,8 @@ const TasksManager = {
             <div class="task-drag-handle" title="Glisser pour réorganiser, imbriquer en sous-tâche ou monter de niveau">⠿</div>
 
             ${hasSubtasks ? `
-              <button class="task-toggle ${isCollapsed ? 'collapsed' : ''}" onclick="TasksManager.toggleCollapse('${task.id}')" title="${isCollapsed ? 'Déplier la branche' : 'Replier la branche'}" aria-label="Déplier / replier">
-                <span class="task-toggle-icon">${isCollapsed ? '▶' : '▼'}</span>
+              <button type="button" class="task-toggle ${isCollapsed ? 'collapsed' : ''}" draggable="false" onmousedown="event.stopPropagation();" onclick="event.preventDefault(); event.stopPropagation(); TasksManager.toggleCollapse('${task.id}');" title="${isCollapsed ? 'Déplier les sous-tâches' : 'Réduire les sous-tâches'}" aria-label="Déplier / replier">
+                <span class="task-toggle-icon" style="pointer-events: none;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
               </button>
             ` : '<div class="task-toggle-spacer"><span class="tree-bullet">•</span></div>'}
             
@@ -796,24 +848,24 @@ const TasksManager = {
             </div>
 
             <div class="task-badges">
-              ${project ? `<span class="badge badge-project" style="border-color:${project.color}; color:${project.color};">${this.escapeHtml(project.title)}</span>` : ''}
+              ${project ? `<span class="badge badge-project" style="border:1px solid ${project.color}70; color:${project.color}; background-color:${project.color}1c; font-weight:600;"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${project.color};"></span><span>${this.escapeHtml(project.title)}</span></span>` : ''}
               ${this.getPriorityBadge(task.priority)}
-              ${task.plannedDate ? `<span class="badge badge-planned" title="Date prévue de réalisation">📅 Prévu : ${task.plannedDate}</span>` : ''}
-              ${task.deadline ? `<span class="badge badge-deadline ${isOverdue ? 'overdue' : ''}" title="Échéance limite">${isOverdue ? '⚠️ ' : '⏳ '}Échéance : ${task.deadline.replace('T', ' ')}</span>` : ''}
+              ${task.plannedDate ? `<span class="badge badge-planned" title="Date prévue de réalisation"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Prévu : ${task.plannedDate}</span></span>` : ''}
+              ${task.deadline ? `<span class="badge badge-deadline ${isOverdue ? 'overdue' : ''}" title="Échéance limite">${isOverdue ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>'}<span>Échéance : ${task.deadline.replace('T', ' ')}</span></span>` : ''}
               ${subtasksBadge}
             </div>
 
             <div class="task-actions">
               <div class="task-action-group order-group" title="Déplacer dans l'arborescence">
-                <button class="btn-icon" title="Monter d'un niveau (outdent)" onclick="TasksManager.outdentTask('${task.id}')" ${level === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}>◀</button>
-                <button class="btn-icon" title="Mettre en sous-tâche de la précédente (indent)" onclick="TasksManager.indentTask('${task.id}')" ${index === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}>▶</button>
-                <button class="btn-icon" title="Monter" onclick="TasksManager.moveUp('${task.id}')">▲</button>
-                <button class="btn-icon" title="Descendre" onclick="TasksManager.moveDown('${task.id}')">▼</button>
+                <button class="btn-icon" title="Monter d'un niveau (outdent)" onclick="TasksManager.outdentTask('${task.id}')" ${level === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+                <button class="btn-icon" title="Mettre en sous-tâche de la précédente (indent)" onclick="TasksManager.indentTask('${task.id}')" ${index === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+                <button class="btn-icon" title="Monter" onclick="TasksManager.moveUp('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>
+                <button class="btn-icon" title="Descendre" onclick="TasksManager.moveDown('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
               </div>
               <div class="task-action-group item-group">
-                <button class="btn-icon btn-action-add" title="Ajouter une sous-tâche" onclick="TasksManager.openTaskModal(null, '${task.id}')">➕</button>
-                <button class="btn-icon btn-action-edit" title="Modifier" onclick="TasksManager.openTaskModal('${task.id}')">✏️</button>
-                <button class="btn-icon btn-action-delete" title="Supprimer" onclick="TasksManager.deleteTask('${task.id}')">🗑️</button>
+                <button class="btn-icon btn-action-add" title="Ajouter une sous-tâche" onclick="TasksManager.openTaskModal(null, '${task.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                <button class="btn-icon btn-action-edit" title="Modifier" onclick="TasksManager.openTaskModal('${task.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                <button class="btn-icon btn-action-delete" title="Supprimer" onclick="TasksManager.deleteTask('${task.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             </div>
           </div>
@@ -824,9 +876,10 @@ const TasksManager = {
         // Sous-tâches
         if (hasSubtasks) {
           const subContainer = document.createElement('div');
-          // Déplier automatiquement si une sous-tâche correspond au filtre actuel
-          const forceExpand = isCollapsed && hasMatchingSubtask && (this.currentFilter !== 'all' || this.currentProjectFilter !== 'all');
-          subContainer.className = `subtasks-container ${isCollapsed && !forceExpand ? 'collapsed' : ''}`;
+          subContainer.className = `subtasks-container ${isCollapsed ? 'collapsed' : ''}`;
+          if (isCollapsed) {
+            subContainer.style.display = 'none';
+          }
           node.appendChild(subContainer);
           renderTaskList(task.subtasks, subContainer, level + 1);
         }
@@ -835,13 +888,26 @@ const TasksManager = {
       });
     };
 
-    renderTaskList(tasks, container, 0);
+    container.innerHTML = '';
+    renderTaskList(tasks, rootTarget, 0);
+
+    // Bouton "+" d'ajout rapide au pied de l'arborescence
+    const bottomAddBtn = document.createElement('div');
+    bottomAddBtn.id = 'tasks-bottom-add-btn';
+    bottomAddBtn.className = 'tasks-bottom-add-btn';
+    bottomAddBtn.title = 'Créer une nouvelle tâche';
+    bottomAddBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Ajouter une nouvelle tâche</span>
+    `;
+    bottomAddBtn.onclick = () => this.openTaskModal();
+    rootTarget.appendChild(bottomAddBtn);
 
     // Zone de dépôt au bas de la liste pour monter une tâche au niveau principal (racine)
     const rootDropZone = document.createElement('div');
     rootDropZone.id = 'tasks-root-dropzone';
     rootDropZone.className = 'tasks-root-dropzone';
-    rootDropZone.innerHTML = `<span>📥 Glisser ici pour placer au niveau principal (racine)</span>`;
+    rootDropZone.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Glisser ici pour placer au niveau principal (racine)</span>`;
 
     rootDropZone.addEventListener('dragover', (e) => {
       if (!this.draggedTaskId) return;
@@ -860,7 +926,11 @@ const TasksManager = {
       this.moveTask(this.draggedTaskId, null, 'root-bottom');
     });
 
-    container.appendChild(rootDropZone);
+    rootTarget.appendChild(rootDropZone);
+    if (useFrag) {
+      container.innerHTML = '';
+      container.appendChild(rootTarget);
+    }
   },
 
   hasMatchingChild(subtasks, filterMatch, projMatch) {
@@ -875,8 +945,8 @@ const TasksManager = {
 
   getPriorityBadge(priority) {
     switch (priority) {
-      case 'urgent': return '<span class="badge badge-priority-urgent">🔥 Urgent</span>';
-      case 'high': return '<span class="badge badge-priority-high">⚡ Élevée</span>';
+      case 'urgent': return '<span class="badge badge-priority-urgent"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><span>Urgent</span></span>';
+      case 'high': return '<span class="badge badge-priority-high"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Élevée</span></span>';
       case 'medium': return '<span class="badge badge-priority-medium">Normale</span>';
       case 'low': return '<span class="badge badge-priority-low">Basse</span>';
       default: return '';
@@ -888,10 +958,13 @@ const TasksManager = {
     if (!select) return;
     const currentVal = select.value;
     select.innerHTML = '<option value="all">Tous les projets</option>';
-    projects.forEach(p => {
+    const hier = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
+      ? StorageManager.getProjectsHierarchy(projects)
+      : (projects || []).map(p => ({ project: p, displayTitle: p.title }));
+    hier.forEach(({ project: p, displayTitle }) => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.title;
+      opt.textContent = displayTitle;
       select.appendChild(opt);
     });
     select.value = currentVal;
@@ -912,15 +985,38 @@ const TasksManager = {
     const inputDeadline = document.getElementById('task-input-deadline');
     const btnSave = document.getElementById('task-modal-save');
 
-    // Remplir la liste des projets
+    // Remplir la liste des projets (avec hiérarchie des sous-projets)
     const projects = StorageManager.getProjects();
+    const hierProjects = (typeof StorageManager.getProjectsHierarchy === 'function')
+      ? StorageManager.getProjectsHierarchy(projects)
+      : projects.map(p => ({ project: p, displayTitle: p.title }));
     inputProject.innerHTML = '<option value="">(Aucun projet)</option>';
-    projects.forEach(p => {
+    hierProjects.forEach(({ project: p, displayTitle }) => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.title;
+      opt.textContent = displayTitle;
       inputProject.appendChild(opt);
     });
+
+    const syncHiddenPlannedTime = () => {
+      if (!inputPlannedTime) return;
+      const raw = inputPlanned ? (inputPlanned.value || '') : '';
+      inputPlannedTime.value = raw.length >= 16 ? raw.slice(11, 16) : '09:00';
+    };
+    if (inputPlanned) {
+      inputPlanned.oninput = syncHiddenPlannedTime;
+      inputPlanned.onchange = syncHiddenPlannedTime;
+    }
+
+    const extractPlannedFields = () => {
+      const raw = inputPlanned ? (inputPlanned.value || '').trim() : '';
+      if (!raw) return { plannedDate: null, plannedTime: '09:00' };
+      const plannedDate = raw.slice(0, 10);
+      const plannedTime = raw.length >= 16
+        ? raw.slice(11, 16)
+        : (inputPlannedTime && inputPlannedTime.value ? inputPlannedTime.value : '09:00');
+      return { plannedDate, plannedTime };
+    };
 
     if (taskId) {
       // Mode modification
@@ -932,21 +1028,21 @@ const TasksManager = {
       inputDesc.value = t.description || '';
       inputProject.value = t.projectId || '';
       inputPriority.value = t.priority || 'medium';
-      inputPlanned.value = t.plannedDate ? t.plannedDate.slice(0, 10) : '';
-      if (inputPlannedTime) {
-        inputPlannedTime.value = t.plannedTime || (t.plannedDate && t.plannedDate.length >= 16 ? t.plannedDate.slice(11, 16) : '09:00');
-      }
+      const initTime = t.plannedTime || (t.plannedDate && t.plannedDate.length >= 16 ? t.plannedDate.slice(11, 16) : '09:00');
+      inputPlanned.value = t.plannedDate ? `${t.plannedDate.slice(0, 10)}T${initTime}` : '';
+      if (inputPlannedTime) inputPlannedTime.value = initTime;
       inputDeadline.value = t.deadline || '';
 
       btnSave.onclick = () => {
         if (!inputTitle.value.trim()) return alert("Le titre est requis.");
+        const { plannedDate, plannedTime } = extractPlannedFields();
         this.updateTask(taskId, {
           title: inputTitle.value,
           description: inputDesc.value,
           projectId: inputProject.value || null,
           priority: inputPriority.value,
-          plannedDate: inputPlanned.value || null,
-          plannedTime: inputPlannedTime ? (inputPlannedTime.value || '09:00') : '09:00',
+          plannedDate,
+          plannedTime,
           deadline: inputDeadline.value || null
         });
         this.closeTaskModal();
@@ -972,13 +1068,14 @@ const TasksManager = {
 
       btnSave.onclick = () => {
         if (!inputTitle.value.trim()) return alert("Le titre est requis.");
+        const { plannedDate, plannedTime } = extractPlannedFields();
         this.addTask({
           title: inputTitle.value,
           description: inputDesc.value,
           projectId: inputProject.value || null,
           priority: inputPriority.value,
-          plannedDate: inputPlanned.value || null,
-          plannedTime: inputPlannedTime ? (inputPlannedTime.value || '09:00') : '09:00',
+          plannedDate,
+          plannedTime,
           deadline: inputDeadline.value || null
         }, parentId);
         this.closeTaskModal();

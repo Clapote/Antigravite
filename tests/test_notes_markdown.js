@@ -298,7 +298,7 @@ const NotesManager = require('../js/notes.js');
   // Critère 7 : Caractères spéciaux et accentués (UTF-8)
   // ---------------------------------------------------------------------------
   await it("7. Préservation fidèle des caractères spéciaux, accentués et émojis", () => {
-    const utf8Text = "Éléphants à l'orée du bois : « Ça coûte 42 € ! » — Événement ✨ 🚀 📅";
+    const utf8Text = "Éléphants à l'orée du bois : « Ça coûte 42 € ! » — Événement ⭐ 🚀 📅";
     const testNotes = [{
       id: "note-utf8",
       title: "Note Accentuée",
@@ -318,7 +318,7 @@ const NotesManager = require('../js/notes.js');
     const html = NotesManager.simpleMarkdownToHtml(utf8Text);
     assert.ok(html.includes("Éléphants"), "Accents majuscules préservés dans le rendu");
     assert.ok(html.includes("Ça coûte 42 €"), "Symboles et cédilles préservés");
-    assert.ok(html.includes("✨ 🚀 📅"), "Émojis préservés");
+    assert.ok(html.includes("⭐ 🚀 📅"), "Émojis préservés");
   });
 
   // ---------------------------------------------------------------------------

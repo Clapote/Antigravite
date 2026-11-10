@@ -21,7 +21,7 @@ const AgendaNotificationManager = {
       "🎯 Horizon 1 heure : « {title} ». Gardez le cap, tout est sous contrôle !",
       "🌤️ Dans 60 minutes, place à : « {title} ». Respirez, tout va bien se passer.",
       "📖 Plus qu'une heure avant « {title} ». Un petit sas pour rassembler vos idées et vos notes.",
-      "✨ Coup d'œil bienveillant : « {title} » est dans 1h. Prenez votre temps pour boucler vos tâches.",
+      "! Coup d'œil bienveillant : « {title} » est dans 1h. Prenez votre temps pour boucler vos tâches.",
       "🚀 Dans 1 heure pile : « {title} ». Une belle opportunité pour avancer sur vos priorités !",
       "🧘‍♂️ Anticipation sereine : « {title} » débute dans 60 minutes. Vous êtes fin prêt.",
       "🌱 Dans 1h : « {title} ». Accordez-vous un instant de calme avant cette prochaine étape.",
@@ -37,14 +37,14 @@ const AgendaNotificationManager = {
       "🎯 Plus que 30 minutes : « {title} ». Faites le vide pour aborder ce créneau dans les meilleures conditions.",
       "💪 Dans une demi-heure : « {title} ». Une belle séance productive s'annonce !",
       "🛋️ Dernière ligne droite : « {title} » commence dans 30 minutes. Prenez deux minutes pour vous recentrer.",
-      "✨ Dans 30 min : « {title} ». Belle énergie pour cette rencontre ou ce temps de travail !",
+      "! Dans 30 min : « {title} ». Belle énergie pour cette rencontre ou ce temps de travail !",
       "🚀 C'est pour très bientôt : « {title} » dans une demi-heure. Tout se déroulera à merveille.",
       "🌈 Dans 30 minutes : « {title} ». Gardez le sourire, vous êtes prêt !"
     ],
     'now': [
       "🔔 C'est l'heure : « {title} » commence maintenant ! Donnez le meilleur de vous-même.",
       "🚀 Top départ pour « {title} » ! Belle séance et plein de réussite.",
-      "✨ C'est le moment : « {title} » débute à l'instant. Concentration, calme et énergie !",
+      "! C'est le moment : « {title} » débute à l'instant. Concentration, calme et énergie !",
       "🎯 Place à : « {title} ». Vous avez toutes les clés en main, bonne session !",
       "🌟 L'heure a sonné pour « {title} ». Respirez un grand coup et lancez-vous avec confiance !",
       "☀️ C'est parti pour « {title} » ! Profitez pleinement de ce temps de concentration.",
@@ -105,10 +105,27 @@ const AgendaNotificationManager = {
   checkUpcomingEvents() {
     if (!window.StorageManager || typeof window.StorageManager.getEvents !== 'function') return;
 
+    // Récupérer les préférences utilisateur pour les notifications
+    const settings = (typeof window.StorageManager.getSettings === 'function')
+      ? window.StorageManager.getSettings()
+      : {};
+
+    // Si les notifications globales sont désactivées dans les paramètres
+    if (settings && settings.notificationsEnabled === false) return;
+
+    // Choix multiples des moments de notification (par défaut : 60m, 30m, now)
+    const enabledStages = (settings && Array.isArray(settings.agendaNotificationStages))
+      ? settings.agendaNotificationStages
+      : ['60m', '30m', 'now'];
+
+    // Si aucun rappel n'est coché, ne rien envoyer
+    if (!enabledStages || enabledStages.length === 0) return;
+
     const events = window.StorageManager.getEvents();
     if (!Array.isArray(events) || events.length === 0) return;
 
     const now = Date.now();
+    let historyModified = false;
 
     events.forEach(evt => {
       // Ignorer les journées entières sans horaire précis ou événements sans date
@@ -126,31 +143,53 @@ const AgendaNotificationManager = {
       const sent = this.sentHistory[eventId];
 
       // 1. Notification 1 heure avant (entre 45 et 61 min avant l'événement)
-      if (diffMin <= 61 && diffMin >= 45 && !sent.includes('60m')) {
+      if (enabledStages.includes('60m') && diffMin <= 61 && diffMin >= 45 && !sent.includes('60m')) {
         sent.push('60m');
+        historyModified = true;
         this.notify('60m', evt);
-        this.saveHistory();
       }
 
       // 2. Notification 30 minutes avant (entre 15 et 31 min avant l'événement)
-      if (diffMin <= 31 && diffMin >= 15 && !sent.includes('30m')) {
+      if (enabledStages.includes('30m') && diffMin <= 31 && diffMin >= 15 && !sent.includes('30m')) {
         sent.push('30m');
+        historyModified = true;
         this.notify('30m', evt);
-        this.saveHistory();
       }
 
       // 3. Notification au moment même (entre -5 min et +2 min)
-      if (diffMin <= 2 && diffMin >= -5 && !sent.includes('now')) {
+      if (enabledStages.includes('now') && diffMin <= 2 && diffMin >= -5 && !sent.includes('now')) {
         sent.push('now');
+        historyModified = true;
         this.notify('now', evt);
-        this.saveHistory();
       }
 
       // Nettoyer l'historique des événements terminés depuis plus de 24h
       if (diffMin < -1440 && this.sentHistory[eventId]) {
         delete this.sentHistory[eventId];
+        historyModified = true;
       }
     });
+
+    // Élagage mémoire : nettoyer les clés orphelines des événements supprimés du calendrier
+    const activeEventIds = new Set(events.map(e => e.id || `${e.title}_${e.start}`));
+    for (const id in this.sentHistory) {
+      if (!activeEventIds.has(id)) {
+        delete this.sentHistory[id];
+        historyModified = true;
+      }
+    }
+
+    if (historyModified) {
+      this.saveHistory();
+    }
+  },
+
+  testNotification(stage = '30m') {
+    const fakeEvent = {
+      id: 'demo-sample-event',
+      title: 'Point d\'étape Antigravité'
+    };
+    this.notify(stage, fakeEvent);
   },
 
   notify(stage, event) {
@@ -177,6 +216,25 @@ const AgendaNotificationManager = {
     if (window.App && typeof window.App.showToast === 'function') {
       window.App.showToast(notificationBody, 'info');
     }
+
+    // 3. Carillon sonore discret si activé dans les paramètres
+    try {
+      const settings = (window.StorageManager && typeof window.StorageManager.getSettings === 'function')
+        ? window.StorageManager.getSettings()
+        : {};
+
+      const soundType = settings.notificationSound || 'zen';
+      const soundVol = (settings.notificationVolume !== undefined ? settings.notificationVolume : 60) / 100;
+
+      if (soundType !== 'none' && soundVol > 0) {
+        const soundMgr = (typeof window.SoundManager !== 'undefined')
+          ? window.SoundManager
+          : (typeof SoundManager !== 'undefined' ? SoundManager : null);
+        if (soundMgr && typeof soundMgr.playSound === 'function') {
+          soundMgr.playSound(soundType, soundVol);
+        }
+      }
+    } catch (_soundErr) {}
   }
 };
 

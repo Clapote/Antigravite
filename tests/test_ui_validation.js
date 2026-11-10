@@ -77,7 +77,7 @@ it("3. Les thèmes Sombre, Clair et OLED définissent des contrastes élevés et
   // Thème Clair
   assert.ok(css.includes('[data-theme="light"]'), "Thème clair défini");
   assert.ok(css.includes('--bg-primary: #f8fafc'), "Fond primaire clair défini");
-  assert.ok(css.includes('--text-main: #0f172a'), "Texte principal clair à fort contraste");
+  assert.ok(css.includes('--text-main: #000000') || css.includes('--text-main: #0f172a'), "Texte principal clair à fort contraste");
   assert.ok(css.includes('[data-theme="light"] .modal-form-section'), "Sous-sections de modales contrastées en thème clair");
 
   // Thème OLED

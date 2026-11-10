@@ -20,6 +20,7 @@ const BackupManager = {
     this.bindEvents();
     this.migrateLegacyBackups();
     this.checkAutoBackup();
+    this.setupAutoBackupScheduler();
   },
 
   getStorage() {
@@ -97,6 +98,11 @@ const BackupManager = {
 
   // Création d'une sauvegarde
   async createManualBackup(label = "Sauvegarde manuelle") {
+    const btnQuick = (typeof document !== 'undefined') ? document.getElementById('sidebar-quick-backup') : null;
+    if (btnQuick) {
+      btnQuick.classList.add('backup-saving');
+    }
+
     const storage = this.getStorage();
     const fullData = storage ? storage.getFullExport() : { tasks: [], projects: [], events: [], notes: [], settings: {} };
     const now = new Date();
@@ -152,13 +158,35 @@ const BackupManager = {
     }
 
     try {
+      const storage = this.getStorage();
+      const settings = storage && typeof storage.getSettings === 'function' ? storage.getSettings() : {};
+      const maxRetention = Math.max(1, Number(settings.backupRetentionCount) || 20);
+
       const backups = this.getAll();
       backups.unshift(backupRecord);
 
-      // Conserver les 20 dernières sauvegardes dans le stockage local
-      if (backups.length > 20) backups.pop();
+      // Appliquer la rétention configurée (localStorage + disque)
+      while (backups.length > maxRetention) {
+        backups.pop();
+      }
 
       this.saveAll(backups);
+
+      if (api && typeof api.pruneBackups === 'function') {
+        try {
+          await api.pruneBackups(maxRetention);
+        } catch (pruneErr) {
+          console.warn("[BackupManager] Purge physique des anciens instantanés :", pruneErr);
+        }
+      }
+
+      if (btnQuick) {
+        btnQuick.classList.remove('backup-saving');
+        btnQuick.classList.add('backup-success');
+        setTimeout(() => {
+          btnQuick.classList.remove('backup-success');
+        }, 1200);
+      }
 
       if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
         if (physicalSaved) {
@@ -176,6 +204,9 @@ const BackupManager = {
 
       return backupRecord;
     } catch (err) {
+      if (btnQuick) {
+        btnQuick.classList.remove('backup-saving');
+      }
       console.error("Erreur lors de l'enregistrement de l'instantané :", err);
 
       if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
@@ -198,7 +229,18 @@ const BackupManager = {
     }
 
     const confirmMsg = `Êtes-vous certain de vouloir restaurer la sauvegarde du ${new Date(backup.createdAt).toLocaleString('fr-FR')} ?\n\nAttention : les données actuelles seront remplacées par celles de la sauvegarde.`;
-    const canConfirm = typeof confirm === 'function' ? confirm(confirmMsg) : (typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm(confirmMsg) : true);
+    let canConfirm = true;
+    if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
+      canConfirm = await window.App.confirm({
+        title: "Restauration de sauvegarde",
+        message: confirmMsg,
+        confirmText: "Restaurer les données",
+        danger: true,
+        icon: "⏪"
+      });
+    } else if (typeof confirm === 'function') {
+      canConfirm = confirm(confirmMsg);
+    }
     if (!canConfirm) return;
 
     try {
@@ -287,8 +329,19 @@ const BackupManager = {
         throw new Error("La structure du fichier de sauvegarde est invalide.");
       }
 
-      const confirmMsg = `Confirmez-vous l'import du fichier "${file.name}" ? Les données actuelles seront remplacées.`;
-      const canConfirm = typeof confirm === 'function' ? confirm(confirmMsg) : (typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm(confirmMsg) : true);
+      const confirmMsg = `Confirmez-vous l'import du fichier "${file.name}" ?\n\nAttention : les données actuelles seront remplacées.`;
+      let canConfirm = true;
+      if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
+        canConfirm = await window.App.confirm({
+          title: "Import de sauvegarde",
+          message: confirmMsg,
+          confirmText: "Importer les données",
+          danger: true,
+          icon: "📥"
+        });
+      } else if (typeof confirm === 'function') {
+        canConfirm = confirm(confirmMsg);
+      }
       if (!canConfirm) return;
 
       // Étape 1 : sauvegarder l'état actuel AVANT de le remplacer.
@@ -322,17 +375,94 @@ const BackupManager = {
     }
   },
 
-  deleteBackup(id) {
+  async deleteBackup(id) {
     const confirmMsg = "Voulez-vous supprimer cet instantané de sauvegarde ?";
-    const canConfirm = typeof confirm === 'function' ? confirm(confirmMsg) : (typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm(confirmMsg) : true);
+    let canConfirm = true;
+    if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
+      canConfirm = await window.App.confirm({
+        title: "Supprimer l'instantané",
+        message: confirmMsg,
+        confirmText: "Supprimer",
+        danger: true,
+        icon: "🗑️"
+      });
+    } else if (typeof confirm === 'function') {
+      canConfirm = confirm(confirmMsg);
+    }
     if (!canConfirm) return;
 
-    let backups = this.getAll();
-    backups = backups.filter(b => b.id !== id);
+    const existingBackups = this.getAll();
+    const targetBackup = existingBackups.find(b => b.id === id);
+    const backups = existingBackups.filter(b => b.id !== id);
     this.saveAll(backups);
+
+    const api = (typeof window !== 'undefined' && window.AntigraviteAPI) ? window.AntigraviteAPI : null;
+    if (targetBackup && api && typeof api.deleteBackupFile === 'function') {
+      const target = targetBackup.diskPath || targetBackup.filename;
+      if (target) {
+        api.deleteBackupFile(target).catch(() => {});
+      }
+    }
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
       window.App.showToast("Instantané supprimé", "info");
     }
+  },
+
+  getConfiguredFrequencyHours(settingsObj = null) {
+    const storage = this.getStorage();
+    const settings = settingsObj || (storage && typeof storage.getSettings === 'function' ? storage.getSettings() : {});
+    if (settings.autoBackupFrequencyHours !== undefined && settings.autoBackupFrequencyHours !== null) {
+      const n = Number(settings.autoBackupFrequencyHours);
+      if (!isNaN(n) && n >= 0) return n;
+    }
+    return settings.autoBackupOnLaunch === false ? 0 : 24;
+  },
+
+  getConfiguredRetentionCount(settingsObj = null) {
+    const storage = this.getStorage();
+    const settings = settingsObj || (storage && typeof storage.getSettings === 'function' ? storage.getSettings() : {});
+    return Math.max(1, parseInt(settings.backupRetentionCount, 10) || 20);
+  },
+
+  async applyRetentionCount(maxCount, shouldPruneDisk = true) {
+    const limit = Math.max(1, parseInt(maxCount, 10) || 20);
+    const backups = this.getAll();
+    let trimmed = false;
+    if (backups.length > limit) {
+      this.saveAll(backups.slice(0, limit));
+      trimmed = true;
+    }
+    const api = (typeof window !== 'undefined' && window.AntigraviteAPI) ? window.AntigraviteAPI : null;
+    if (shouldPruneDisk && api && typeof api.pruneBackups === 'function') {
+      try {
+        const res = await api.pruneBackups(limit);
+        return { trimmed, removedCount: (res && res.removedCount) || 0 };
+      } catch (err) {
+        console.warn("[BackupManager] Erreur purge rétention disque :", err);
+      }
+    }
+    return { trimmed, removedCount: 0 };
+  },
+
+  setupAutoBackupScheduler() {
+    if (this._autoBackupTimer) {
+      clearInterval(this._autoBackupTimer);
+      this._autoBackupTimer = null;
+    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const freqHours = this.getConfiguredFrequencyHours();
+    if (freqHours <= 0) return;
+
+    // Vérification périodique légère (toutes les 15 min minimum, ou moitié de l'intervalle configuré)
+    const checkEveryMs = Math.max(15 * 60 * 1000, Math.min(60 * 60 * 1000, (freqHours * 3600 * 1000) / 2));
+    this._autoBackupTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden === true) {
+        // En arrière-plan, on vérifie quand même si l'échéance de sauvegarde est dépassée
+        this.checkAutoBackup();
+      } else {
+        this.checkAutoBackup();
+      }
+    }, checkEveryMs);
   },
 
   // Migration douce et prudente des anciennes sauvegardes pour alléger localStorage
@@ -383,7 +513,16 @@ const BackupManager = {
     try {
       const storage = this.getStorage();
       const settings = storage && typeof storage.getSettings === 'function' ? storage.getSettings() : {};
-      const autoBackupOnLaunch = settings.autoBackupOnLaunch !== false;
+      const freqHours = this.getConfiguredFrequencyHours(settings);
+
+      // Si fréquence à 0 : aucune sauvegarde automatique (y compris initiale) ; manuel uniquement
+      if (freqHours <= 0) {
+        return;
+      }
+
+      const intervalMs = freqHours * 3600 * 1000;
+      const nowMs = Date.now();
+      const label = freqHours === 24 ? "Sauvegarde quotidienne automatique" : "Sauvegarde planifiée automatique";
 
       // Vérifier les sauvegardes réellement présentes sur le disque.
       let diskBackups = [];
@@ -396,34 +535,26 @@ const BackupManager = {
           console.warn("[BackupManager] Erreur lors de la vérification des sauvegardes sur disque :", e);
         }
 
-        // RÈGLE IMPÉRATIVE : Si aucune sauvegarde physique n'existe sur le disque,
-        // déclencher immédiatement la sauvegarde initiale complète, même si des métadonnées
-        // locales existent déjà.
         if (!Array.isArray(diskBackups) || diskBackups.length === 0) {
           await this.createManualBackup("Sauvegarde initiale automatique");
           return;
         }
 
-        // Si autoBackupOnLaunch est activé et des sauvegardes physiques existent,
-        // vérifier si une sauvegarde a déjà été réalisée aujourd'hui
-        if (autoBackupOnLaunch && diskBackups.length > 0) {
-          const latestBackup = diskBackups[0];
-          const latestDate = new Date(latestBackup.createdAt);
-          const today = new Date();
-          const isSameDay = !isNaN(latestDate.getTime()) &&
-            latestDate.getFullYear() === today.getFullYear() &&
-            latestDate.getMonth() === today.getMonth() &&
-            latestDate.getDate() === today.getDate();
-
-          if (!isSameDay) {
-            await this.createManualBackup("Sauvegarde quotidienne automatique");
-          }
+        const latestBackup = diskBackups[0];
+        const latestMs = new Date(latestBackup.createdAt).getTime();
+        if (isNaN(latestMs) || (nowMs - latestMs) >= intervalMs) {
+          await this.createManualBackup(label);
         }
       } else {
         // Hors environnement Electron / IPC disque (ex: mode web direct)
         const localBackups = this.getAll();
         if (localBackups.length === 0) {
           await this.createManualBackup("Sauvegarde initiale automatique");
+          return;
+        }
+        const latestLocalMs = new Date(localBackups[0].createdAt).getTime();
+        if (isNaN(latestLocalMs) || (nowMs - latestLocalMs) >= intervalMs) {
+          await this.createManualBackup(label);
         }
       }
     } catch (err) {
@@ -463,9 +594,9 @@ const BackupManager = {
         <td>${b.size}</td>
         <td>
           <div style="display:flex; gap:6px;">
-            <button class="btn btn-secondary btn-sm" onclick="BackupManager.restoreBackup('${b.id}')" title="Restaurer cette version">🔄 Restaurer</button>
-            <button class="btn btn-secondary btn-sm" onclick="BackupManager.downloadBackupFile('${b.id}')" title="Télécharger le fichier">💾 Télécharger</button>
-            <button class="btn-icon" onclick="BackupManager.deleteBackup('${b.id}')" title="Supprimer">🗑️</button>
+            <button class="btn btn-secondary btn-sm" onclick="BackupManager.restoreBackup('${b.id}')" title="Restaurer cette version"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span>Restaurer</span></button>
+            <button class="btn btn-secondary btn-sm" onclick="BackupManager.downloadBackupFile('${b.id}')" title="Télécharger le fichier"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Télécharger</span></button>
+            <button class="btn-icon" onclick="BackupManager.deleteBackup('${b.id}')" title="Supprimer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
           </div>
         </td>
       `;

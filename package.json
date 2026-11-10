@@ -1,6 +1,6 @@
 {
   "name": "antigravite",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Application personnelle de gestion des tâches",
   "private": true,
   "main": "main.js",
@@ -16,6 +16,7 @@
   "build": {
     "appId": "fr.antigravite.app",
     "productName": "Antigravite",
+    "compression": "maximum",
     "directories": {
       "output": "dist"
     },
@@ -36,9 +37,13 @@
       "js/**/*",
       "services/**/*",
       "data/**/*",
+      "music/**/*",
       "package.json",
       "!**/*.bak*",
       "!**/*.backup*"
+    ],
+    "asarUnpack": [
+      "music/**/*"
     ],
     "win": {
       "target": [

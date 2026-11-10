@@ -61,7 +61,9 @@ const GoogleSyncManager = {
         e.preventDefault();
         const isPass = secretInput.type === 'password';
         secretInput.type = isPass ? 'text' : 'password';
-        toggleSecret.textContent = isPass ? '🙈' : '👁️';
+        toggleSecret.innerHTML = isPass
+          ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+          : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
       };
     }
 
@@ -188,13 +190,13 @@ const GoogleSyncManager = {
     if (badge) {
       if (status.isConnected) {
         badge.className = 'status-chip status-connected';
-        badge.innerHTML = `<span>🟢</span> <span>Connecté : <strong>${status.userEmail || 'Compte Google'}</strong></span>`;
+        badge.innerHTML = `<span class="status-dot status-dot-connected" style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--success);"></span> <span>Connecté : <strong>${status.userEmail || 'Compte Google'}</strong></span>`;
       } else if (status.hasCredentials) {
         badge.className = 'status-chip status-configured';
-        badge.innerHTML = `<span>🟡</span> <span>Identifiants configurés • Prêt à connecter</span>`;
+        badge.innerHTML = `<span class="status-dot status-dot-configured" style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--warning);"></span> <span>Identifiants configurés • Prêt à connecter</span>`;
       } else {
         badge.className = 'status-chip status-disconnected';
-        badge.innerHTML = `<span>⚪</span> <span>Non connecté</span>`;
+        badge.innerHTML = `<span class="status-dot status-dot-disconnected" style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--text-dim);"></span> <span>Non connecté</span>`;
       }
     }
 
@@ -346,13 +348,25 @@ const GoogleSyncManager = {
     } finally {
       if (btnLogin) {
         btnLogin.disabled = false;
-        btnLogin.innerHTML = `<span>🌐</span> <span>Se connecter avec Google</span>`;
+        btnLogin.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> <span>Se connecter avec Google</span>`;
       }
     }
   },
 
   async disconnect() {
-    if (!confirm("Déconnecter votre compte Google Agenda d'Antigravité ?\n(Vos événements créés localement resteront intacts).")) return;
+    let shouldDisconnect = true;
+    if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
+      shouldDisconnect = await window.App.confirm({
+        title: "Déconnexion Google Agenda",
+        message: "Déconnecter votre compte Google Agenda d'Antigravité ?\n(Vos événements créés localement resteront intacts).",
+        confirmText: "Déconnecter le compte",
+        danger: true,
+        icon: "🔗"
+      });
+    } else if (typeof confirm === 'function') {
+      shouldDisconnect = confirm("Déconnecter votre compte Google Agenda d'Antigravité ?\n(Vos événements créés localement resteront intacts).");
+    }
+    if (!shouldDisconnect) return;
 
     // Retirer les événements Google du calendrier actif d'Antigravité
     const currentEvents = StorageManager.getEvents();
@@ -506,7 +520,7 @@ const GoogleSyncManager = {
       if (syncBtn) {
         syncBtn.disabled = false;
         syncBtn.classList.remove('syncing');
-        syncBtn.innerHTML = `<span>🔄</span> <span>Actualiser</span>`;
+        syncBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> <span>Actualiser</span>`;
       }
     }
   },
@@ -947,7 +961,7 @@ const GoogleSyncManager = {
     if (!window.AntigraviteAPI?.google) {
       resultBox.style.display = 'block';
       resultBox.innerHTML = `
-        <div style="background: rgba(245,158,11,0.1); border: 1px solid #f59e0b; border-radius: var(--radius-md); padding: 12px 16px; margin-top: 10px; color: #f59e0b; font-size: 0.85rem;">
+        <div style="background: var(--warning-light); border: 1px solid var(--warning); border-radius: var(--radius-md); padding: 12px 16px; margin-top: 10px; color: var(--warning); font-size: 0.85rem;">
           <strong>ℹ️ Mode Navigateur :</strong> Veuillez ouvrir Antigravité avec Electron pour exécuter la lecture réelle de l'API Google Calendar.
         </div>
       `;
@@ -970,7 +984,7 @@ const GoogleSyncManager = {
       let html = `
         <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 18px; margin-top: 10px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <strong style="color: #10b981;">✅ Test de lecture réussi (${count} événement${count > 1 ? 's' : ''} trouvé${count > 1 ? 's' : ''})</strong>
+            <strong style="color: var(--success);">✅ Test de lecture réussi (${count} événement${count > 1 ? 's' : ''} trouvé${count > 1 ? 's' : ''})</strong>
             <span style="font-size:0.75rem; color:var(--text-dim);">Lecture seule stricte (Phase 2)</span>
           </div>
           <div style="font-size:0.82rem; color:var(--text-muted); margin-bottom: 8px;">
@@ -996,14 +1010,14 @@ const GoogleSyncManager = {
       }
     } catch (err) {
       resultBox.innerHTML = `
-        <div style="background: rgba(244,63,94,0.1); border: 1px solid #f43f5e; border-radius: var(--radius-md); padding: 12px 16px; margin-top: 10px; color: #f43f5e; font-size: 0.85rem;">
+        <div style="background: var(--danger-light); border: 1px solid var(--danger); border-radius: var(--radius-md); padding: 12px 16px; margin-top: 10px; color: var(--danger); font-size: 0.85rem;">
           <strong>❌ Échec de lecture Google Calendar :</strong> ${this.escapeHtml(err.message)}
         </div>
       `;
     } finally {
       if (btnTest) {
         btnTest.disabled = false;
-        btnTest.innerHTML = `<span>🔍</span> <span>Tester la lecture des événements (Lecture seule)</span>`;
+        btnTest.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> <span>Tester la lecture des événements (Lecture seule)</span>`;
       }
     }
   },

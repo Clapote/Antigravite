@@ -39,12 +39,56 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
     return ipcRenderer.invoke('antigravite:list-backups');
   },
 
+  deleteBackupFile: (filenameOrPath) => {
+    if (!filenameOrPath || typeof filenameOrPath !== 'string') {
+      return Promise.resolve({ deleted: false });
+    }
+    return ipcRenderer.invoke('antigravite:delete-backup-file', filenameOrPath);
+  },
+
+  pruneBackups: (maxCount) => {
+    return ipcRenderer.invoke('antigravite:prune-backups', Number(maxCount));
+  },
+
+  getBackupDirectory: () => {
+    return ipcRenderer.invoke('antigravite:get-backup-directory');
+  },
+
+  selectBackupDirectory: () => {
+    return ipcRenderer.invoke('antigravite:select-backup-directory');
+  },
+
+  resetBackupDirectory: () => {
+    return ipcRenderer.invoke('antigravite:reset-backup-directory');
+  },
+
+  openBackupDirectory: () => {
+    return ipcRenderer.invoke('antigravite:open-backup-directory');
+  },
+
+  copyBackupsToDirectory: (fromDir, toDir) => {
+    return ipcRenderer.invoke('antigravite:copy-backups-to-directory', { fromDir, toDir });
+  },
+
+  system: Object.freeze({
+    getDesktopPrefs: () => ipcRenderer.invoke('antigravite:get-desktop-prefs'),
+    setDesktopPrefs: (prefs) => ipcRenderer.invoke('antigravite:set-desktop-prefs', prefs || {}),
+    setStartupSetting: (enabled) => ipcRenderer.invoke('antigravite:set-startup-setting', !!enabled),
+    getCacheStats: () => ipcRenderer.invoke('antigravite:get-cache-stats'),
+    clearCache: () => ipcRenderer.invoke('antigravite:clear-cache'),
+    getPerfDiagnostics: () => ipcRenderer.invoke('antigravite:get-perf-diagnostics')
+  }),
+
   openExternal: (url) => {
     return ipcRenderer.invoke('antigravite:open-external', url);
   },
 
   quitApp: () => {
     return ipcRenderer.invoke('antigravite:quit-app');
+  },
+
+  toggleWindow: () => {
+    return ipcRenderer.invoke('antigravite:toggle-window-visibility');
   },
 
   setTitleBarOverlay: (options) => {
@@ -58,6 +102,16 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
     }
     return ipcRenderer.invoke('antigravite:show-notification', options);
   },
+
+  // Gestionnaire de Musique & Ambiance
+  music: Object.freeze({
+    listLocalTracks: () => ipcRenderer.invoke('antigravite:list-local-music'),
+    openMusicFolder: () => ipcRenderer.invoke('antigravite:open-music-folder'),
+    selectAndCopyMusic: () => ipcRenderer.invoke('antigravite:select-and-copy-music'),
+    copyMusicFiles: (filePaths) => ipcRenderer.invoke('antigravite:copy-music-files', filePaths),
+    openPersonalMusicFolder: () => ipcRenderer.invoke('antigravite:open-personal-music-folder'),
+    getPersonalMusicPath: () => ipcRenderer.invoke('antigravite:get-personal-music-path')
+  }),
 
   // Intégration Google Agenda sécurisée (Phase 2)
   google: Object.freeze({

@@ -10,7 +10,9 @@ const StorageManager = {
     EVENTS: 'antigravite_events_v1',
     NOTES: 'antigravite_notes_v1',
     SETTINGS: 'antigravite_settings_v1',
-    BACKUPS: 'antigravite_backups_metadata_v1'
+    BACKUPS: 'antigravite_backups_metadata_v1',
+    TRASH: 'antigravite_trash_v1',
+    SIDEBAR_QUICK_NOTE: 'antigravite_sidebar_quick_note_v1'
   },
 
   // Initialisation du stockage
@@ -159,6 +161,80 @@ const StorageManager = {
     }
   },
 
+  /**
+   * Retourne les projets ordonnés hiérarchiquement (racines puis sous-projets imbriqués),
+   * avec protection anti-cycle et conservation des orphelins à la racine.
+   */
+  getProjectsHierarchy(projectsList = null) {
+    const projects = Array.isArray(projectsList) ? projectsList : this.getProjects();
+    if (!Array.isArray(projects) || projects.length === 0) return [];
+
+    const byId = new Map();
+    projects.forEach(p => {
+      if (p && p.id) byId.set(p.id, p);
+    });
+
+    const childrenByParent = new Map();
+    projects.forEach(p => {
+      if (!p || !p.id) return;
+      const parentId = (p.parentProjectId && p.parentProjectId !== p.id && byId.has(p.parentProjectId))
+        ? p.parentProjectId
+        : null;
+      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+      childrenByParent.get(parentId).push(p);
+    });
+
+    const result = [];
+    const visited = new Set();
+
+    const walk = (parentId, level, parentProject, pathParts) => {
+      const list = childrenByParent.get(parentId) || [];
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        if (visited.has(p.id)) continue;
+        visited.add(p.id);
+
+        const nextPathParts = pathParts.concat(p.title || 'Projet');
+        const directChildren = childrenByParent.get(p.id) || [];
+        result.push({
+          project: p,
+          level,
+          parentProject,
+          childrenCount: directChildren.length,
+          displayTitle: level === 0 ? (p.title || 'Projet') : `${'  '.repeat(level)}└─ ${p.title || 'Sous-projet'}`,
+          pathTitle: nextPathParts.join(' › ')
+        });
+        walk(p.id, level + 1, p, nextPathParts);
+      }
+    };
+
+    walk(null, 0, null, []);
+
+    // Récupérer d'éventuels cycles isolés pour ne perdre aucun projet
+    projects.forEach(p => {
+      if (p && p.id && !visited.has(p.id)) {
+        visited.add(p.id);
+        result.push({
+          project: p,
+          level: 0,
+          parentProject: null,
+          childrenCount: (childrenByParent.get(p.id) || []).length,
+          displayTitle: p.title || 'Projet',
+          pathTitle: p.title || 'Projet'
+        });
+      }
+    });
+
+    return result;
+  },
+
+  getProjectPathLabel(projectId, projectsList = null) {
+    if (!projectId) return '';
+    const hierarchy = this.getProjectsHierarchy(projectsList);
+    const match = hierarchy.find(item => item.project.id === projectId);
+    return match ? match.pathTitle : '';
+  },
+
   // Agenda / Événements
   getEvents() {
     if (this._cache.events) return this._cache.events;
@@ -172,6 +248,10 @@ const StorageManager = {
     this._cache.events = events;
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(this.KEYS.EVENTS, JSON.stringify(events));
+    }
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+      const activeDate = (window.AgendaManager && window.AgendaManager.activeDateStr) ? window.AgendaManager.activeDateStr : null;
+      window.App.updateSidebarDayProgress(activeDate);
     }
   },
 
@@ -193,11 +273,13 @@ const StorageManager = {
 
   DEFAULT_SETTINGS: {
     theme: 'dark',           // 'dark' | 'light' | 'oled'
-    accentColor: 'blue',     // 'blue' | 'emerald' | 'purple' | 'amber' | 'rose'
+    accentColor: 'blue',     // 'blue' | 'emerald' | 'purple' | 'amber' | 'rose' | 'cyan' | 'orange' | 'mint' | 'indigo'
     density: 'comfortable',  // 'comfortable' | 'compact'
     fontSize: 'normal',      // 'small' | 'normal' | 'large'
+    fontFamily: 'system',    // 'system' | 'tech' | 'rounded'
     borderRadius: 'modern',  // 'minimal' | 'modern' | 'soft'
-    backgroundImage: null,   // null | 'nebula' | 'aurora' | 'mineral' | 'sunset' | 'data:image/...'
+    glassStyle: 'balanced',  // 'balanced' | 'glass' | 'solid'
+    backgroundImage: null,   // null | 'nebula' | 'aurora' | 'mineral' | 'sunset' | 'ocean' | 'forest' | 'cyberpunk' | 'minimal' | 'lavender' | 'solar' | 'data:image/...'
     backgroundOpacity: 25,   // 5 à 80 (%)
     backgroundBlur: 0,       // 0 à 20 (px)
     startOfWeek: 1,
@@ -205,7 +287,98 @@ const StorageManager = {
     autoBackupOnLaunch: true,
     backupRetentionDays: 30,
     notificationsEnabled: true,
-    userName: 'Utilisateur'
+    agendaNotificationStages: ['60m', '30m', 'now'], // Choix multiples : '60m', '30m', 'now'
+    notificationSound: 'zen', // 'zen' | 'chime' | 'pop' | 'none'
+    notificationVolume: 60,  // 0 à 100 (%)
+    sidebarDayProgressEnabled: true, // Afficher la progression de la journée sous les onglets à gauche
+    sidebarMiniPlayerEnabled: true,  // Afficher le mini-lecteur de musique dans le volet latéral
+    sidebarStickyNoteEnabled: true,  // Afficher le module Post-it mémo dans le volet latéral
+    sidebarVisibleScreens: {
+      tasks: true,
+      projects: true,
+      agenda: true,
+      notes: true,
+      focus: true,
+      music: true,
+      trash: true,
+      backups: true
+    },
+    userName: '',            // Prénom ou nom d'usage de la personne
+    greetingMood: 'mixed',   // 'mixed' | 'warm' | 'witty' | 'custom'
+    customGreetingPhrase: '', // Phrase personnalisée sur-mesure (si mode custom)
+    // Paramètres sérieux (réglages d'usine = comportement normal d'Antigravité)
+    performanceMode: 'normal',        // 'normal' | 'economy' | 'potato'
+    launchOnStartup: false,           // Lancement automatique au démarrage Windows
+    runInBackgroundOnClose: true,     // Rester actif dans la zone de notification à la fermeture
+    autoBackupFrequencyHours: 24,     // Intervalle en heures (0 = désactivé / manuel uniquement)
+    backupRetentionCount: 20,         // Nombre maximal d'instantanés conservés
+    backupDirectory: null,            // Dossier personnalisé (null = défaut AppData)
+    disableAnimations: false,         // Indépendant des profils : désactive les animations CSS/JS
+    disablePreviews: false,           // Indépendant des profils : désactive les aperçus dynamiques
+    disableHoverEffects: false        // Indépendant des profils : désactive les effets au survol
+  },
+
+  SERIOUS_SETTING_KEYS: [
+    'performanceMode',
+    'launchOnStartup',
+    'runInBackgroundOnClose',
+    'autoBackupFrequencyHours',
+    'autoBackupOnLaunch',
+    'backupRetentionCount',
+    'backupDirectory',
+    'disableAnimations',
+    'disablePreviews',
+    'disableHoverEffects'
+  ],
+
+  getSeriousDefaults() {
+    const defaults = {};
+    this.SERIOUS_SETTING_KEYS.forEach((k) => {
+      defaults[k] = this.DEFAULT_SETTINGS[k];
+    });
+    return defaults;
+  },
+
+  resetSeriousSettings() {
+    const current = this.getSettings();
+    const updated = Object.assign({}, current, this.getSeriousDefaults());
+    this.saveSettings(updated);
+    return updated;
+  },
+
+  getStorageStats() {
+    let localStorageBytes = 0;
+    const breakdown = {};
+    const byteLen = (str) => {
+      if (!str) return 0;
+      if (typeof Blob !== 'undefined') return new Blob([str]).size;
+      if (typeof Buffer !== 'undefined') return Buffer.byteLength(str, 'utf8');
+      return str.length * 2;
+    };
+
+    if (typeof localStorage !== 'undefined') {
+      Object.keys(this.KEYS).forEach((name) => {
+        const key = this.KEYS[name];
+        const raw = localStorage.getItem(key);
+        const bytes = byteLen(raw);
+        breakdown[name] = bytes;
+        localStorageBytes += bytes;
+      });
+    }
+
+    return {
+      localStorageBytes,
+      breakdown,
+      cachedCollections: Object.keys(this._cache || {}).length,
+      counts: {
+        tasks: (this.getTasks() || []).length,
+        projects: (this.getProjects() || []).length,
+        events: (this.getEvents() || []).length,
+        notes: (this.getNotes() || []).length,
+        backups: (this.getBackups() || []).length,
+        trash: (this.getTrash() || []).length
+      }
+    };
   },
 
   // Préférences
@@ -224,6 +397,24 @@ const StorageManager = {
     this._cache.settings = settings;
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(this.KEYS.SETTINGS, JSON.stringify(settings));
+    }
+  },
+
+  // Note rapide / Post-it du volet latéral
+  getSidebarQuickNote() {
+    if (typeof localStorage === 'undefined') return '';
+    try {
+      return localStorage.getItem(this.KEYS.SIDEBAR_QUICK_NOTE) || '';
+    } catch {
+      return '';
+    }
+  },
+  saveSidebarQuickNote(text) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(this.KEYS.SIDEBAR_QUICK_NOTE, text || '');
+    } catch (e) {
+      console.warn('[StorageManager] Erreur sauvegarde post-it latéral:', e);
     }
   },
 
@@ -266,6 +457,23 @@ const StorageManager = {
     }
   },
 
+  // Corbeille
+  getTrash() {
+    if (this._cache.trash) return this._cache.trash;
+    if (typeof localStorage === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(this.KEYS.TRASH);
+      this._cache.trash = raw ? JSON.parse(raw) : [];
+    } catch { this._cache.trash = []; }
+    return this._cache.trash;
+  },
+  saveTrash(trash) {
+    this._cache.trash = trash;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(this.KEYS.TRASH, JSON.stringify(trash));
+    }
+  },
+
   // Export complet de toutes les données dans un seul objet
   getFullExport() {
     return {
@@ -275,7 +483,8 @@ const StorageManager = {
       projects: this.getProjects(),
       events: this.getEvents(),
       notes: this.getNotes(),
-      settings: this.getSettings()
+      settings: this.getSettings(),
+      trash: this.getTrash()
     };
   },
 
@@ -288,6 +497,7 @@ const StorageManager = {
     if (data.events) this.saveEvents(data.events);
     if (data.notes) this.saveNotes(data.notes);
     if (data.settings) this.saveSettings(data.settings);
+    if (data.trash) this.saveTrash(data.trash);
     return true;
   }
 };

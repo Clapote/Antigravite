@@ -170,6 +170,11 @@ if ($backupCreated) {
 Assert-Test "Création d'un instantané de sauvegarde dans backups/" $backupCreated
 Assert-Test "Vérification de l'intégrité et de la restauration de la sauvegarde" $backupReadable
 
+# Nettoyage de l'instantané temporaire de test pour préserver l'espace disque
+if (Test-Path $testBackupFile) {
+    Remove-Item -Path $testBackupFile -Force -ErrorAction SilentlyContinue
+}
+
 # -----------------------------------------------------------------------------
 # TEST 8 : Intégration Google Agenda (Phase 2 - Lecture Seule & Sécurité)
 # -----------------------------------------------------------------------------
@@ -398,6 +403,18 @@ if (Test-Path $nodePath) {
     $v112FeaturesPass = ($LASTEXITCODE -eq 0)
 }
 Assert-Test "Fonctionnalités v1.1.2 (Vues Jour/Mois, Interconnexion Projets-Tâches-Notes, Raccourci, Heure tâche & Barre des tâches)" $v112FeaturesPass
+
+# -----------------------------------------------------------------------------
+# TEST 27 : Fonctionnalités v1.1.3 (Rappels Agenda, Fonds d'écran & Accents)
+# -----------------------------------------------------------------------------
+Write-Host "`n27. Vérification des fonctionnalités v1.1.3..." -ForegroundColor Yellow
+
+$v113FeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v113_features.js")
+    $v113FeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités v1.1.3 (Rappels Agenda multi-choix, Fonds d'écran étendus & Accents supplémentaires)" $v113FeaturesPass
 
 # -----------------------------------------------------------------------------
 # BILAN

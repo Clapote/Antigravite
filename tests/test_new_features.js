@@ -110,15 +110,15 @@ it("L'état replié/déplié du volet latéral est correctement mémorisé", () 
 // -----------------------------------------------------------------------------
 it("Le message d'accueil et de bonne journée est correctement calculé selon l'heure", () => {
   const getGreeting = (hour) => {
-    if (hour >= 18 || hour < 5) return "Bonsoir ! Passez une excellente soirée ✨";
-    if (hour >= 12 && hour < 14) return "Bonjour ! Bon appétit et très belle journée ✨";
-    return "Bonjour ! Passez une excellente journée ✨";
+    if (hour >= 18 || hour < 5) return "Bonsoir ! Passez une excellente soirée !";
+    if (hour >= 12 && hour < 14) return "Bonjour ! Bon appétit et très belle journée !";
+    return "Bonjour ! Passez une excellente journée !";
   };
 
-  assert.strictEqual(getGreeting(9), "Bonjour ! Passez une excellente journée ✨");
-  assert.strictEqual(getGreeting(13), "Bonjour ! Bon appétit et très belle journée ✨");
-  assert.strictEqual(getGreeting(20), "Bonsoir ! Passez une excellente soirée ✨");
-  assert.strictEqual(getGreeting(2), "Bonsoir ! Passez une excellente soirée ✨");
+  assert.strictEqual(getGreeting(9), "Bonjour ! Passez une excellente journée !");
+  assert.strictEqual(getGreeting(13), "Bonjour ! Bon appétit et très belle journée !");
+  assert.strictEqual(getGreeting(20), "Bonsoir ! Passez une excellente soirée !");
+  assert.strictEqual(getGreeting(2), "Bonsoir ! Passez une excellente soirée !");
 });
 
 // -----------------------------------------------------------------------------

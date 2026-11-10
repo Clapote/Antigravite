@@ -25,43 +25,59 @@ const AgendaManager = {
     this.bindEvents();
     this.initContextMenu();
     this.initDragAndDrop();
+    this.initRightClickExtend();
+    this.initNowIndicatorTimer();
+  },
+
+  getMonday(d) {
+    const date = new Date(d);
+    const day = date.getDay(); // 0 = Dimanche, 1 = Lundi, ...
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // 1 = Lundi
+    const monday = new Date(date.getFullYear(), date.getMonth(), diff);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
   },
 
   initWeek() {
-    const now = new Date();
-    // Trouver le lundi de la semaine courante
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // 1 = Lundi
-    const monday = new Date(now.setDate(diff));
-    monday.setHours(0, 0, 0, 0);
-    this.currentWeekStart = monday;
+    this.currentWeekStart = this.getMonday(new Date());
   },
 
   navigatePrev() {
     if (!this.currentWeekStart) this.initWeek();
     if (this.currentView === 'day') {
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 1);
+      this.activeDateStr = this.formatDateIso(this.currentWeekStart);
     } else if (this.currentView === 'month') {
       this.currentWeekStart.setMonth(this.currentWeekStart.getMonth() - 1);
     } else {
+      this.currentWeekStart = this.getMonday(this.currentWeekStart);
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 7);
     }
     this.render();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+      window.App.updateSidebarDayProgress(this.activeDateStr || null);
+    }
   },
 
   navigateNext() {
     if (!this.currentWeekStart) this.initWeek();
     if (this.currentView === 'day') {
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 1);
+      this.activeDateStr = this.formatDateIso(this.currentWeekStart);
     } else if (this.currentView === 'month') {
       this.currentWeekStart.setMonth(this.currentWeekStart.getMonth() + 1);
     } else {
+      this.currentWeekStart = this.getMonday(this.currentWeekStart);
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 7);
     }
     this.render();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+      window.App.updateSidebarDayProgress(this.activeDateStr || null);
+    }
   },
 
   navigateToday() {
+    this.activeDateStr = null;
     const now = new Date();
     if (this.currentView === 'day') {
       now.setHours(0, 0, 0, 0);
@@ -71,14 +87,21 @@ const AgendaManager = {
       now.setHours(0, 0, 0, 0);
       this.currentWeekStart = now;
     } else {
-      this.initWeek();
+      this.currentWeekStart = this.getMonday(now);
     }
     this.render();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+      window.App.updateSidebarDayProgress();
+    }
   },
 
   setView(view) {
     if (!['day', 'week', 'month'].includes(view)) view = 'week';
     this.currentView = view;
+    // Si on bascule sur la vue semaine, la semaine doit TOUJOURS débuter par un lundi
+    if (view === 'week' && this.currentWeekStart) {
+      this.currentWeekStart = this.getMonday(this.currentWeekStart);
+    }
     if (typeof document !== 'undefined') {
       const viewButtons = document.querySelectorAll('.btn-agenda-view');
       viewButtons.forEach(b => {
@@ -86,6 +109,25 @@ const AgendaManager = {
       });
     }
     this.render();
+  },
+
+  zoomToDay(dateIso) {
+    if (!dateIso) return;
+    const parts = dateIso.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const targetDate = new Date(year, month, day);
+    targetDate.setHours(0, 0, 0, 0);
+    this.currentWeekStart = targetDate;
+    this.activeDateStr = dateIso;
+    if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
+      window.App.triggerHapticFeedback();
+    }
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+      window.App.updateSidebarDayProgress(dateIso);
+    }
+    this.setView('day');
   },
 
   bindEvents() {
@@ -163,9 +205,11 @@ const AgendaManager = {
     if (calendarBody && !this._gridClickBound) {
       this._gridClickBound = true;
       calendarBody.addEventListener('click', (e) => {
-        // Ignorer si on a cliqué sur un événement ou si un drag vient de se terminer
+        // Clic gauche uniquement pour la création standard
+        if (e.button !== 0) return;
+        // Ignorer si on a cliqué sur un événement, si un drag vient de se terminer ou après une session de clic droit
         if (e.target.closest('.calendar-event')) return;
-        if (this._suppressNextClick) {
+        if (this._suppressNextClick || this._rightClickSession) {
           this._suppressNextClick = false;
           return;
         }
@@ -175,6 +219,10 @@ const AgendaManager = {
 
         const dateStr = dayCol.dataset.date;
         if (!dateStr) return;
+        this.activeDateStr = dateStr;
+        if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+          window.App.updateSidebarDayProgress(dateStr);
+        }
 
         const rect = dayCol.getBoundingClientRect();
         const relY = Math.max(0, e.clientY - rect.top);
@@ -192,10 +240,134 @@ const AgendaManager = {
         const endHourStr = String(endHour).padStart(2, '0');
         const endTime = `${endHourStr}:${startMinStr}`;
 
+        // Nettoyer l'indicateur visuel de survol lors de l'ouverture
+        const activeHover = document.getElementById('agenda-slot-hover-indicator');
+        if (activeHover) activeHover.remove();
+        const activeLabel = calendarBody.querySelector('.time-slot-label.active-slot');
+        if (activeLabel) activeLabel.classList.remove('active-slot');
+
         this.openEventModal(null, {
           start: `${dateStr}T${startTime}`,
           end: `${dateStr}T${endTime}`
         });
+      });
+    }
+
+    // Indicateur interactif de survol de créneau heure par heure (Ghost slot)
+    if (calendarBody && !this._gridHoverBound) {
+      this._gridHoverBound = true;
+      let hoverIndicator = null;
+      let lastActiveLabel = null;
+
+      const removeHover = () => {
+        // Ne JAMAIS supprimer le retour visuel pendant qu'un clic droit est maintenu
+        if (this._rightClickSession) return;
+        if (hoverIndicator && hoverIndicator.parentElement) {
+          hoverIndicator.remove();
+        }
+        if (lastActiveLabel) {
+          lastActiveLabel.classList.remove('active-slot');
+          lastActiveLabel = null;
+        }
+      };
+
+      calendarBody.addEventListener('mousemove', (e) => {
+        if (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function' && StorageManager.getSettings().disablePreviews === true) {
+          removeHover();
+          return;
+        }
+        // Ignorer complètement si une session de clic droit ou de drag est active, ou si un bouton est enfoncé
+        if (this._rightClickSession || this.dragSession || (typeof document !== 'undefined' && document.querySelector('.dragging'))) {
+          return;
+        }
+        if (e.buttons !== 0) {
+          return;
+        }
+        if (e.target.closest('.calendar-event')) {
+          removeHover();
+          return;
+        }
+
+        const dayCol = e.target.closest('.day-column');
+        if (!dayCol) {
+          removeHover();
+          return;
+        }
+
+        const dateStr = dayCol.dataset.date;
+        if (!dateStr) {
+          removeHover();
+          return;
+        }
+
+        const rect = dayCol.getBoundingClientRect();
+        const relY = Math.max(0, e.clientY - rect.top);
+        const hoursOffset = relY / this.slotHeight;
+        const clickedHour = Math.floor(this.dayHoursStart + hoursOffset);
+
+        // Même arrondi au quart d'heure que lors du clic (00, 15, 30, 45)
+        const rawMinutes = Math.floor((hoursOffset % 1) * 60);
+        const roundedMinutes = Math.min(45, Math.floor(rawMinutes / 15) * 15);
+
+        const startHour = Math.min(23, Math.max(0, clickedHour));
+        const startHourStr = String(startHour).padStart(2, '0');
+        const startMinStr = String(roundedMinutes).padStart(2, '0');
+        const startTime = `${startHourStr}:${startMinStr}`;
+
+        const endHour = Math.min(23, clickedHour + 1);
+        const endHourStr = String(endHour).padStart(2, '0');
+        const endTime = `${endHourStr}:${startMinStr}`;
+
+        const topPx = (startHour - this.dayHoursStart + (roundedMinutes / 60)) * this.slotHeight;
+        const totalHours = (this.dayHoursEnd - this.dayHoursStart) + 1;
+        const maxH = totalHours * this.slotHeight;
+        const heightPx = Math.min(this.slotHeight, Math.max(20, maxH - topPx));
+
+        if (!hoverIndicator || !hoverIndicator.parentElement) {
+          hoverIndicator = document.getElementById('agenda-slot-hover-indicator');
+          if (!hoverIndicator) {
+            hoverIndicator = document.createElement('div');
+            hoverIndicator.className = 'agenda-slot-hover-indicator';
+            hoverIndicator.id = 'agenda-slot-hover-indicator';
+            hoverIndicator.innerHTML = `
+              <div class="agenda-slot-hover-badge">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span class="agenda-slot-hover-time"></span>
+              </div>
+            `;
+          }
+        }
+
+        const timeSpan = hoverIndicator.querySelector('.agenda-slot-hover-time');
+        if (timeSpan) {
+          timeSpan.textContent = `${startTime} – ${endTime}`;
+        }
+
+        hoverIndicator.style.top = `${topPx}px`;
+        hoverIndicator.style.height = `${heightPx}px`;
+
+        if (hoverIndicator.parentElement !== dayCol) {
+          dayCol.appendChild(hoverIndicator);
+        }
+
+        // Mettre en évidence l'heure correspondante dans la colonne des heures (time-gutter)
+        const hourLabel = calendarBody.querySelector(`.time-slot-label[data-hour="${startHour}"]`);
+        if (lastActiveLabel && lastActiveLabel !== hourLabel) {
+          lastActiveLabel.classList.remove('active-slot');
+        }
+        if (hourLabel) {
+          hourLabel.classList.add('active-slot');
+          lastActiveLabel = hourLabel;
+        }
+      });
+
+      calendarBody.addEventListener('mouseleave', () => {
+        if (!this._rightClickSession) {
+          removeHover();
+        }
       });
     }
 
@@ -222,13 +394,21 @@ const AgendaManager = {
   saveAll(events) {
     StorageManager.saveEvents(events);
     this.render();
-    if (window.App) window.App.updateDashboard();
+    if (window.App) {
+      if (typeof window.App.updateDashboard === 'function') window.App.updateDashboard();
+      if (typeof window.App.updateSidebarDayProgress === 'function') {
+        window.App.updateSidebarDayProgress(this.activeDateStr || null);
+      }
+    }
     if (window.AgendaNotificationManager && typeof window.AgendaNotificationManager.checkUpcomingEvents === 'function') {
       window.AgendaNotificationManager.checkUpcomingEvents();
     }
   },
 
   addEvent(eventData) {
+    if (eventData.start) {
+      this.activeDateStr = eventData.start.slice(0, 10);
+    }
     const events = this.getAll();
 
     let taskId = eventData.taskId || null;
@@ -317,6 +497,9 @@ const AgendaManager = {
   },
 
   updateEvent(id, updatedData) {
+    if (updatedData && updatedData.start) {
+      this.activeDateStr = updatedData.start.slice(0, 10);
+    }
     const events = this.getAll();
     const evt = events.find(e => e.id === id);
     if (!evt) return false;
@@ -364,12 +547,14 @@ const AgendaManager = {
     }
   },
 
-  // Calcul des 7 jours de la semaine courante
+  // Calcul des 7 jours de la semaine courante (commence TOUJOURS par lundi et finit par dimanche)
   getWeekDays() {
+    const monday = this.getMonday(this.currentWeekStart || new Date());
+    this.currentWeekStart = monday;
     const days = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(this.currentWeekStart);
-      d.setDate(d.getDate() + i);
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      d.setHours(0, 0, 0, 0);
       days.push(d);
     }
     return days;
@@ -548,7 +733,7 @@ const AgendaManager = {
     return layout;
   },
 
-  renderMonthView(allEvents, taskMap, noteById, noteByEventId) {
+  renderMonthView(allEvents, taskMap, noteById, noteByEventId, projectMap = null) {
     if (!this.currentWeekStart) this.initWeek();
     const gridEl = document.getElementById('calendar-month-grid');
     if (!gridEl) return;
@@ -578,7 +763,17 @@ const AgendaManager = {
 
       let pillsHtml = '';
       dayEvents.forEach(e => {
-        const eventColor = e.color || (e.source === 'google' ? '#2563eb' : '#7c3aed');
+        let eventColor = e.color;
+        const linkedTask = e.taskId && taskMap ? taskMap.get(e.taskId) : null;
+        if (linkedTask && linkedTask.task && linkedTask.task.projectId && projectMap) {
+          const proj = projectMap.get(linkedTask.task.projectId);
+          if (proj && proj.color) {
+            eventColor = proj.color;
+          }
+        }
+        if (!eventColor) {
+          eventColor = (e.source === 'google' ? '#2563eb' : '#7c3aed');
+        }
         const startTimeStr = e.start && e.start.length >= 16 ? e.start.slice(11, 16) : '';
         const titleSafe = this.escapeHtml(e.title || '(Sans titre)');
         pillsHtml += `
@@ -596,7 +791,9 @@ const AgendaManager = {
         <div class="month-day-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}" 
              data-date="${dateIso}"
              onclick="AgendaManager.openEventModal(null, { start: '${dateIso}T09:00', end: '${dateIso}T10:00' });">
-          <div class="month-day-header">
+          <div class="month-day-header clickable-day" 
+               onclick="event.stopPropagation(); AgendaManager.zoomToDay('${dateIso}');" 
+               title="Zoomer sur cette journée (${dateIso})">
             <span class="month-day-number">${iterDate.getDate()}</span>
           </div>
           <div class="month-day-events" style="display:flex; flex-direction:column; gap:2px; overflow-y:auto; max-height:85px;">
@@ -624,6 +821,8 @@ const AgendaManager = {
     const allEvents = this.getAll();
     const tasks = StorageManager.getTasks();
     const allNotes = StorageManager.getNotes();
+    const allProjects = StorageManager.getProjects();
+    const projectMap = new Map(allProjects.map(p => [p.id, p]));
 
     // Indexation O(1) des tâches
     const taskMap = new Map();
@@ -654,7 +853,7 @@ const AgendaManager = {
       const monthTitle = monthDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
       if (labelEl) labelEl.textContent = monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1);
 
-      this.renderMonthView(allEvents, taskMap, noteById, noteByEventId);
+      this.renderMonthView(allEvents, taskMap, noteById, noteByEventId, projectMap);
       return;
     }
 
@@ -701,8 +900,10 @@ const AgendaManager = {
       const iso = this.formatDateIso(d);
       const isToday = iso === todayStr;
       const dayIdx = (d.getDay() + 6) % 7;
+      const isClickable = this.currentView !== 'day';
       weekdaysHtml += `
-        <div class="weekday-header ${isToday ? 'today' : ''}">
+        <div class="weekday-header ${isToday ? 'today' : ''} ${isClickable ? 'clickable-day' : ''}"
+             ${isClickable ? `onclick="AgendaManager.zoomToDay('${iso}')" title="Zoomer sur cette journée (${iso})"` : ''}>
           <span class="weekday-name">${dayNames[dayIdx]}</span>
           <span class="weekday-num">${d.getDate()}</span>
         </div>
@@ -714,7 +915,7 @@ const AgendaManager = {
     let bodyHtml = `<div class="time-gutter" style="height: ${totalGridHeight}px;">`;
     for (let h = this.dayHoursStart; h <= this.dayHoursEnd; h++) {
       const hh = String(h).padStart(2, '0') + ':00';
-      bodyHtml += `<div class="time-slot-label" style="height: ${this.slotHeight}px;">${hh}</div>`;
+      bodyHtml += `<div class="time-slot-label" data-hour="${h}" style="height: ${this.slotHeight}px;">${hh}</div>`;
     }
     bodyHtml += `</div>`;
 
@@ -742,9 +943,11 @@ const AgendaManager = {
         const startH = item.startMin / 60;
         const endH = item.endMin / 60;
 
-        // Position relative à 07h00
-        const top = Math.max(0, (startH - this.dayHoursStart) * this.slotHeight);
-        const durationH = Math.max(0.35, endH - startH);
+        // Position relative à la grille horaire (07h00 - 23h00) avec bornage visuel
+        const visStartH = Math.max(this.dayHoursStart, startH);
+        const visEndH = Math.min(this.dayHoursEnd, endH);
+        const top = Math.max(0, (visStartH - this.dayHoursStart) * this.slotHeight);
+        const durationH = Math.max(0.35, visEndH - visStartH);
         const height = Math.max(26, durationH * this.slotHeight - 2);
 
         // Position horizontale en colonnes virtuelles pour chevauchements
@@ -766,7 +969,8 @@ const AgendaManager = {
           if (dateStr === startDay) {
             timeDisplay = `${startTimeStr} ➔`;
           } else if (dateStr === endDay) {
-            timeDisplay = `➔ ${endTimeStr}`;
+            const isNightEnd = !e.isAllDay && endTimeStr && endTimeStr < '07:00';
+            timeDisplay = isNightEnd ? `➔ Fin ${endTimeStr} (Nuit)` : `➔ ${endTimeStr}`;
           } else {
             timeDisplay = 'Journée continue';
           }
@@ -774,20 +978,30 @@ const AgendaManager = {
           timeDisplay = `${startTimeStr} - ${endTimeStr}`;
         }
 
+        const isNightEnd = isMultiDay && dateStr === endDay && !e.isAllDay && endTimeStr && endTimeStr < '07:00';
         const linkedTask = e.taskId ? taskMap.get(e.taskId) : null;
         const linkedNote = (e.noteId ? noteById.get(e.noteId) : null) || noteByEventId.get(e.id);
         const isCompact = height < 44;
 
-        // Code couleur validé par l'utilisateur (dynamique inline)
-        const eventColor = e.color || (isGoogle ? '#2563eb' : '#7c3aed');
+        // Code couleur : hérité de la tâche liée et de son projet si disponible
+        let eventColor = e.color;
+        if (linkedTask && linkedTask.task && linkedTask.task.projectId) {
+          const proj = projectMap.get(linkedTask.task.projectId);
+          if (proj && proj.color) {
+            eventColor = proj.color;
+          }
+        }
+        if (!eventColor) {
+          eventColor = isGoogle ? '#2563eb' : '#7c3aed';
+        }
 
         bodyHtml += `
-          <div class="calendar-event ${isGoogle ? 'google-event' : 'antigravite-event'} ${isCompact ? 'compact' : ''}" 
+          <div class="calendar-event ${isGoogle ? 'google-event' : 'antigravite-event'} ${isCompact ? 'compact' : ''} ${isNightEnd ? 'night-spillover-event' : ''}" 
                data-event-id="${e.id}"
-               style="top: ${top}px; height: ${height}px; left: ${leftPct}%; width: ${widthPct}%; background: linear-gradient(135deg, ${eventColor} 0%, ${eventColor}ee 100%) !important; border: 1px solid rgba(255, 255, 255, 0.25) !important; border-left: 4px solid rgba(255, 255, 255, 0.8) !important; color: #ffffff !important; box-shadow: 0 2px 6px rgba(0,0,0,0.35);"
+               style="top: ${top}px; height: ${height}px; left: ${leftPct}%; width: ${widthPct}%; background: linear-gradient(135deg, ${eventColor} 0%, ${eventColor}ee 100%) !important; border: 1px solid rgba(255, 255, 255, 0.25) !important; border-left: 4px ${isNightEnd ? 'dashed' : 'solid'} rgba(255, 255, 255, 0.9) !important; color: #ffffff !important; box-shadow: 0 2px 6px rgba(0,0,0,0.35);"
                onmousedown="AgendaManager.onEventMouseDown(event, '${e.id}')"
                onclick="AgendaManager.onEventClick(event, '${e.id}')"
-               title="${this.escapeHtml(e.title)} (${timeDisplay}${isMultiDay ? ' • du ' + startDay + ' au ' + endDay : ''})${isGoogle ? ' [Google Agenda]' : ' [Antigravité]'}${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
+               title="${this.escapeHtml(e.title)} (${isNightEnd ? 'Finie à ' + endTimeStr + ' du matin (nuit)' : timeDisplay}${isMultiDay ? ' • du ' + startDay + ' au ' + endDay : ''})${isGoogle ? ' [Google Agenda]' : ' [Antigravité]'}${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
             
             <div class="event-resize-handle handle-top" data-action="resize-top" title="Ajuster l'heure de début"></div>
 
@@ -795,7 +1009,7 @@ const AgendaManager = {
               <div class="event-compact-row">
                 ${isGoogle ? '<span class="event-origin-tag google" style="font-size:0.55rem; padding:0 3px;">G</span>' : ''}
                 <span class="event-title compact" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</span>
-                <span class="event-time-compact" style="color: rgba(255,255,255,0.95); margin-left: auto;">${e.isAllDay ? 'Jour' : (isMultiDay && dateStr !== startDay ? '➔ ' + endTimeStr : startTimeStr)}</span>
+                <span class="event-time-compact" style="color: rgba(255,255,255,0.95); margin-left: auto;">${e.isAllDay ? 'Jour' : (isMultiDay && dateStr !== startDay ? (isNightEnd ? '➔ ' + endTimeStr + ' (Nuit)' : '➔ ' + endTimeStr) : startTimeStr)}</span>
               </div>
             ` : `
               <div class="event-header-row">
@@ -820,9 +1034,183 @@ const AgendaManager = {
     });
 
     bodyEl.innerHTML = bodyHtml;
+    this.updateNowIndicator();
+  },
+
+  _getNowIntervalMs(perfMode) {
+    if (perfMode === 'potato') return 120000;
+    if (perfMode === 'economy') return 60000;
+    return 30000;
+  },
+
+  applyPerformanceMode(perfMode) {
+    if (typeof window === 'undefined' || !this._nowTimerBound) return;
+    const nextMs = this._getNowIntervalMs(perfMode);
+    if (this._nowIntervalMs === nextMs && this._nowInterval) return;
+    this._nowIntervalMs = nextMs;
+    if (this._nowInterval) clearInterval(this._nowInterval);
+    this._nowInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden === true) return;
+      if (window.App && window.App.currentScreen && window.App.currentScreen !== 'agenda') return;
+      if (this.currentView !== 'month') {
+        this.updateNowIndicator();
+      }
+    }, nextMs);
+  },
+
+  initNowIndicatorTimer() {
+    if (this._nowTimerBound) return;
+    this._nowTimerBound = true;
+    const perfMode = (typeof document !== 'undefined' && document.documentElement && typeof document.documentElement.getAttribute === 'function')
+      ? (document.documentElement.getAttribute('data-perf-mode') || 'normal')
+      : 'normal';
+    this.applyPerformanceMode(perfMode);
+  },
+
+  updateNowIndicator() {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+
+    const safeRemove = (el) => {
+      if (!el) return;
+      if (typeof el.remove === 'function') {
+        el.remove();
+      } else if (el.parentElement && typeof el.parentElement.removeChild === 'function') {
+        el.parentElement.removeChild(el);
+      } else if (el.parentNode && typeof el.parentNode.removeChild === 'function') {
+        el.parentNode.removeChild(el);
+      }
+    };
+
+    if (this.currentView === 'month') {
+      const old = typeof document.getElementById === 'function' ? document.getElementById('agenda-now-indicator') : null;
+      safeRemove(old);
+      return;
+    }
+
+    const todayStr = this.formatDateIso(new Date());
+    const todayCol = document.querySelector(`.day-column[data-date="${todayStr}"]`);
+    const existing = typeof document.getElementById === 'function' ? document.getElementById('agenda-now-indicator') : null;
+
+    if (!todayCol) {
+      safeRemove(existing);
+      return;
+    }
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTotalMin = currentHour * 60 + currentMinute;
+    const startMin = this.dayHoursStart * 60;
+    const endMin = this.dayHoursEnd * 60;
+
+    if (currentTotalMin < startMin || currentTotalMin > endMin) {
+      safeRemove(existing);
+      return;
+    }
+
+    const slotH = this.slotHeight || 50;
+    const top = Math.round(((currentTotalMin - startMin) / 60) * slotH);
+    const timeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+
+    if (existing && existing.parentElement === todayCol) {
+      existing.style.top = `${top}px`;
+      existing.title = `Heure actuelle : ${timeStr}`;
+      const badge = typeof existing.querySelector === 'function' ? existing.querySelector('.agenda-now-badge') : null;
+      if (badge) badge.textContent = timeStr;
+    } else {
+      safeRemove(existing);
+      if (typeof document.createElement !== 'function') return;
+      const indicator = document.createElement('div');
+      indicator.id = 'agenda-now-indicator';
+      indicator.className = 'agenda-now-indicator';
+      indicator.style.top = `${top}px`;
+      indicator.title = `Heure actuelle : ${timeStr}`;
+      if (typeof indicator.setAttribute === 'function') {
+        indicator.setAttribute('aria-label', `Heure actuelle : ${timeStr}`);
+      }
+      indicator.innerHTML = `
+        <div class="agenda-now-dot"></div>
+        <div class="agenda-now-line"></div>
+        <span class="agenda-now-badge">${timeStr}</span>
+      `;
+      if (typeof todayCol.appendChild === 'function') {
+        todayCol.appendChild(indicator);
+      }
+    }
+  },
+
+  buildEventTaskGroups(tasks, allProjects) {
+    const hierProjects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
+      ? StorageManager.getProjectsHierarchy(allProjects)
+      : (allProjects || []).map(p => ({ project: p, pathTitle: p.title }));
+
+    const projectObjMap = new Map();
+    (allProjects || []).forEach(p => projectObjMap.set(p.id, p));
+
+    const allFlatTasks = [];
+    const activePersonal = [];
+    const donePersonal = [];
+    const activeByProj = new Map();
+    const doneByProj = new Map();
+
+    const flattenTasks = (list, prefix = '') => {
+      (list || []).forEach(t => {
+        const item = { id: t.id, title: prefix + t.title, completed: !!t.completed, projectId: t.projectId };
+        allFlatTasks.push(item);
+        const isDone = item.completed;
+        if (t.projectId && projectObjMap.has(t.projectId)) {
+          const targetMap = isDone ? doneByProj : activeByProj;
+          if (!targetMap.has(t.projectId)) targetMap.set(t.projectId, []);
+          targetMap.get(t.projectId).push(item);
+        } else {
+          if (isDone) donePersonal.push(item);
+          else activePersonal.push(item);
+        }
+        if (t.subtasks && t.subtasks.length > 0) flattenTasks(t.subtasks, prefix + '— ');
+      });
+    };
+    flattenTasks(tasks);
+
+    const groups = [];
+    if (activePersonal.length > 0) {
+      groups.push({ label: "👤 Tâches personnelles (à faire)", items: activePersonal, completed: false });
+    }
+    hierProjects.forEach(({ project, pathTitle }) => {
+      const list = activeByProj.get(project.id);
+      if (list && list.length > 0) {
+        groups.push({ label: "📁 Projet : " + (pathTitle || project.title), items: list, completed: false, projectId: project.id });
+      }
+    });
+
+    if (donePersonal.length > 0) {
+      groups.push({ label: "✓ Terminées — 👤 Sans projet", items: donePersonal, completed: true });
+    }
+    hierProjects.forEach(({ project, pathTitle }) => {
+      const list = doneByProj.get(project.id);
+      if (list && list.length > 0) {
+        groups.push({ label: "✓ Terminées — 📁 " + (pathTitle || project.title), items: list, completed: true, projectId: project.id });
+      }
+    });
+
+    return { groups, allFlatTasks, projectObjMap, hierProjects };
   },
 
   openEventModal(eventId = null, defaultValues = null) {
+    if (defaultValues && defaultValues.start) {
+      this.activeDateStr = defaultValues.start.slice(0, 10);
+      if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+        window.App.updateSidebarDayProgress(this.activeDateStr);
+      }
+    } else if (eventId) {
+      const existingEvt = this.getAll().find(e => e.id === eventId);
+      if (existingEvt && existingEvt.start) {
+        this.activeDateStr = existingEvt.start.slice(0, 10);
+        if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+          window.App.updateSidebarDayProgress(this.activeDateStr);
+        }
+      }
+    }
+
     const modal = document.getElementById('event-modal');
     if (!modal) return;
 
@@ -856,14 +1244,17 @@ const AgendaManager = {
 
     let selectedDest = 'local';
 
-    // Remplir les projets pour la création directe de tâche
+    // Remplir les projets (y compris sous-projets) pour la création directe de tâche
     if (selectTaskProject) {
       selectTaskProject.innerHTML = '<option value="">(Aucun projet)</option>';
       const allProjects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects() : [];
-      allProjects.forEach(p => {
+      const hier = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
+        ? StorageManager.getProjectsHierarchy(allProjects)
+        : allProjects.map(p => ({ project: p, displayTitle: p.title }));
+      hier.forEach(({ project: p, displayTitle }) => {
         const opt = document.createElement('option');
         opt.value = p.id;
-        opt.textContent = p.title;
+        opt.textContent = displayTitle || p.title;
         selectTaskProject.appendChild(opt);
       });
     }
@@ -939,46 +1330,19 @@ const AgendaManager = {
       inputColor.onchange = () => updateActiveSwatch(inputColor.value);
     }
 
-    // Remplir les tâches pour la liaison facultative (regroupées par projet)
+    // Remplir les tâches pour la liaison facultative : tâches à faire par projet en haut, tâches terminées par projet tout en bas
     const tasks = StorageManager.getTasks();
     const allProjects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects() : [];
     const projectMap = new Map();
     allProjects.forEach(p => projectMap.set(p.id, p.title));
 
+    const { groups: taskGroups, allFlatTasks, projectObjMap, hierProjects } = this.buildEventTaskGroups(tasks, allProjects);
+
     inputTask.innerHTML = '<option value="">(Aucune tâche associée)</option>';
-    const personalTasks = [];
-    const tasksByProj = new Map();
-
-    const flattenTasks = (list, prefix = '') => {
-      list.forEach(t => {
-        const item = { id: t.id, title: prefix + t.title, completed: !!t.completed, projectId: t.projectId };
-        if (t.projectId && projectMap.has(t.projectId)) {
-          if (!tasksByProj.has(t.projectId)) tasksByProj.set(t.projectId, []);
-          tasksByProj.get(t.projectId).push(item);
-        } else {
-          personalTasks.push(item);
-        }
-        if (t.subtasks && t.subtasks.length > 0) flattenTasks(t.subtasks, prefix + '— ');
-      });
-    };
-    flattenTasks(tasks);
-
-    if (personalTasks.length > 0) {
+    taskGroups.forEach(g => {
       const grp = document.createElement('optgroup');
-      grp.label = "👤 Tâches personnelles (sans projet)";
-      personalTasks.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = (t.completed ? '✓ ' : '') + t.title;
-        grp.appendChild(opt);
-      });
-      inputTask.appendChild(grp);
-    }
-
-    tasksByProj.forEach((tList, pId) => {
-      const grp = document.createElement('optgroup');
-      grp.label = "📁 Projet : " + (projectMap.get(pId) || 'Projet');
-      tList.forEach(t => {
+      grp.label = g.label;
+      g.items.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
         opt.textContent = (t.completed ? '✓ ' : '') + t.title;
@@ -992,6 +1356,16 @@ const AgendaManager = {
       if (checkCreateTask && inputTask.value) {
         checkCreateTask.checked = false;
         if (detailsNewTask) detailsNewTask.style.display = 'none';
+      }
+      if (inputTask.value) {
+        const found = allFlatTasks.find(t => t.id === inputTask.value);
+        if (found && found.projectId) {
+          const proj = projectObjMap.get(found.projectId);
+          if (proj && proj.color && inputColor) {
+            inputColor.value = proj.color;
+            updateActiveSwatch(proj.color);
+          }
+        }
       }
     };
 
@@ -1020,9 +1394,11 @@ const AgendaManager = {
         inputNote.appendChild(grp);
       }
 
-      notesByProj.forEach((nList, pId) => {
+      hierProjects.forEach(({ project, pathTitle }) => {
+        const nList = notesByProj.get(project.id);
+        if (!nList || nList.length === 0) return;
         const grp = document.createElement('optgroup');
-        grp.label = "📁 Projet : " + (projectMap.get(pId) || 'Projet');
+        grp.label = "📁 Projet : " + (pathTitle || project.title || 'Projet');
         nList.forEach(n => {
           const opt = document.createElement('option');
           opt.value = n.id;
@@ -1160,7 +1536,20 @@ const AgendaManager = {
               ? "📌 Note : La tâche Antigravité associée restera intacte dans votre liste." 
               : "Cette action supprimera le créneau de votre agenda Google.");
 
-          if (confirm(confirmMsg)) {
+          let shouldDelete = true;
+          if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
+            shouldDelete = await window.App.confirm({
+              title: "Supprimer de Google Agenda",
+              message: confirmMsg,
+              confirmText: "Supprimer",
+              danger: true,
+              icon: "📅"
+            });
+          } else if (typeof confirm === 'function') {
+            shouldDelete = confirm(confirmMsg);
+          }
+
+          if (shouldDelete) {
             btnDelete.disabled = true;
             const originalText = btnDelete.textContent;
             btnDelete.textContent = "Suppression...";
@@ -1172,7 +1561,11 @@ const AgendaManager = {
               }
               this.closeEventModal();
             } catch (err) {
-              alert("Erreur lors de la suppression Google : " + err.message);
+              if (window.App && typeof window.App.alert === 'function') {
+                await window.App.alert({ title: "Erreur Google Agenda", message: err.message, type: "error" });
+              } else {
+                alert("Erreur lors de la suppression Google : " + err.message);
+              }
             } finally {
               btnDelete.disabled = false;
               btnDelete.textContent = originalText;
@@ -1285,16 +1678,42 @@ const AgendaManager = {
         btnDelete.style.display = 'inline-flex';
         btnSave.textContent = "Enregistrer les modifications";
 
-        btnDelete.onclick = () => {
-          if (confirm("Supprimer ce créneau d'agenda ? (La tâche associée ne sera pas supprimée)")) {
+        btnDelete.onclick = async () => {
+          let shouldDelete = true;
+          if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
+            shouldDelete = await window.App.confirm({
+              title: "Supprimer le créneau",
+              message: "Supprimer ce créneau d'agenda ?\n(La tâche associée ne sera pas supprimée).",
+              confirmText: "Supprimer le créneau",
+              danger: true,
+              icon: "⏱️"
+            });
+          } else if (typeof confirm === 'function') {
+            shouldDelete = confirm("Supprimer ce créneau d'agenda ? (La tâche associée ne sera pas supprimée)");
+          }
+          if (shouldDelete) {
             this.deleteEvent(eventId);
             this.closeEventModal();
           }
         };
 
         btnSave.onclick = () => {
-          if (!inputTitle.value.trim()) return alert("Le titre est requis.");
-          if (!inputStart.value || !inputEnd.value) return alert("Les heures de début et fin sont requises.");
+          if (!inputTitle.value.trim()) {
+            if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+              window.App.showToast("Le titre du créneau est requis", "error");
+            } else if (typeof alert === 'function') {
+              alert("Le titre est requis.");
+            }
+            return;
+          }
+          if (!inputStart.value || !inputEnd.value) {
+            if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+              window.App.showToast("Les heures de début et fin sont requises", "error");
+            } else if (typeof alert === 'function') {
+              alert("Les heures de début et fin sont requises.");
+            }
+            return;
+          }
 
           const isAllDay = inputAllDay ? inputAllDay.checked : false;
           let startVal = inputStart.value;
@@ -1533,8 +1952,14 @@ const AgendaManager = {
 
     if (changed) {
       StorageManager.saveNotes(notes);
-      if (window.NotesManager && typeof window.NotesManager.renderNotesList === 'function') {
-        window.NotesManager.renderNotesList();
+      if (typeof window !== 'undefined' && window.NotesManager) {
+        if (typeof window.NotesManager.renderNotesList === 'function') {
+          window.NotesManager.renderNotesList();
+        }
+        if (typeof window.NotesManager.renderEventSelector === 'function' && window.NotesManager.currentNoteId) {
+          const current = StorageManager.getNotes().find(n => n.id === window.NotesManager.currentNoteId);
+          if (current) window.NotesManager.renderEventSelector(current);
+        }
       }
     }
   },
@@ -1546,44 +1971,11 @@ const AgendaManager = {
 
     document.addEventListener('contextmenu', (e) => {
       const agendaScreen = document.getElementById('screen-agenda');
-      if (!agendaScreen || !agendaScreen.contains(e.target)) return;
-
-      // Cas 1 : Clic droit sur un événement existant
-      const eventEl = e.target.closest('.calendar-event');
-      if (eventEl) {
+      if (agendaScreen && agendaScreen.contains(e.target)) {
+        // Bloquer systématiquement le menu contextuel natif ou prématuré dans l'agenda
+        // La distinction clic-court vs maintien est gérée avec précision par initRightClickExtend
         e.preventDefault();
         e.stopPropagation();
-        const eventId = eventEl.dataset.eventId || (eventEl.getAttribute('onclick') ? eventEl.getAttribute('onclick').match(/'([^']+)'/)?.[1] : null);
-        if (eventId) {
-          this.showEventContextMenu(e.clientX, e.clientY, eventId);
-          return;
-        }
-      }
-
-      // Cas 2 : Clic droit sur un emplacement libre dans une colonne jour
-      const dayCol = e.target.closest('.day-column');
-      if (dayCol) {
-        e.preventDefault();
-        e.stopPropagation();
-        const dateStr = dayCol.dataset.date;
-        const rect = dayCol.getBoundingClientRect();
-        const relY = Math.max(0, e.clientY - rect.top);
-        const hoursOffset = relY / this.slotHeight;
-        const clickedHour = Math.floor(this.dayHoursStart + hoursOffset);
-        
-        // Arrondir par pas de 15 minutes (00, 15, 30, 45)
-        const rawMinutes = Math.floor((hoursOffset % 1) * 60);
-        const roundedMinutes = Math.min(45, Math.floor(rawMinutes / 15) * 15);
-        const startHourStr = String(Math.min(23, Math.max(0, clickedHour))).padStart(2, '0');
-        const startMinStr = String(roundedMinutes).padStart(2, '0');
-        const startTime = `${startHourStr}:${startMinStr}`;
-
-        const endHour = Math.min(23, clickedHour + 1);
-        const endHourStr = String(endHour).padStart(2, '0');
-        const endTime = `${endHourStr}:${startMinStr}`;
-
-        this.showSlotContextMenu(e.clientX, e.clientY, dateStr, startTime, endTime);
-        return;
       }
     });
 
@@ -1662,9 +2054,21 @@ const AgendaManager = {
 
     const btnDelete = document.getElementById('cmenu-delete');
     if (btnDelete) {
-      btnDelete.onclick = () => {
+      btnDelete.onclick = async () => {
         this.hideContextMenu();
-        if (confirm(`Supprimer l'événement « ${evt.title} » ? (La tâche associée reste intacte)`)) {
+        let shouldDelete = true;
+        if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
+          shouldDelete = await window.App.confirm({
+            title: "Supprimer l'événement",
+            message: `Supprimer l'événement « ${evt.title} » ?\n(La tâche associée reste intacte).`,
+            confirmText: "Supprimer",
+            danger: true,
+            icon: "🗑️"
+          });
+        } else if (typeof confirm === 'function') {
+          shouldDelete = confirm(`Supprimer l'événement « ${evt.title} » ? (La tâche associée reste intacte)`);
+        }
+        if (shouldDelete) {
           this.deleteEvent(eventId);
         }
       };
@@ -1962,6 +2366,12 @@ const AgendaManager = {
       const duration = s.currentEndH - s.currentStartH;
       const heightPx = Math.max(26, duration * this.slotHeight - 2);
       s.eventEl.style.height = `${heightPx}px`;
+      s.eventEl.classList.add('is-resizing');
+
+      const timePill = s.eventEl.querySelector('.event-time-pill, .event-time-compact');
+      if (timePill) {
+        timePill.textContent = `${this.formatHourDecimal(s.currentStartH)} - ${this.formatHourDecimal(s.currentEndH)}`;
+      }
     } else if (s.mode === 'resize-top') {
       const parentCol = s.eventEl.closest('.day-column') || s.eventEl.parentElement;
       const colRect = parentCol.getBoundingClientRect();
@@ -1979,10 +2389,25 @@ const AgendaManager = {
 
       s.eventEl.style.top = `${topPx}px`;
       s.eventEl.style.height = `${heightPx}px`;
+      s.eventEl.classList.add('is-resizing');
+
+      const timePill = s.eventEl.querySelector('.event-time-pill, .event-time-compact');
+      if (timePill) {
+        timePill.textContent = `${this.formatHourDecimal(s.currentStartH)} - ${this.formatHourDecimal(s.currentEndH)}`;
+      }
     }
 
     // Afficher l'indicateur d'horaire en temps réel
     this.updateDragIndicator(e.clientX, e.clientY, s);
+  },
+
+  formatDurationMinutes(totalMin) {
+    if (totalMin <= 0) return '0 min';
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h${String(m).padStart(2, '0')}`;
   },
 
   async handleGlobalMouseUp(e) {
@@ -2030,8 +2455,12 @@ const AgendaManager = {
       const dayLabel = !isNaN(d.getTime()) ? d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) : s.currentDateStr;
       label = `📅 ${dayLabel} • ${startTimeStr} - ${endTimeStr}`;
     } else {
-      const durationMin = Math.round((s.currentEndH - s.currentStartH) * 60);
-      label = `⏱️ ${startTimeStr} - ${endTimeStr} (${durationMin} min)`;
+      const currentDurationMin = Math.round((s.currentEndH - s.currentStartH) * 60);
+      const initialDurationMin = Math.round(s.durationH * 60);
+      const diffMin = currentDurationMin - initialDurationMin;
+      const durationStr = this.formatDurationMinutes(currentDurationMin);
+      const diffStr = diffMin > 0 ? ` (+${diffMin}m)` : diffMin < 0 ? ` (${diffMin}m)` : '';
+      label = `⏱️ ${startTimeStr} - ${endTimeStr} • ${durationStr}${diffStr}`;
     }
 
     indicator.textContent = label;
@@ -2041,6 +2470,7 @@ const AgendaManager = {
   },
 
   async updateEventSchedule(eventId, newDateStr, newStartH, newEndH) {
+    this.activeDateStr = newDateStr;
     const events = this.getAll();
     const evt = events.find(e => e.id === eventId);
     if (!evt) return false;
@@ -2077,12 +2507,334 @@ const AgendaManager = {
       this.updateEvent(eventId, updatedData);
     }
 
+    if (window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+      window.App.updateSidebarDayProgress(newDateStr);
+    }
+
     const d = new Date(`${newDateStr}T00:00:00`);
     const dayLabel = !isNaN(d.getTime()) ? d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) : newDateStr;
     if (window.App && typeof window.App.showToast === 'function') {
       window.App.showToast(`« ${evt.title} » : ${dayLabel} • ${startTimeStr} - ${endTimeStr}`, 'info');
     }
     return true;
+  },
+
+  // Augmenter la durée d'un événement au maintien du clic droit ou étirement au clic gauche/droit
+  initRightClickExtend() {
+    if (this._rightClickExtendBound || typeof document === 'undefined') return;
+    this._rightClickExtendBound = true;
+
+    // 1. Détection de l'appui (mousedown) : Clic droit (2) ou Clic gauche (0) sur créneau vide
+    document.addEventListener('mousedown', (e) => {
+      // Ignorer si ce n'est ni un clic gauche (0) ni un clic droit (2)
+      if (e.button !== 0 && e.button !== 2) return;
+
+      const agendaScreen = document.getElementById('screen-agenda');
+      if (!agendaScreen || !agendaScreen.contains(e.target)) return;
+
+      // Éviter si on clique dans la modale d'événement ou un menu ouvert
+      if (e.target.closest('#event-modal') || e.target.closest('#agenda-context-menu')) return;
+
+      const eventEl = e.target.closest('.calendar-event');
+      const dayCol = e.target.closest('.day-column');
+      if (!eventEl && !dayCol) return;
+
+      // Pour le clic gauche sur un événement existant : laisser le drag and drop natif de l'événement gérer (move / resize-top / resize-bottom)
+      if (e.button === 0 && eventEl) return;
+
+      // Intercepter le comportement par défaut pour le clic droit
+      if (e.button === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      let isExisting = false;
+      let eventId = null;
+      let evt = null;
+      let startH = 0;
+      let endH = 0;
+      let dateStr = '';
+
+      if (eventEl && e.button === 2) {
+        eventId = eventEl.dataset.eventId || (eventEl.getAttribute('onclick') ? eventEl.getAttribute('onclick').match(/'([^']+)'/)?.[1] : null);
+        if (eventId) {
+          evt = this.getAll().find(ev => ev.id === eventId);
+          if (evt && !evt.isAllDay) {
+            isExisting = true;
+            startH = this.parseHourDecimal(evt.start);
+            endH = this.parseHourDecimal(evt.end);
+            if (endH <= startH) endH = startH + 1;
+            dateStr = (evt.start && evt.start.length >= 10) ? evt.start.slice(0, 10) : (dayCol ? dayCol.dataset.date : '');
+          }
+        }
+      }
+
+      if (!isExisting && dayCol) {
+        dateStr = dayCol.dataset.date;
+        if (!dateStr) return;
+        const rect = dayCol.getBoundingClientRect();
+        const relY = Math.max(0, e.clientY - rect.top);
+        const hoursOffset = relY / this.slotHeight;
+        const clickedHour = Math.floor(this.dayHoursStart + hoursOffset);
+        const rawMinutes = Math.floor((hoursOffset % 1) * 60);
+        const roundedMinutes = Math.min(45, Math.floor(rawMinutes / 15) * 15);
+        startH = Math.min(23, Math.max(0, clickedHour)) + (roundedMinutes / 60);
+        endH = Math.min(24, startH + 1);
+      }
+
+      if (!dateStr) dateStr = this.formatDateIso(new Date());
+
+      const maxEndH = Math.min(this.dayHoursEnd + 1, startH + 12);
+
+      this._rightClickSession = {
+        button: e.button,
+        type: isExisting ? 'existing' : 'slot',
+        eventId,
+        eventEl,
+        evt,
+        dayCol: dayCol || (eventEl ? eventEl.closest('.day-column') : null),
+        dateStr,
+        startH,
+        initialEndH: endH,
+        currentEndH: endH,
+        maxEndH,
+        startX: e.clientX,
+        startY: e.clientY,
+        hasExtended: false,
+        intervalId: null,
+        holdTimeoutId: null
+      };
+
+      // Rendu visuel immédiat pour figer le début et afficher l'animation dès l'appui
+      this._updateRightClickVisuals(this._rightClickSession);
+
+      // Si l'utilisateur maintient le clic pendant le délai imparti -> début de l'extension automatique
+      const holdDelay = (e.button === 2) ? 180 : 350;
+      this._rightClickSession.holdTimeoutId = setTimeout(() => {
+        if (!this._rightClickSession) return;
+        this._startRightClickExtension();
+      }, holdDelay);
+    });
+
+    // 2. Déplacement pendant l'appui (étirement en direct vers le bas avec animation fluide)
+    window.addEventListener('mousemove', (e) => {
+      const s = this._rightClickSession;
+      if (!s) return;
+
+      const deltaY = e.clientY - s.startY;
+      // Dès que la souris glisse vers le bas de plus de 5px : déclencher l'étirement immédiatement
+      if (!s.hasExtended && deltaY > 5) {
+        if (s.holdTimeoutId) clearTimeout(s.holdTimeoutId);
+        s.hasExtended = true;
+      }
+
+      if (s.hasExtended) {
+        const dayCol = s.dayCol || (s.eventEl ? s.eventEl.closest('.day-column') : null);
+        if (dayCol) {
+          const rect = dayCol.getBoundingClientRect();
+          const relY = Math.max(0, e.clientY - rect.top);
+          const mouseH = this.dayHoursStart + (relY / this.slotHeight);
+          const snappedMinutes = Math.round(((mouseH % 1) * 60) / 15) * 15;
+          const rawCandidateEnd = Math.floor(mouseH) + (snappedMinutes / 60);
+          // Le créneau s'étire vers le bas en suivant le curseur (minimum 15 min après startH)
+          const candidateEndH = Math.min(s.maxEndH, Math.max(s.startH + 0.25, rawCandidateEnd));
+          if (candidateEndH !== s.currentEndH && candidateEndH > s.startH) {
+            s.currentEndH = candidateEndH;
+            this._updateRightClickVisuals(s);
+            if (window.App && typeof window.App.triggerHapticFeedback === 'function') {
+              window.App.triggerHapticFeedback();
+            }
+          }
+        }
+      }
+    });
+
+    // 3. Relâchement de la souris (mouseup)
+    window.addEventListener('mouseup', async (e) => {
+      const s = this._rightClickSession;
+      if (!s) return;
+
+      if (s.holdTimeoutId) clearTimeout(s.holdTimeoutId);
+      if (s.intervalId) clearInterval(s.intervalId);
+
+      // Neutraliser systématiquement le clic classique subséquent pour empêcher la création parasite à l'arrivée
+      this._suppressNextClick = true;
+      setTimeout(() => {
+        this._suppressNextClick = false;
+      }, 300);
+
+      const durationIncreased = s.currentEndH > s.initialEndH || s.hasExtended;
+
+      if (s.button === 0) {
+        // --- CLIC GAUCHE ---
+        const startTimeStr = this.formatHourDecimal(s.startH);
+        const endTimeStr = this.formatHourDecimal(s.currentEndH);
+        const totalMin = Math.round((s.currentEndH - s.startH) * 60);
+        const hours = Math.floor(totalMin / 60);
+        const mins = totalMin % 60;
+        const durLabel = hours > 0 ? (mins > 0 ? `${hours}h${mins}` : `${hours}h`) : `${mins}min`;
+
+        // Ouvrir la modale avec les heures calculées depuis l'ancrage de départ
+        this.openEventModal(null, {
+          start: `${s.dateStr}T${startTimeStr}`,
+          end: `${s.dateStr}T${endTimeStr}`
+        });
+        if (durationIncreased && window.App && typeof window.App.showToast === 'function') {
+          window.App.showToast(`⏱️ Créneau sélectionné : ${startTimeStr} – ${endTimeStr} (${durLabel})`, 'info');
+        }
+      } else {
+        // --- CLIC DROIT ---
+        if (durationIncreased) {
+          const startTimeStr = this.formatHourDecimal(s.startH);
+          const endTimeStr = this.formatHourDecimal(s.currentEndH);
+          const totalMin = Math.round((s.currentEndH - s.startH) * 60);
+          const hours = Math.floor(totalMin / 60);
+          const mins = totalMin % 60;
+          const durLabel = hours > 0 ? (mins > 0 ? `${hours}h${mins}` : `${hours}h`) : `${mins}min`;
+
+          if (s.type === 'existing' && s.eventId) {
+            await this.updateEventSchedule(s.eventId, s.dateStr, s.startH, s.currentEndH);
+            if (window.App && typeof window.App.showToast === 'function') {
+              window.App.showToast(`⏱️ Durée prolongée : ${startTimeStr} – ${endTimeStr} (${durLabel})`, 'success');
+            }
+          } else if (s.type === 'slot') {
+            this.openEventModal(null, {
+              start: `${s.dateStr}T${startTimeStr}`,
+              end: `${s.dateStr}T${endTimeStr}`
+            });
+            if (window.App && typeof window.App.showToast === 'function') {
+              window.App.showToast(`⏱️ Nouveau créneau : ${startTimeStr} – ${endTimeStr} (${durLabel})`, 'info');
+            }
+          }
+        } else {
+          // Clic droit court sans maintien -> afficher le menu contextuel
+          if (!s.hasExtended) {
+            if (s.type === 'existing' && s.eventId) {
+              this.showEventContextMenu(e.clientX, e.clientY, s.eventId);
+            } else if (s.type === 'slot') {
+              const startTimeStr = this.formatHourDecimal(s.startH);
+              const endTimeStr = this.formatHourDecimal(s.initialEndH);
+              this.showSlotContextMenu(e.clientX, e.clientY, s.dateStr, startTimeStr, endTimeStr);
+            }
+          }
+        }
+      }
+
+      this._cleanupRightClickVisuals(s);
+      this._rightClickSession = null;
+    });
+
+    // 4. Annulation par Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this._rightClickSession) {
+        const s = this._rightClickSession;
+        if (s.holdTimeoutId) clearTimeout(s.holdTimeoutId);
+        if (s.intervalId) clearInterval(s.intervalId);
+        this._cleanupRightClickVisuals(s);
+        this._rightClickSession = null;
+      }
+    });
+  },
+
+  _startRightClickExtension() {
+    const s = this._rightClickSession;
+    if (!s) return;
+
+    s.hasExtended = true;
+
+    const stepIncrement = () => {
+      if (!this._rightClickSession) return;
+      const nextEnd = Math.min(s.maxEndH, s.currentEndH + 0.25);
+      if (nextEnd > s.currentEndH) {
+        s.currentEndH = nextEnd;
+        this._updateRightClickVisuals(s);
+        if (window.App && typeof window.App.triggerHapticFeedback === 'function') {
+          window.App.triggerHapticFeedback();
+        }
+      }
+    };
+
+    // Premier incrément (+15 min)
+    stepIncrement();
+
+    // Répéter tant que le clic droit reste maintenu
+    s.intervalId = setInterval(stepIncrement, 240);
+  },
+
+  _updateRightClickVisuals(s) {
+    const durationH = Math.max(0.25, s.currentEndH - s.startH);
+    const heightPx = Math.max(26, durationH * this.slotHeight - 2);
+    const startTimeStr = this.formatHourDecimal(s.startH);
+    const endTimeStr = this.formatHourDecimal(s.currentEndH);
+    const totalMin = Math.round(durationH * 60);
+    const hours = Math.floor(totalMin / 60);
+    const mins = totalMin % 60;
+    const durLabel = hours > 0 ? (mins > 0 ? `${hours}h${mins}` : `${hours}h`) : `${mins}min`;
+
+    if (s.type === 'existing' && s.eventEl) {
+      s.eventEl.classList.add('event-extending');
+      s.eventEl.style.setProperty('height', `${heightPx}px`, 'important');
+
+      // Mettre à jour l'étiquette horaire visible dans la carte
+      const timePill = s.eventEl.querySelector('.event-time-pill') || s.eventEl.querySelector('.event-time-compact');
+      if (timePill) {
+        timePill.textContent = `${startTimeStr} - ${endTimeStr}`;
+      }
+
+      let badge = s.eventEl.querySelector('.event-extending-badge');
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'event-extending-badge';
+        s.eventEl.appendChild(badge);
+      }
+      badge.textContent = `⏱️ ${startTimeStr} – ${endTimeStr} (${durLabel})`;
+    } else if (s.type === 'slot' && s.dayCol) {
+      let indicator = document.getElementById('agenda-slot-hover-indicator');
+      if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'agenda-slot-hover-indicator extending';
+        indicator.id = 'agenda-slot-hover-indicator';
+        indicator.innerHTML = `
+          <div class="agenda-slot-hover-badge">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span class="agenda-slot-hover-time"></span>
+          </div>
+        `;
+        s.dayCol.appendChild(indicator);
+      } else if (indicator.parentElement !== s.dayCol) {
+        s.dayCol.appendChild(indicator);
+      }
+      indicator.classList.add('extending');
+      indicator.style.display = 'flex';
+      const topPx = (s.startH - this.dayHoursStart) * this.slotHeight;
+      indicator.style.setProperty('top', `${topPx}px`, 'important');
+      indicator.style.setProperty('height', `${heightPx}px`, 'important');
+      const span = indicator.querySelector('.agenda-slot-hover-time');
+      if (span) {
+        span.textContent = `${startTimeStr} – ${endTimeStr} (${durLabel})`;
+      }
+    }
+  },
+
+  _cleanupRightClickVisuals(s) {
+    if (!s) return;
+    if (s.eventEl) {
+      s.eventEl.classList.remove('event-extending');
+      const badge = s.eventEl.querySelector('.event-extending-badge');
+      if (badge) badge.remove();
+      if (!s.hasExtended) {
+        const origDur = Math.max(0.25, s.initialEndH - s.startH);
+        s.eventEl.style.setProperty('height', `${Math.max(26, origDur * this.slotHeight - 2)}px`);
+      }
+    }
+    const indicator = document.getElementById('agenda-slot-hover-indicator');
+    if (indicator) {
+      indicator.classList.remove('extending');
+      if (s.type === 'slot') indicator.remove();
+    }
   },
 
   closeEventModal() {
