@@ -108,19 +108,19 @@
         </li>
       </ul>
 
-      <!-- Widget simplifié de progression de la journée (07h - 23h) -->
+      <!-- Widget de la frise chronologique de la journée (00:00 - 24:00) -->
       <div id="sidebar-day-progress-widget" class="sidebar-day-progress-widget">
         <div class="sidebar-day-progress-header">
           <div class="sidebar-day-progress-label">
             <span class="sidebar-day-progress-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
             <span id="sidebar-day-progress-time">--:--</span>
           </div>
-          <span id="sidebar-day-progress-percent" class="sidebar-day-progress-percent">0%</span>
+          <span id="sidebar-day-progress-percent" class="sidebar-day-progress-percent" style="display: none;"></span>
         </div>
         <div class="sidebar-day-progress-track" id="sidebar-day-progress-track">
           <div id="sidebar-day-progress-bar" class="sidebar-day-progress-fill" style="width: 0%;"></div>
         </div>
-        <div id="sidebar-day-progress-remaining" class="sidebar-day-progress-sub">Journée active (07h-23h)</div>
+        <div id="sidebar-day-progress-remaining" class="sidebar-day-progress-sub" style="display: none;"></div>
       </div>
 
       <!-- Mini-lecteur de musique dans le volet latéral (affiché SEULEMENT lorsqu'il y a de la musique) -->
@@ -384,10 +384,19 @@
             <div class="notes-search">
               <input type="text" id="notes-search-input" placeholder="🔍 Rechercher dans les notes...">
             </div>
-            <!-- Filtre de classement des notes (Toutes, Personnelles, Par projet) -->
-            <div style="padding: 0 10px 8px 10px;">
-              <select id="notes-filter-project" class="form-control" style="font-size: 0.78rem; height: 30px; padding: 2px 8px; width: 100%; cursor: pointer;">
-                <option value="all">📂 Toutes les notes</option>
+            <!-- Filtres Dossiers & Projets -->
+            <div style="padding: 0 10px 8px 10px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <select id="notes-filter-folder" class="form-control" style="font-size: 0.78rem; height: 30px; padding: 2px 8px; flex: 1; cursor: pointer;" title="Filtrer par dossier de notes">
+                  <option value="all">📁 Tous les dossiers</option>
+                </select>
+                <button type="button" id="btn-new-folder" class="btn btn-secondary btn-sm" onclick="NotesManager.promptNewFolder();" style="height: 30px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; font-size: 0.75rem;" title="Nouveau dossier de notes">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                  <span>+</span>
+                </button>
+              </div>
+              <select id="notes-filter-project" class="form-control" style="font-size: 0.78rem; height: 30px; padding: 2px 8px; width: 100%; cursor: pointer;" title="Filtrer par projet">
+                <option value="all">📂 Tous les projets</option>
                 <option value="personal">👤 Notes personnelles (sans projet)</option>
               </select>
             </div>
@@ -405,8 +414,16 @@
                 <button id="btn-delete-note" class="btn btn-danger btn-sm" title="Supprimer la note"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             </div>
-            <!-- Barre de liaison Projet & Agenda -->
+            <!-- Barre de liaison Dossier, Projet & Agenda -->
             <div class="note-agenda-bar" id="note-agenda-bar">
+              <!-- Groupe Dossier -->
+              <div class="note-bar-group">
+                <span class="note-bar-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> <span>Dossier :</span></span>
+                <select id="note-input-folder" class="note-bar-select note-folder-select" title="Classer cette note dans un dossier"></select>
+              </div>
+
+              <div class="note-bar-divider"></div>
+
               <!-- Groupe Projet -->
               <div class="note-bar-group">
                 <span class="note-bar-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> <span>Projet :</span></span>
@@ -1491,12 +1508,24 @@
             <!-- 1. Activation / Désactivation des onglets d'Antigravité -->
             <div class="settings-section" id="settings-section-sidebar-tabs">
               <h4 class="settings-section-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg><span>Onglets du volet latéral</span></h4>
-              <p class="settings-section-desc">Activez ou désactivez les onglets selon vos habitudes. Masquez facilement les modules que vous n'utilisez pas.</p>
+              <p class="settings-section-desc">Activez, désactivez ou <strong>glissez-déposez les onglets</strong> pour personnaliser leur ordre d'affichage dans le volet latéral gauche.</p>
 
-              <div class="sidebar-tabs-toggle-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px;">
+              <div class="sidebar-tabs-section-toolbar" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
+                <span style="font-size: 0.78rem; color: var(--text-dim); display: inline-flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                  <span>Glissez-déposez une carte pour modifier la disposition des onglets</span>
+                </span>
+                <button type="button" id="btn-reset-sidebar-tabs-order" class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; padding: 4px 10px;" title="Rétablir la disposition d'origine des onglets">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  <span>Ordre par défaut</span>
+                </button>
+              </div>
+
+              <div class="sidebar-tabs-toggle-grid" id="sidebar-tabs-toggle-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 8px;">
                 
                 <!-- Tâches -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="tasks">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
                     <div>
@@ -1504,11 +1533,14 @@
                       <div class="tab-toggle-desc">Gestionnaire de tâches arborescent</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-tasks" class="form-checkbox" checked data-tab-name="tasks">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Tâches">
+                    <input type="checkbox" id="toggle-tab-tasks" class="form-checkbox" checked data-tab-name="tasks">
+                  </label>
+                </div>
 
                 <!-- Projets -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="projects">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
                     <div>
@@ -1516,11 +1548,14 @@
                       <div class="tab-toggle-desc">Organisation par dossiers et projets</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-projects" class="form-checkbox" checked data-tab-name="projects">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Projets">
+                    <input type="checkbox" id="toggle-tab-projects" class="form-checkbox" checked data-tab-name="projects">
+                  </label>
+                </div>
 
                 <!-- Agenda -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="agenda">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
                     <div>
@@ -1528,11 +1563,14 @@
                       <div class="tab-toggle-desc">Planning hebdomadaire et synchronisation</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-agenda" class="form-checkbox" checked data-tab-name="agenda">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Agenda">
+                    <input type="checkbox" id="toggle-tab-agenda" class="form-checkbox" checked data-tab-name="agenda">
+                  </label>
+                </div>
 
                 <!-- Notes -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="notes">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                     <div>
@@ -1540,11 +1578,14 @@
                       <div class="tab-toggle-desc">Traitement de texte et carnets personnels</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-notes" class="form-checkbox" checked data-tab-name="notes">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Notes">
+                    <input type="checkbox" id="toggle-tab-notes" class="form-checkbox" checked data-tab-name="notes">
+                  </label>
+                </div>
 
                 <!-- Focus Pomodoro -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="focus">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
                     <div>
@@ -1552,11 +1593,14 @@
                       <div class="tab-toggle-desc">Minuteur Pomodoro &amp; Deep Work</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-focus" class="form-checkbox" checked data-tab-name="focus">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Focus">
+                    <input type="checkbox" id="toggle-tab-focus" class="form-checkbox" checked data-tab-name="focus">
+                  </label>
+                </div>
 
                 <!-- Musique -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="music">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
                     <div>
@@ -1564,11 +1608,14 @@
                       <div class="tab-toggle-desc">Lecteur audio Lofi et ambiances locales</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-music" class="form-checkbox" checked data-tab-name="music">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Musique">
+                    <input type="checkbox" id="toggle-tab-music" class="form-checkbox" checked data-tab-name="music">
+                  </label>
+                </div>
 
                 <!-- Corbeille -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="trash">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
                     <div>
@@ -1576,11 +1623,14 @@
                       <div class="tab-toggle-desc">Restauration des éléments supprimés</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-trash" class="form-checkbox" checked data-tab-name="trash">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Corbeille">
+                    <input type="checkbox" id="toggle-tab-trash" class="form-checkbox" checked data-tab-name="trash">
+                  </label>
+                </div>
 
                 <!-- Sauvegardes -->
-                <label class="sidebar-tab-toggle-card">
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="backups">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
                   <div class="tab-toggle-info">
                     <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span>
                     <div>
@@ -1588,8 +1638,10 @@
                       <div class="tab-toggle-desc">Snapshots locaux et export JSON</div>
                     </div>
                   </div>
-                  <input type="checkbox" id="toggle-tab-backups" class="form-checkbox" checked data-tab-name="backups">
-                </label>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Sauvegardes">
+                    <input type="checkbox" id="toggle-tab-backups" class="form-checkbox" checked data-tab-name="backups">
+                  </label>
+                </div>
 
               </div>
               <div style="margin-top: 10px; font-size: 0.76rem; color: var(--text-dim);">
@@ -1605,8 +1657,8 @@
               <div style="background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
                 <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
                   <div style="padding-right: 14px;">
-                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); display: block;">Frise chronologique de la journée (07h - 23h)</span>
-                    <span style="font-size: 0.78rem; color: var(--text-dim); display: block; margin-top: 2px;">Affiche la jauge découpée en segments colorés représentant vos événements de l'agenda avec survol interactif.</span>
+                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); display: block;">Frise chronologique de la journée</span>
+                    <span style="font-size: 0.78rem; color: var(--text-dim); display: block; margin-top: 2px;">Affiche la frise découpée en segments colorés représentant vos événements de l'agenda de minuit à minuit.</span>
                   </div>
                   <input type="checkbox" id="setting-sidebar-day-progress" class="form-checkbox" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);">
                 </label>
@@ -1822,6 +1874,10 @@
                     <div class="shortcut-keys"><kbd>F1</kbd></div>
                   </div>
                   <div class="shortcut-item-row">
+                    <span class="shortcut-desc">Revenir à aujourd'hui (dans l'Agenda)</span>
+                    <div class="shortcut-keys"><kbd>T</kbd></div>
+                  </div>
+                  <div class="shortcut-item-row">
                     <span class="shortcut-desc">Fermer la fenêtre / modale active</span>
                     <div class="shortcut-keys"><kbd>Échap</kbd></div>
                   </div>
@@ -1971,11 +2027,64 @@
               <p class="settings-section-desc">Historique détaillé des évolutions majeures de la version 1.2.0 pour organiser vos projets, votre temps et vos performances.</p>
 
               <div class="changelog-container">
+                <!-- Version 1.2.1 (Nouveautés & Confort d'usage) -->
+                <div class="changelog-release-card" style="border-color: var(--accent);">
+                  <div class="changelog-release-header">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                      <span class="changelog-version-tag" style="background: var(--accent); color: #fff;">Version 1.2.1</span>
+                      <span class="changelog-badge-current">Actuelle</span>
+                      <span style="font-size: 0.76rem; color: var(--text-dim);">(Correctifs d'usage, confort &amp; personnalisation)</span>
+                    </div>
+                    <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
+                  </div>
+                  <p class="changelog-release-lead">Mise à jour de confort et de finitions suite aux retours d'utilisation de la v1.2.0 : réorganisation libre des onglets du volet par glisser-déposer, correction orthographique native dans les notes, amplitude 24h &amp; focus confort dans l'agenda, nouvelle modale d'événement esthétique et aérée, récurrence avec fin paramétrable, défilement horizontal adaptatif et intégration bidirectionnelle renforcée.</p>
+
+                  <div class="changelog-categories">
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title">🎨 Personnalisation du volet &amp; Ergonomie de fenêtre</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Réorganisation des onglets par glisser-déposer :</strong> Dans <em>Paramètres &gt; Options du volet latéral</em>, déplacez librement les cartes des onglets à la souris pour réordonner instantanément les boutons du volet latéral gauche. Un bouton permet de rétablir l'ordre par défaut à tout moment.</li>
+                        <li><strong>Défilement horizontal adaptatif :</strong> En réduisant la largeur de la fenêtre, le contenu central défile horizontalement sans décaler ni cacher le volet latéral gauche.</li>
+                        <li><strong>Dégagement des boutons système Windows :</strong> La barre supérieure et le bouton <em>Nouvelle tâche</em> restent parfaitement dégagés sous les commandes Réduire, Agrandir et Fermer, même sur les écrans plus compacts.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title">📅 Agenda 24h, Créneaux &amp; Récurrence</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Amplitude complète 24h (minuit à minuit) :</strong> L'agenda s'étend désormais sur l'intégralité des 24 heures pour planifier vos nuits et vos soirées, tout en positionnant automatiquement le défilement sur les heures actives (07h00 - 23h00) à chaque ouverture ou clic sur <em>Aujourd'hui</em>.</li>
+                        <li><strong>Raccourci clavier « T » :</strong> En consultation de l'agenda, pressez la touche <kbd>T</kbd> pour revenir instantanément à aujourd'hui et vous caler à 07h00.</li>
+                        <li><strong>Redesign de la modale de créneau :</strong> Interface aérée et ordonnée en cartes distinctes, sélecteurs d'heures et de fin sans coupure de texte, défilement vertical complet et clarté visuelle renforcée.</li>
+                        <li><strong>Fin de récurrence paramétrable :</strong> Choisissez désormais si un créneau récurrent se répète <em>Pour toujours</em> ou s'il s'arrête à une <em>Date limite</em> précise (avec garde-fous pour protéger la réactivité de l'agenda).</li>
+                        <li><strong>Indicateur visuel des tâches achevées :</strong> Les créneaux d'agenda reliés à des tâches terminées affichent un badge <em>✓ Fait</em> et un discret témoin vert.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title">📝 Notes, Dossiers &amp; Confort visuel</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Dossiers personnalisés pour les notes :</strong> Regroupez et rangez vos notes par dossiers personnalisés dans la barre latérale des notes. Pliage/dépliage mémorisé, déplacement immédiat par glisser-déposer ou via le sélecteur de dossier dans l'en-tête de la note, et préservation absolue des liens (créneaux d'agenda, projets et Wikilinks [[Titre]]).</li>
+                        <li><strong>Correction orthographique native &amp; menu contextuel :</strong> Clic droit sur les mots soulignés en rouge dans les notes pour afficher directement les suggestions de correction du dictionnaire français.</li>
+                        <li><strong>Liaison bidirectionnelle stricte Notes ↔ Agenda :</strong> Lier une note à un créneau depuis l'éditeur de notes synchronise automatiquement la note dans le créneau côté Agenda, et inversement.</li>
+                        <li><strong>Épuration visuelle des tâches :</strong> Suppression des fonds de boîte parasites derrière les lignes de tâches pour une interface plus légère et élégante.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title">⚡ Performance &amp; Ambiance sonore</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Fondu sonore doux (Espace Musique) :</strong> L'écoute s'adoucit avec un fade in et fade out progressif lors du démarrage, de la pause, de l'arrêt ou du changement de morceau pour un confort auditif feutré.</li>
+                        <li><strong>Pré-chargement instantané des écrans (Zero-Lag) :</strong> Préparation en arrière-plan des vues principales pour une réactivité instantanée et une transition fluide sans saccades.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="changelog-release-card">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <span class="changelog-version-tag">Version 1.2.0</span>
-                      <span class="changelog-badge-current">Actuelle</span>
+                      <span style="font-size: 0.75rem; color: var(--text-dim); background: var(--bg-tertiary); padding: 2px 7px; border-radius: 999px;">Majeure</span>
                       <span style="font-size: 0.76rem; color: var(--text-dim);">(évolutions complètes depuis la v1.1.2)</span>
                     </div>
                     <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
@@ -2555,81 +2664,54 @@
     </div>
   </div>
 
-  <!-- MODALE CRÉNEAU AGENDA -->
+  <!-- MODALE CRÉNEAU AGENDA (REDESIGN AESTHETIC & ERGONOMIC) -->
   <div id="event-modal" class="modal-overlay">
-    <div class="modal-content modal-content-lg">
+    <div class="modal-content modal-content-lg event-modal-dialog">
       <div class="modal-header">
-        <h3 id="event-modal-title">Créneau d'agenda</h3>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="event-modal-icon-badge">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <div>
+            <h3 id="event-modal-title" style="margin: 0; font-size: 1.08rem; font-weight: 600;">Créneau d'agenda</h3>
+            <span id="event-modal-subtitle" style="font-size: 0.75rem; color: var(--text-muted); display: block;">Organisez votre temps et vos priorités</span>
+          </div>
+        </div>
         <button class="btn-icon" onclick="AgendaManager.closeEventModal()" title="Fermer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body event-modal-body">
         <!-- Bannière d'information pour événement Google -->
-        <div id="event-modal-google-info" style="display: none; background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.25); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.82rem; color: var(--text-main); justify-content: space-between; align-items: center;">
+        <div id="event-modal-google-info" style="display: none; background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.25); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 0.8rem; color: var(--text-main); justify-content: space-between; align-items: center;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            <span><strong>Événement Google Agenda</strong> (Synchronisation bidirectionnelle active)</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span><strong>Google Agenda</strong> (Synchronisation bidirectionnelle)</span>
           </div>
-          <button type="button" id="btn-event-open-google" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 10px;" title="Consulter dans Google Agenda en ligne">Ouvrir en ligne ↗</button>
+          <button type="button" id="btn-event-open-google" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 3px 8px;" title="Consulter dans Google Agenda en ligne">Ouvrir en ligne ↗</button>
         </div>
 
         <!-- Sélecteur de destination (Créneau local vs Google Agenda) -->
-        <div class="form-group" id="event-group-destination" style="display: none;">
-          <label style="font-size: 0.82rem; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; display: block;">Enregistrer dans :</label>
-          <div class="segmented-control" style="max-width: 360px;">
-            <button type="button" class="segmented-btn active" id="event-dest-local" data-dest="local">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Local Antigravité</span>
-            </button>
-            <button type="button" class="segmented-btn" id="event-dest-google" data-dest="google">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Google Agenda</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Titre principal de l'événement -->
-        <div class="form-group">
-          <label for="event-input-title">Titre de l'événement / créneau *</label>
-          <input type="text" id="event-input-title" class="form-control" placeholder="ex: Session de travail concentré, Rendez-vous...">
-        </div>
-
-        <!-- Horaires et Journée entière dans un bloc ergonomique -->
-        <div class="modal-form-section">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">Horaires du créneau</span>
-            <label for="event-input-allday" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-muted); cursor: pointer; user-select: none;">
-              <input type="checkbox" id="event-input-allday" style="cursor: pointer; width: 15px; height: 15px;">
-              <span>Journée entière</span>
-            </label>
-          </div>
-          <div class="form-row" style="margin-bottom: 0;">
-            <div class="form-group" style="flex: 1;">
-              <label for="event-input-start">Début *</label>
-              <input type="datetime-local" id="event-input-start" class="form-control">
-            </div>
-            <div class="form-group" style="flex: 1;">
-              <label for="event-input-end">Fin *</label>
-              <input type="datetime-local" id="event-input-end" class="form-control">
+        <div class="form-group" id="event-group-destination" style="display: none; margin-bottom: 2px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0;">Destination du créneau :</label>
+            <div class="segmented-control" style="max-width: 320px; margin: 0;">
+              <button type="button" class="segmented-btn active" id="event-dest-local" data-dest="local">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Local Antigravité</span>
+              </button>
+              <button type="button" class="segmented-btn" id="event-dest-google" data-dest="google">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Google Agenda</span>
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Lieu, Couleur et Récurrence -->
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-          <div class="form-group" id="event-group-location" style="flex: 2; min-width: 170px;">
-            <label for="event-input-location"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Lieu / Visioconférence (facultatif)</span></label>
-            <input type="text" id="event-input-location" class="form-control" placeholder="ex: Bureau, Google Meet, Salle 12...">
+        <!-- SECTION 1 : TITRE & PALETTE DE COULEUR -->
+        <div class="event-modal-section event-modal-main-info">
+          <div class="form-group" style="margin-bottom: 8px;">
+            <input type="text" id="event-input-title" class="form-control event-title-input" placeholder="Titre de l'événement ou créneau... *" autofocus>
           </div>
-          <div class="form-group" id="event-group-recurrence" style="flex: 1; min-width: 150px;">
-            <label for="event-input-recurrence"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span>Récurrence</span></label>
-            <select id="event-input-recurrence" class="form-control" style="font-size: 0.82rem; height: 38px;">
-              <option value="none">Aucune (créneau unique)</option>
-              <option value="daily">Tous les jours</option>
-              <option value="weekly">Toutes les semaines</option>
-              <option value="monthly">Tous les mois</option>
-            </select>
-          </div>
-          <div class="form-group" style="flex: 2; min-width: 220px;">
-            <label for="event-input-color"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg><span>Couleur du créneau</span></label>
-            <div id="event-color-swatches" class="event-color-swatches" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 5px;">
+          <div class="event-color-picker-row">
+            <span class="event-color-picker-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg> Couleur :</span>
+            <div id="event-color-swatches" class="event-color-swatches">
               <span class="color-swatch active" data-color="#8b5cf6" style="background:#8b5cf6;" title="Violet astral"></span>
               <span class="color-swatch" data-color="#3b82f6" style="background:#3b82f6;" title="Bleu ciel"></span>
               <span class="color-swatch" data-color="#06b6d4" style="background:#06b6d4;" title="Cyan océan"></span>
@@ -2650,40 +2732,110 @@
           </div>
         </div>
 
-        <!-- Description -->
-        <div class="form-group">
-          <label for="event-input-desc"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>Description / Notes du créneau</span></label>
-          <textarea id="event-input-desc" class="form-control" rows="2" placeholder="Détails du créneau, ordre du jour, informations utiles..." style="resize: vertical;" spellcheck="true"></textarea>
+        <!-- SECTION 2 : PLANIFICATION (HORAIRES & RÉCURRENCE) -->
+        <div class="event-modal-section">
+          <div class="event-section-header">
+            <span class="event-section-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Planification & Horaires
+            </span>
+            <label for="event-input-allday" class="event-allday-toggle">
+              <input type="checkbox" id="event-input-allday">
+              <span>Journée entière</span>
+            </label>
+          </div>
+          <div class="form-row" style="margin-bottom: 10px; gap: 10px;">
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+              <label for="event-input-start" style="font-size: 0.75rem;">Début *</label>
+              <input type="datetime-local" id="event-input-start" class="form-control" style="font-size: 0.82rem; height: 34px;">
+            </div>
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+              <label for="event-input-end" style="font-size: 0.75rem;">Fin *</label>
+              <input type="datetime-local" id="event-input-end" class="form-control" style="font-size: 0.82rem; height: 34px;">
+            </div>
+          </div>
+
+          <!-- Bloc Récurrence pleine largeur (aucun mot coupé horizontalement) -->
+          <div class="form-group" id="event-group-recurrence" style="margin-bottom: 8px;">
+            <label for="event-input-recurrence" style="font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 5px; margin-bottom: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              <span>Répéter le créneau :</span>
+            </label>
+            <select id="event-input-recurrence" class="form-control event-full-select" style="font-size: 0.84rem; height: 34px; width: 100%;">
+              <option value="none">Ne pas répéter (créneau unique)</option>
+              <option value="daily">Tous les jours</option>
+              <option value="weekly">Toutes les semaines</option>
+              <option value="monthly">Tous les mois</option>
+            </select>
+          </div>
+
+          <!-- Choix fin de récurrence (Pour toujours vs Date limite) -->
+          <div id="event-recurrence-end-container" class="form-group recurrence-end-container" style="display: none; margin-bottom: 0; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+              <label style="font-size: 0.75rem; font-weight: 600; margin: 0; white-space: nowrap;">Fin de la récurrence :</label>
+              <div class="recurrence-end-actions" style="display: flex; gap: 8px; align-items: center; flex: 1; justify-content: flex-end;">
+                <button type="button" class="btn-rec-end active" id="btn-rec-end-forever" title="Créneau récurrent sans fin prédéterminée">
+                  <span>♾️ Pour toujours</span>
+                </button>
+                <button type="button" class="btn-rec-end" id="btn-rec-end-date" title="Arrêter la récurrence à une date précise">
+                  <span>📅 Jusqu'au...</span>
+                </button>
+                <input type="date" id="event-input-recurrence-end" class="form-control" style="display: none; max-width: 155px; font-size: 0.8rem; height: 30px; padding: 2px 6px;" title="Date de fin d'application de la récurrence">
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Section des Liaisons Antigravité (Tâche & Note) -->
-        <div class="modal-form-section">
-          <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">
-            Liaisons avec vos éléments Antigravité
+        <!-- SECTION 3 : LIEU & DESCRIPTION -->
+        <div class="event-modal-section">
+          <div class="form-group" id="event-group-location" style="margin-bottom: 8px;">
+            <div class="input-with-icon">
+              <span class="input-icon-prefix"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+              <input type="text" id="event-input-location" class="form-control" placeholder="Lieu, lien de visioconférence (Google Meet, Teams, Bureau...)" style="padding-left: 28px; font-size: 0.82rem; height: 32px;">
+            </div>
           </div>
-          <div class="form-row" style="margin-bottom: 0; gap: 14px;">
-            <div class="form-group" style="min-width: 0;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 4px;">
-                <label for="event-input-task" style="margin-bottom: 0; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg><span>Tâche rattachée</span></label>
-                <button type="button" id="btn-event-open-task" class="btn btn-secondary btn-sm" style="display: none; padding: 1px 6px; font-size: 0.7rem; height: 20px; flex-shrink: 0;" title="Consulter cette tâche dans la liste">↗ Voir</button>
-              </div>
-              <select id="event-input-task" class="form-control" style="font-size: 0.8rem; width: 100%; max-width: 100%; box-sizing: border-box; text-overflow: ellipsis;"></select>
+          <div class="form-group" style="margin-bottom: 0;">
+            <textarea id="event-input-desc" class="form-control event-desc-textarea" rows="2" placeholder="Description, notes ou ordre du jour du créneau..." spellcheck="true"></textarea>
+          </div>
+        </div>
 
-              <!-- Option de création directe de tâche depuis la modale d'agenda -->
-              <div id="event-create-task-container" style="margin-top: 8px;">
-                <label for="event-check-create-task" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; cursor: pointer; color: var(--text-main); user-select: none;">
-                  <input type="checkbox" id="event-check-create-task" style="cursor: pointer; width: 14px; height: 14px; flex-shrink: 0;">
+        <!-- SECTION 4 : LIAISONS ANTIGRAVITÉ (TÂCHES & NOTES) -->
+        <div class="event-modal-section event-modal-links-section">
+          <div class="event-section-header" style="margin-bottom: 8px;">
+            <span class="event-section-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Liaisons Antigravité
+            </span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">Synchronisation instantanée</span>
+          </div>
+
+          <div class="event-links-stack" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Ligne 1 : Tâche rattachée (Pleine largeur pour afficher le titre complet sans coupure) -->
+            <div class="event-link-row-card">
+              <div class="event-link-col-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <label for="event-input-task" class="event-link-label" style="font-size: 0.76rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; margin: 0;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+                  <span>Tâche rattachée</span>
+                </label>
+                <button type="button" id="btn-event-open-task" class="btn btn-secondary btn-sm btn-link-action" style="display: none;" title="Consulter cette tâche dans la liste">↗ Voir</button>
+              </div>
+              <select id="event-input-task" class="form-control event-select-link" style="width: 100%; height: 34px; font-size: 0.82rem;"></select>
+
+              <!-- Création directe de tâche depuis la modale -->
+              <div id="event-create-task-container" style="margin-top: 6px;">
+                <label for="event-check-create-task" class="event-create-task-toggle">
+                  <input type="checkbox" id="event-check-create-task">
                   <span>Créer simultanément une tâche</span>
                 </label>
-                <div id="event-new-task-details" style="display: none; margin-top: 6px; padding: 8px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <div id="event-new-task-details" class="event-new-task-panel" style="display: none; margin-top: 6px;">
                   <div class="form-row" style="margin-bottom: 0; gap: 8px;">
-                    <div class="form-group" style="flex: 1; margin-bottom: 0; min-width: 0;">
-                      <label for="event-task-project" style="font-size: 0.73rem;">Projet :</label>
-                      <select id="event-task-project" class="form-control" style="font-size: 0.73rem; height: 26px; padding: 2px 4px; width: 100%; max-width: 100%;"></select>
+                    <div class="form-group" style="flex: 1.2; margin-bottom: 0; min-width: 0;">
+                      <label for="event-task-project" style="font-size: 0.72rem; display: block; margin-bottom: 2px;">Projet :</label>
+                      <select id="event-task-project" class="form-control" style="font-size: 0.74rem; height: 28px; padding: 2px 4px; width: 100%;"></select>
                     </div>
-                    <div class="form-group" style="flex: 1; margin-bottom: 0; min-width: 0;">
-                      <label for="event-task-priority" style="font-size: 0.73rem;">Priorité :</label>
-                      <select id="event-task-priority" class="form-control" style="font-size: 0.73rem; height: 26px; padding: 2px 4px; width: 100%; max-width: 100%;">
+                    <div class="form-group" style="flex: 0.8; margin-bottom: 0; min-width: 0;">
+                      <label for="event-task-priority" style="font-size: 0.72rem; display: block; margin-bottom: 2px;">Priorité :</label>
+                      <select id="event-task-priority" class="form-control" style="font-size: 0.74rem; height: 28px; padding: 2px 4px; width: 100%;">
                         <option value="low">Basse</option>
                         <option value="medium" selected>Moyenne</option>
                         <option value="high">Haute</option>
@@ -2693,15 +2845,21 @@
                   </div>
                 </div>
               </div>
-              <span style="font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; display: block; line-height: 1.3;">La suppression du créneau n'affectera jamais la tâche.</span>
             </div>
-            <div class="form-group" style="min-width: 0;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 4px;">
-                <label for="event-input-note" style="margin-bottom: 0; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>Note associée</span></label>
-                <button type="button" id="btn-event-open-note" class="btn btn-secondary btn-sm" style="display: none; padding: 1px 6px; font-size: 0.7rem; height: 20px; flex-shrink: 0;" title="Ouvrir cette note dans l'éditeur de notes">↗ Ouvrir</button>
+
+            <!-- Ligne 2 : Note associée (Pleine largeur pour afficher le titre complet sans coupure) -->
+            <div class="event-link-row-card">
+              <div class="event-link-col-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <label for="event-input-note" class="event-link-label" style="font-size: 0.76rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; margin: 0;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  <span>Note associée</span>
+                </label>
+                <button type="button" id="btn-event-open-note" class="btn btn-secondary btn-sm btn-link-action" style="display: none;" title="Ouvrir cette note dans l'éditeur">↗ Ouvrir</button>
               </div>
-              <select id="event-input-note" class="form-control" style="font-size: 0.8rem; width: 100%; max-width: 100%; box-sizing: border-box; text-overflow: ellipsis;"></select>
-              <span style="font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; display: block; line-height: 1.3;">Liez ou rédigez un compte-rendu pour ce créneau.</span>
+              <select id="event-input-note" class="form-control event-select-link" style="width: 100%; height: 34px; font-size: 0.82rem;"></select>
+              <div class="event-link-hint" style="margin-top: 4px; font-size: 0.68rem; color: var(--text-dim);">
+                Liez ou rédigez le compte-rendu lié à ce créneau.
+              </div>
             </div>
           </div>
         </div>
@@ -2710,7 +2868,7 @@
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
         <button id="event-modal-delete" class="btn btn-danger">Supprimer le créneau</button>
         <div style="display: flex; gap: 10px;">
-          <button class="btn btn-secondary" onclick="AgendaManager.closeEventModal()">Annuler</button>
+          <button type="button" class="btn btn-secondary" onclick="AgendaManager.closeEventModal()">Annuler</button>
           <button id="event-modal-save" class="btn btn-primary" style="min-width: 170px;">Enregistrer le créneau</button>
         </div>
       </div>
@@ -2722,6 +2880,13 @@
     <div id="context-menu-header" class="context-menu-header"></div>
     <div class="context-menu-divider"></div>
     <div id="context-menu-items" class="context-menu-items"></div>
+  </div>
+
+  <!-- MENU CONTEXTUEL DOSSIERS DE NOTES (CLIC SUR ⋯ OU CLIC DROIT) -->
+  <div id="notes-folder-context-menu" class="context-menu" style="display: none; z-index: 1100;">
+    <div id="notes-folder-menu-header" class="context-menu-header"></div>
+    <div class="context-menu-divider"></div>
+    <div id="notes-folder-menu-items" class="context-menu-items"></div>
   </div>
 
   <!-- MODALE CRÉATION / RENOMMAGE DE PLAYLIST -->
@@ -2873,6 +3038,7 @@
       </div>
       <div class="modal-body" style="padding: 20px 22px;">
         <p id="dialog-message" class="dialog-message" style="margin: 0; font-size: 0.92rem; line-height: 1.55; white-space: pre-line; color: var(--text-main);"></p>
+        <input type="text" id="dialog-input" class="form-input" style="display: none; width: 100%; margin-top: 14px; font-size: 0.92rem; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-main);" placeholder="">
       </div>
       <div class="modal-footer" id="dialog-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px;">
         <button id="dialog-btn-cancel" class="btn btn-secondary">Annuler</button>

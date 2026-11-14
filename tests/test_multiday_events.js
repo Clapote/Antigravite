@@ -215,16 +215,16 @@ it("4.1 Événement minuté sur plusieurs jours (ex: 10 oct 22:00 -> 12 oct 04:0
   // Vérification de computeOverlappingLayout selon les jours
   const layoutDay1 = AgendaManager.computeOverlappingLayout([timedMultiEvt], "2026-10-10");
   assert.strictEqual(layoutDay1[0].startMin, 22 * 60, "Jour 1 : début à 22h00");
-  assert.strictEqual(layoutDay1[0].endMin, AgendaManager.dayHoursEnd * 60, "Jour 1 : prolongé jusqu'à la fin de la grille (23h00)");
+  assert.strictEqual(layoutDay1[0].endMin, AgendaManager.dayHoursEnd * 60, "Jour 1 : prolongé jusqu'à la fin de la grille (24h00)");
 
   const layoutDay2 = AgendaManager.computeOverlappingLayout([timedMultiEvt], "2026-10-11");
-  assert.strictEqual(layoutDay2[0].startMin, AgendaManager.dayHoursStart * 60, "Jour 2 : commence dès le début de la grille (07h00)");
-  assert.strictEqual(layoutDay2[0].endMin, AgendaManager.dayHoursEnd * 60, "Jour 2 : s'étend jusqu'à la fin de la grille (23h00)");
+  assert.strictEqual(layoutDay2[0].startMin, AgendaManager.dayHoursStart * 60, "Jour 2 : commence dès le début de la grille (00h00)");
+  assert.strictEqual(layoutDay2[0].endMin, AgendaManager.dayHoursEnd * 60, "Jour 2 : s'étend jusqu'à la fin de la grille (24h00)");
 
   const layoutDay3 = AgendaManager.computeOverlappingLayout([timedMultiEvt], "2026-10-12");
-  assert.strictEqual(layoutDay3[0].startMin, AgendaManager.dayHoursStart * 60, "Jour 3 : commence à 07h00");
-  // 4h00 est avant 7h00 -> Math.max(startMin + 20, 4*60) = 440 min
-  assert.strictEqual(layoutDay3[0].endMin, AgendaManager.dayHoursStart * 60 + 20, "Jour 3 : clampé avec le minimum visuel");
+  assert.strictEqual(layoutDay3[0].startMin, AgendaManager.dayHoursStart * 60, "Jour 3 : commence à 00h00");
+  // 4h00 est à 240 min -> Math.max(startMin + 20, 4*60) = 240 min car startMin est 00h00
+  assert.strictEqual(layoutDay3[0].endMin, 240, "Jour 3 : se termine à 04h00 (240 min)");
 });
 
 it("4.2 Événement minuté se terminant exactement à 00:00 (minuit)", () => {

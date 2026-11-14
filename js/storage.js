@@ -303,6 +303,19 @@ const StorageManager = {
       trash: true,
       backups: true
     },
+    sidebarTabsOrder: [
+      'tasks',
+      'projects',
+      'agenda',
+      'notes',
+      'focus',
+      'music',
+      'trash',
+      'backups'
+    ],
+    notesFolders: [
+      'Général'
+    ],
     userName: '',            // Prénom ou nom d'usage de la personne
     greetingMood: 'mixed',   // 'mixed' | 'warm' | 'witty' | 'custom'
     customGreetingPhrase: '', // Phrase personnalisée sur-mesure (si mode custom)

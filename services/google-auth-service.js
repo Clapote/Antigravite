@@ -43,33 +43,54 @@ class GoogleAuthService {
   }
 
   async loadAuthData() {
+    let buffer = null;
     try {
-      const buffer = await fs.readFile(this.authFile);
-      let decryptedStr = '';
-      if (safeStorage && safeStorage.isEncryptionAvailable()) {
-        try {
-          decryptedStr = safeStorage.decryptString(buffer);
-        } catch {
-          // Si le déchiffrement échoue (ex: clé non chiffrée en mode secours)
+      buffer = await fs.readFile(this.authFile);
+    } catch {
+      // Tentative de migration transparente depuis l'autre casse du nom d'application (antigravite vs Antigravite)
+      try {
+        const altDir = this.authDir.includes('Antigravite')
+          ? this.authDir.replace('Antigravite', 'antigravite')
+          : this.authDir.replace('antigravite', 'Antigravite');
+        const altFile = path.join(altDir, 'auth_data.enc');
+        buffer = await fs.readFile(altFile);
+      } catch {
+        buffer = null;
+      }
+    }
+
+    if (buffer) {
+      try {
+        let decryptedStr = '';
+        if (safeStorage && safeStorage.isEncryptionAvailable()) {
+          try {
+            decryptedStr = safeStorage.decryptString(buffer);
+          } catch {
+            decryptedStr = buffer.toString('utf8');
+          }
+        } else {
           decryptedStr = buffer.toString('utf8');
         }
-      } else {
-        decryptedStr = buffer.toString('utf8');
-      }
 
-      this.authCache = JSON.parse(decryptedStr);
-    } catch {
-      this.authCache = {
-        clientId: null,
-        clientSecret: null,
-        tokens: null,
-        user: null,
-        selectedCalendarId: 'primary',
-        selectedCalendarSummary: 'Principal',
-        lastSyncAt: null,
-        syncToken: null
-      };
+        this.authCache = JSON.parse(decryptedStr);
+        // Si chargé avec succès (notamment depuis le chemin alternatif), sauvegarder dans le chemin courant
+        await this.saveAuthData().catch(() => {});
+        return this.authCache;
+      } catch (err) {
+        console.warn('[GoogleAuth] Échec de désérialisation du trousseau chiffré:', err.message);
+      }
     }
+
+    this.authCache = {
+      clientId: null,
+      clientSecret: null,
+      tokens: null,
+      user: null,
+      selectedCalendarId: 'primary',
+      selectedCalendarSummary: 'Principal',
+      lastSyncAt: null,
+      syncToken: null
+    };
     return this.authCache;
   }
 

@@ -10,9 +10,23 @@
 const AgendaManager = {
   currentWeekStart: null,
   currentView: 'week', // 'day', 'week', 'month'
-  dayHoursStart: 7, // 07:00
-  dayHoursEnd: 23,  // 23:00
-  slotHeight: 50,   // 50px par heure
+  dayHoursStart: 0, // 00:00 (Minuit)
+  dayHoursEnd: 24,  // 24:00 (Minuit - 24 heures complètes)
+  slotHeight: 50,   // ~50px par heure pour un focus confortable sur 07:00-23:00
+  _lastScrollTop: null,
+  _preserveScrollTop: null,
+
+  scrollToNormalHours(smooth = false) {
+    const bodyEl = document.getElementById('calendar-body-container') || document.getElementById('calendar-body') || (typeof document !== 'undefined' && document.querySelector ? document.querySelector('.calendar-body') : null);
+    if (!bodyEl) return;
+    const target = Math.round(7 * (this.slotHeight || 50));
+    this._lastScrollTop = target;
+    if (smooth && typeof bodyEl.scrollTo === 'function') {
+      bodyEl.scrollTo({ top: target, behavior: 'smooth' });
+    } else {
+      bodyEl.scrollTop = target;
+    }
+  },
 
   init() {
     if (this.initialized) {
@@ -90,6 +104,7 @@ const AgendaManager = {
       this.currentWeekStart = this.getMonday(now);
     }
     this.render();
+    this.scrollToNormalHours(true);
     if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
       window.App.updateSidebarDayProgress();
     }
@@ -232,13 +247,19 @@ const AgendaManager = {
         // Arrondir par pas de 15 minutes (00, 15, 30, 45)
         const rawMinutes = Math.floor((hoursOffset % 1) * 60);
         const roundedMinutes = Math.min(45, Math.floor(rawMinutes / 15) * 15);
-        const startHourStr = String(Math.min(23, Math.max(0, clickedHour))).padStart(2, '0');
+        const startHour = Math.min(23, Math.max(0, clickedHour));
+        const startHourStr = String(startHour).padStart(2, '0');
         const startMinStr = String(roundedMinutes).padStart(2, '0');
         const startTime = `${startHourStr}:${startMinStr}`;
 
-        const endHour = Math.min(23, clickedHour + 1);
-        const endHourStr = String(endHour).padStart(2, '0');
-        const endTime = `${endHourStr}:${startMinStr}`;
+        let endTime;
+        if (startHour >= 23) {
+          endTime = '23:59';
+        } else {
+          const endHour = startHour + 1;
+          const endHourStr = String(endHour).padStart(2, '0');
+          endTime = `${endHourStr}:${startMinStr}`;
+        }
 
         // Nettoyer l'indicateur visuel de survol lors de l'ouverture
         const activeHover = document.getElementById('agenda-slot-hover-indicator');
@@ -314,12 +335,17 @@ const AgendaManager = {
         const startMinStr = String(roundedMinutes).padStart(2, '0');
         const startTime = `${startHourStr}:${startMinStr}`;
 
-        const endHour = Math.min(23, clickedHour + 1);
-        const endHourStr = String(endHour).padStart(2, '0');
-        const endTime = `${endHourStr}:${startMinStr}`;
+        let endTime;
+        if (startHour >= 23) {
+          endTime = '23:59';
+        } else {
+          const endHour = startHour + 1;
+          const endHourStr = String(endHour).padStart(2, '0');
+          endTime = `${endHourStr}:${startMinStr}`;
+        }
 
         const topPx = (startHour - this.dayHoursStart + (roundedMinutes / 60)) * this.slotHeight;
-        const totalHours = (this.dayHoursEnd - this.dayHoursStart) + 1;
+        const totalHours = this.dayHoursEnd - this.dayHoursStart;
         const maxH = totalHours * this.slotHeight;
         const heightPx = Math.min(this.slotHeight, Math.max(20, maxH - topPx));
 
@@ -441,6 +467,7 @@ const AgendaManager = {
       taskId: taskId,
       noteId: eventData.noteId || null,
       recurrence: eventData.recurrence || 'none',
+      recurrenceEnd: (eventData.recurrence && eventData.recurrence !== 'none') ? (eventData.recurrenceEnd || null) : null,
       externalId: null,
       source: 'local',
       createdAt: new Date().toISOString()
@@ -504,16 +531,22 @@ const AgendaManager = {
     const evt = events.find(e => e.id === id);
     if (!evt) return false;
 
-    evt.title = updatedData.title.trim();
-    evt.description = updatedData.description ? updatedData.description.trim() : '';
+    if (updatedData.title !== undefined) evt.title = updatedData.title.trim();
+    if (updatedData.description !== undefined) evt.description = updatedData.description ? updatedData.description.trim() : '';
     if (updatedData.location !== undefined) evt.location = updatedData.location.trim();
-    evt.start = updatedData.start;
-    evt.end = updatedData.end;
+    if (updatedData.start !== undefined) evt.start = updatedData.start;
+    if (updatedData.end !== undefined) evt.end = updatedData.end;
     if (updatedData.isAllDay !== undefined) evt.isAllDay = !!updatedData.isAllDay;
-    evt.color = updatedData.color || evt.color;
+    if (updatedData.color !== undefined) evt.color = updatedData.color || evt.color;
     evt.taskId = updatedData.taskId !== undefined ? updatedData.taskId : evt.taskId;
     if (updatedData.noteId !== undefined) evt.noteId = updatedData.noteId;
     if (updatedData.recurrence !== undefined) evt.recurrence = updatedData.recurrence;
+    if (updatedData.recurrenceEnd !== undefined) {
+      evt.recurrenceEnd = updatedData.recurrenceEnd || null;
+    }
+    if (evt.recurrence === 'none') {
+      evt.recurrenceEnd = null;
+    }
     evt.updatedAt = new Date().toISOString();
 
     this.saveAll(events);
@@ -765,6 +798,7 @@ const AgendaManager = {
       dayEvents.forEach(e => {
         let eventColor = e.color;
         const linkedTask = e.taskId && taskMap ? taskMap.get(e.taskId) : null;
+        const isTaskCompleted = !!(linkedTask && linkedTask.task && linkedTask.task.completed);
         if (linkedTask && linkedTask.task && linkedTask.task.projectId && projectMap) {
           const proj = projectMap.get(linkedTask.task.projectId);
           if (proj && proj.color) {
@@ -774,15 +808,16 @@ const AgendaManager = {
         if (!eventColor) {
           eventColor = (e.source === 'google' ? '#2563eb' : '#7c3aed');
         }
+        const linkedNote = (e.noteId ? noteById.get(e.noteId) : null) || (noteByEventId ? noteByEventId.get(e.id) : null);
         const startTimeStr = e.start && e.start.length >= 16 ? e.start.slice(11, 16) : '';
         const titleSafe = this.escapeHtml(e.title || '(Sans titre)');
         pillsHtml += `
-          <div class="month-event-pill" 
+          <div class="month-event-pill ${isTaskCompleted ? 'task-completed-pill' : ''}" 
                style="background: ${eventColor};" 
                data-event-id="${e.id}"
                onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}');"
-               title="${titleSafe} (${e.isAllDay ? 'Journée' : startTimeStr})">
-            ${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${titleSafe}
+               title="${titleSafe} (${e.isAllDay ? 'Journée' : startTimeStr})${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + (isTaskCompleted ? ' (Terminée ✓)' : '') + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
+            ${isTaskCompleted ? '<span style="color:#4ade80; font-weight:bold; margin-right:2px;">✓</span> ' : ''}${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${linkedNote ? '📝 ' : ''}${titleSafe}
           </div>
         `;
       });
@@ -861,10 +896,17 @@ const AgendaManager = {
     if (weekViewContainer) weekViewContainer.style.display = 'flex';
     if (monthViewContainer) monthViewContainer.style.display = 'none';
 
+    // Conserver la position de scroll actuelle de l'utilisateur s'il scrollait déjà
+    if (bodyEl && bodyEl.scrollTop > 0) {
+      this._preserveScrollTop = bodyEl.scrollTop;
+    }
+
     // Calcul dynamique de la hauteur des créneaux horaires
+    // On calibre la hauteur sur ~15.5 heures (ex: 07h00 à 22h30/23h00) pour afficher
+    // immédiatement la journée active tout en permettant de défiler librement de minuit à minuit.
     const availableHeight = bodyEl.clientHeight || (typeof window !== 'undefined' ? (window.innerHeight - 170) : 800);
-    const totalHours = this.dayHoursEnd - this.dayHoursStart; // 23 - 7 = 16
-    this.slotHeight = Math.max(34, Math.floor(availableHeight / totalHours));
+    this.slotHeight = Math.max(44, Math.floor(availableHeight / 15.5));
+    const totalHours = this.dayHoursEnd - this.dayHoursStart; // 24 - 0 = 24
     const totalGridHeight = this.slotHeight * totalHours;
 
     let days = [];
@@ -911,9 +953,9 @@ const AgendaManager = {
     });
     weekdaysEl.innerHTML = weekdaysHtml;
 
-    // 2. Colonne des heures (07:00 à 22:00)
+    // 2. Colonne des heures (00:00 à 23:00 - 24 créneaux)
     let bodyHtml = `<div class="time-gutter" style="height: ${totalGridHeight}px;">`;
-    for (let h = this.dayHoursStart; h <= this.dayHoursEnd; h++) {
+    for (let h = this.dayHoursStart; h < this.dayHoursEnd; h++) {
       const hh = String(h).padStart(2, '0') + ':00';
       bodyHtml += `<div class="time-slot-label" data-hour="${h}" style="height: ${this.slotHeight}px;">${hh}</div>`;
     }
@@ -982,6 +1024,7 @@ const AgendaManager = {
         const linkedTask = e.taskId ? taskMap.get(e.taskId) : null;
         const linkedNote = (e.noteId ? noteById.get(e.noteId) : null) || noteByEventId.get(e.id);
         const isCompact = height < 44;
+        const isTaskCompleted = !!(linkedTask && linkedTask.task && linkedTask.task.completed);
 
         // Code couleur : hérité de la tâche liée et de son projet si disponible
         let eventColor = e.color;
@@ -996,18 +1039,20 @@ const AgendaManager = {
         }
 
         bodyHtml += `
-          <div class="calendar-event ${isGoogle ? 'google-event' : 'antigravite-event'} ${isCompact ? 'compact' : ''} ${isNightEnd ? 'night-spillover-event' : ''}" 
+          <div class="calendar-event ${isGoogle ? 'google-event' : 'antigravite-event'} ${isCompact ? 'compact' : ''} ${isNightEnd ? 'night-spillover-event' : ''} ${isTaskCompleted ? 'task-completed-event' : ''}" 
                data-event-id="${e.id}"
                style="top: ${top}px; height: ${height}px; left: ${leftPct}%; width: ${widthPct}%; background: linear-gradient(135deg, ${eventColor} 0%, ${eventColor}ee 100%) !important; border: 1px solid rgba(255, 255, 255, 0.25) !important; border-left: 4px ${isNightEnd ? 'dashed' : 'solid'} rgba(255, 255, 255, 0.9) !important; color: #ffffff !important; box-shadow: 0 2px 6px rgba(0,0,0,0.35);"
                onmousedown="AgendaManager.onEventMouseDown(event, '${e.id}')"
                onclick="AgendaManager.onEventClick(event, '${e.id}')"
-               title="${this.escapeHtml(e.title)} (${isNightEnd ? 'Finie à ' + endTimeStr + ' du matin (nuit)' : timeDisplay}${isMultiDay ? ' • du ' + startDay + ' au ' + endDay : ''})${isGoogle ? ' [Google Agenda]' : ' [Antigravité]'}${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
+               title="${this.escapeHtml(e.title)} (${isNightEnd ? 'Finie à ' + endTimeStr + ' du matin (nuit)' : timeDisplay}${isMultiDay ? ' • du ' + startDay + ' au ' + endDay : ''})${isGoogle ? ' [Google Agenda]' : ' [Antigravité]'}${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + (isTaskCompleted ? ' (Terminée ✓)' : '') + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
             
             <div class="event-resize-handle handle-top" data-action="resize-top" title="Ajuster l'heure de début"></div>
 
             ${isCompact ? `
               <div class="event-compact-row">
                 ${isGoogle ? '<span class="event-origin-tag google" style="font-size:0.55rem; padding:0 3px;">G</span>' : ''}
+                ${isTaskCompleted ? '<span style="font-size:0.68rem; margin-right:3px; color:#4ade80; font-weight:bold;" title="Tâche liée terminée">✓</span>' : ''}
+                ${linkedNote ? '<span style="font-size:0.65rem; margin-right:2px;" title="Note liée : ' + this.escapeHtml(linkedNote.title) + '">📝</span>' : ''}
                 <span class="event-title compact" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</span>
                 <span class="event-time-compact" style="color: rgba(255,255,255,0.95); margin-left: auto;">${e.isAllDay ? 'Jour' : (isMultiDay && dateStr !== startDay ? (isNightEnd ? '➔ ' + endTimeStr + ' (Nuit)' : '➔ ' + endTimeStr) : startTimeStr)}</span>
               </div>
@@ -1018,10 +1063,11 @@ const AgendaManager = {
                   : '<span class="event-origin-tag google">Google</span>') 
                   : '<span class="event-time-pill" style="margin-left:0;">' + timeDisplay + '</span>'}
                 ${isGoogle ? '<span class="event-time-pill">' + timeDisplay + '</span>' : ''}
+                ${isTaskCompleted ? '<span class="event-done-pill" style="margin-left:auto; font-size:0.65rem; background:rgba(34,197,94,0.35); border:1px solid rgba(74,222,128,0.6); color:#86efac; border-radius:999px; padding:1px 5px; font-weight:600; display:inline-flex; align-items:center; gap:2px;">✓ Fait</span>' : ''}
               </div>
               <div class="event-title" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '<span title="Créneau récurrent">🔁</span> ' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</div>
               ${e.location ? `<div class="event-location" title="${this.escapeHtml(e.location)}">📍 ${this.escapeHtml(e.location)}</div>` : ''}
-              ${linkedTask ? `<div class="event-linked-info" title="Tâche : ${this.escapeHtml(linkedTask.task.title)}">📌 ${this.escapeHtml(linkedTask.task.title)}</div>` : ''}
+              ${linkedTask ? `<div class="event-linked-info" title="Tâche : ${this.escapeHtml(linkedTask.task.title)}${isTaskCompleted ? ' (Terminée)' : ''}">${isTaskCompleted ? '✅' : '📌'} <span style="${isTaskCompleted ? 'text-decoration: line-through; opacity: 0.85;' : ''}">${this.escapeHtml(linkedTask.task.title)}</span></div>` : ''}
               ${linkedNote ? `<div class="event-linked-info" title="Note : ${this.escapeHtml(linkedNote.title)}">📝 ${this.escapeHtml(linkedNote.title)}</div>` : ''}
             `}
 
@@ -1035,6 +1081,34 @@ const AgendaManager = {
 
     bodyEl.innerHTML = bodyHtml;
     this.updateNowIndicator();
+
+    // Attacher l'écouteur de scroll pour mémoriser le défilement de l'utilisateur
+    if (bodyEl && !bodyEl._scrollBound) {
+      bodyEl._scrollBound = true;
+      bodyEl.addEventListener('scroll', () => {
+        this._lastScrollTop = bodyEl.scrollTop;
+      }, { passive: true });
+    }
+
+    // Positionner le défilement sur les heures normales (07:00) ou restaurer le scroll précédent
+    if (bodyEl) {
+      const targetScroll = (this._preserveScrollTop !== null && this._preserveScrollTop !== undefined)
+        ? this._preserveScrollTop
+        : ((this._lastScrollTop !== null && this._lastScrollTop !== undefined)
+            ? this._lastScrollTop
+            : Math.round(7 * this.slotHeight));
+
+      this._preserveScrollTop = null;
+      this._lastScrollTop = targetScroll;
+
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => {
+          bodyEl.scrollTop = targetScroll;
+        });
+      } else {
+        bodyEl.scrollTop = targetScroll;
+      }
+    }
   },
 
   _getNowIntervalMs(perfMode) {
@@ -1235,6 +1309,10 @@ const AgendaManager = {
     const btnDestGoogle = document.getElementById('event-dest-google');
     const inputAllDay = document.getElementById('event-input-allday');
     const inputRecurrence = document.getElementById('event-input-recurrence');
+    const containerRecEnd = document.getElementById('event-recurrence-end-container');
+    const btnRecEndForever = document.getElementById('btn-rec-end-forever');
+    const btnRecEndDate = document.getElementById('btn-rec-end-date');
+    const inputRecurrenceEnd = document.getElementById('event-input-recurrence-end');
     const checkCreateTask = document.getElementById('event-check-create-task');
     const containerCreateTask = document.getElementById('event-create-task-container');
     const detailsNewTask = document.getElementById('event-new-task-details');
@@ -1243,6 +1321,77 @@ const AgendaManager = {
     const btnOpenTask = document.getElementById('btn-event-open-task');
 
     let selectedDest = 'local';
+    let currentRecurrenceEnd = null;
+
+    const updateRecurrenceEndUI = () => {
+      const rec = inputRecurrence ? inputRecurrence.value : 'none';
+      if (!containerRecEnd) return;
+      if (rec === 'none') {
+        containerRecEnd.style.display = 'none';
+        if (inputRecurrenceEnd) inputRecurrenceEnd.style.display = 'none';
+        return;
+      }
+      containerRecEnd.style.display = 'block';
+      if (currentRecurrenceEnd) {
+        if (btnRecEndForever) btnRecEndForever.classList.remove('active');
+        if (btnRecEndDate) btnRecEndDate.classList.add('active');
+        if (inputRecurrenceEnd) {
+          inputRecurrenceEnd.style.display = 'inline-block';
+          inputRecurrenceEnd.value = currentRecurrenceEnd;
+        }
+      } else {
+        if (btnRecEndForever) btnRecEndForever.classList.add('active');
+        if (btnRecEndDate) btnRecEndDate.classList.remove('active');
+        if (inputRecurrenceEnd) {
+          inputRecurrenceEnd.style.display = 'none';
+          inputRecurrenceEnd.value = '';
+        }
+      }
+    };
+
+    const syncSelectTitles = () => {
+      [inputRecurrence, inputTask, inputNote].forEach(sel => {
+        if (sel && sel.selectedIndex >= 0 && sel.options[sel.selectedIndex]) {
+          sel.title = sel.options[sel.selectedIndex].textContent || '';
+        }
+      });
+    };
+
+    if (inputRecurrence) {
+      inputRecurrence.onchange = () => {
+        syncSelectTitles();
+        updateRecurrenceEndUI();
+      };
+    }
+
+    if (btnRecEndForever) {
+      btnRecEndForever.onclick = () => {
+        currentRecurrenceEnd = null;
+        updateRecurrenceEndUI();
+      };
+    }
+
+    if (btnRecEndDate) {
+      btnRecEndDate.onclick = () => {
+        if (!currentRecurrenceEnd) {
+          const sVal = (inputStart && inputStart.value) ? inputStart.value.slice(0, 10) : new Date().toISOString().slice(0, 10);
+          const sDate = new Date(`${sVal}T00:00:00`);
+          sDate.setMonth(sDate.getMonth() + 1);
+          const y = sDate.getFullYear();
+          const m = String(sDate.getMonth() + 1).padStart(2, '0');
+          const d = String(sDate.getDate()).padStart(2, '0');
+          currentRecurrenceEnd = `${y}-${m}-${d}`;
+        }
+        updateRecurrenceEndUI();
+        if (inputRecurrenceEnd) inputRecurrenceEnd.focus();
+      };
+    }
+
+    if (inputRecurrenceEnd) {
+      inputRecurrenceEnd.onchange = () => {
+        currentRecurrenceEnd = inputRecurrenceEnd.value || null;
+      };
+    }
 
     // Remplir les projets (y compris sous-projets) pour la création directe de tâche
     if (selectTaskProject) {
@@ -1352,6 +1501,7 @@ const AgendaManager = {
     });
 
     inputTask.onchange = () => {
+      syncSelectTitles();
       updateTaskButtonVisibility(inputTask.value);
       if (checkCreateTask && inputTask.value) {
         checkCreateTask.checked = false;
@@ -1427,6 +1577,7 @@ const AgendaManager = {
 
     if (inputNote) {
       inputNote.onchange = () => {
+        syncSelectTitles();
         updateNoteButtonVisibility(inputNote.value);
       };
     }
@@ -1521,10 +1672,19 @@ const AgendaManager = {
         inputTask.value = evt.taskId || '';
         inputTask.disabled = false;
 
+        const resolvedNoteGoogle = (evt.noteId ? allNotes.find(n => n.id === evt.noteId) : null) || allNotes.find(n => n.linkedEventId === evt.id);
+        const resolvedNoteIdGoogle = resolvedNoteGoogle ? resolvedNoteGoogle.id : (evt.noteId || '');
         if (inputNote) {
-          inputNote.value = evt.noteId || '';
-          updateNoteButtonVisibility(evt.noteId);
+          inputNote.value = resolvedNoteIdGoogle;
+          updateNoteButtonVisibility(resolvedNoteIdGoogle);
         }
+        if (resolvedNoteIdGoogle && !evt.noteId) {
+          evt.noteId = resolvedNoteIdGoogle;
+        }
+
+        if (inputRecurrence) inputRecurrence.value = evt.recurrence || 'none';
+        currentRecurrenceEnd = evt.recurrenceEnd || null;
+        updateRecurrenceEndUI();
 
         btnDelete.style.display = 'inline-flex';
         btnDelete.textContent = "Supprimer de Google Agenda";
@@ -1591,6 +1751,8 @@ const AgendaManager = {
             endVal = `${endDateStr}T19:00`;
           }
 
+          const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
+          const recurrenceEnd = (recurrence !== 'none') ? (currentRecurrenceEnd || (inputRecurrenceEnd && inputRecurrenceEnd.value) || null) : null;
           const noteId = inputNote ? (inputNote.value || null) : null;
           const updatedData = {
             title: inputTitle.value.trim(),
@@ -1601,7 +1763,9 @@ const AgendaManager = {
             isAllDay,
             color: inputColor.value || '#3b82f6',
             taskId: inputTask.value || null,
-            noteId
+            noteId,
+            recurrence,
+            recurrenceEnd
           };
 
           btnSave.disabled = true;
@@ -1669,10 +1833,17 @@ const AgendaManager = {
         updateTaskButtonVisibility(evt.taskId);
         if (containerCreateTask) containerCreateTask.style.display = evt.taskId ? 'none' : 'block';
         if (inputRecurrence) inputRecurrence.value = evt.recurrence || 'none';
+        currentRecurrenceEnd = evt.recurrenceEnd || null;
+        updateRecurrenceEndUI();
 
+        const resolvedNoteLocal = (evt.noteId ? allNotes.find(n => n.id === evt.noteId) : null) || allNotes.find(n => n.linkedEventId === evt.id);
+        const resolvedNoteIdLocal = resolvedNoteLocal ? resolvedNoteLocal.id : (evt.noteId || '');
         if (inputNote) {
-          inputNote.value = evt.noteId || '';
-          updateNoteButtonVisibility(evt.noteId);
+          inputNote.value = resolvedNoteIdLocal;
+          updateNoteButtonVisibility(resolvedNoteIdLocal);
+        }
+        if (resolvedNoteIdLocal && !evt.noteId) {
+          evt.noteId = resolvedNoteIdLocal;
         }
 
         btnDelete.style.display = 'inline-flex';
@@ -1744,6 +1915,7 @@ const AgendaManager = {
             }
           }
           const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
+          const recurrenceEnd = (recurrence !== 'none') ? (currentRecurrenceEnd || (inputRecurrenceEnd && inputRecurrenceEnd.value) || null) : null;
 
           const noteId = inputNote ? (inputNote.value || null) : null;
           this.updateEvent(eventId, {
@@ -1756,7 +1928,8 @@ const AgendaManager = {
             color: inputColor.value,
             taskId,
             noteId,
-            recurrence
+            recurrence,
+            recurrenceEnd
           });
           this.syncNoteEventLink(eventId, noteId);
           this.closeEventModal();
@@ -1833,6 +2006,8 @@ const AgendaManager = {
       updateTaskButtonVisibility(inputTask.value);
       if (containerCreateTask) containerCreateTask.style.display = 'block';
       if (inputRecurrence) inputRecurrence.value = (defaultValues && defaultValues.recurrence) || 'none';
+      currentRecurrenceEnd = (defaultValues && defaultValues.recurrenceEnd) || null;
+      updateRecurrenceEndUI();
 
       if (inputNote) {
         inputNote.value = (defaultValues && defaultValues.noteId) ? defaultValues.noteId : '';
@@ -1878,6 +2053,7 @@ const AgendaManager = {
           }
         }
         const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
+        const recurrenceEnd = (recurrence !== 'none') ? (currentRecurrenceEnd || (inputRecurrenceEnd && inputRecurrenceEnd.value) || null) : null;
 
         const noteId = inputNote ? (inputNote.value || null) : null;
         const eventData = {
@@ -1890,7 +2066,8 @@ const AgendaManager = {
           color: inputColor.value || '#3b82f6',
           taskId,
           noteId,
-          recurrence
+          recurrence,
+          recurrenceEnd
         };
 
         if (selectedDest === 'google') {
@@ -1924,6 +2101,7 @@ const AgendaManager = {
       };
     }
 
+    syncSelectTitles();
     modal.classList.add('active');
     inputTitle.focus();
   },
@@ -1960,6 +2138,17 @@ const AgendaManager = {
           const current = StorageManager.getNotes().find(n => n.id === window.NotesManager.currentNoteId);
           if (current) window.NotesManager.renderEventSelector(current);
         }
+      }
+    }
+
+    // Synchroniser réciproquement la propriété noteId sur l'événement dans le stockage agenda
+    if (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function') {
+      const events = StorageManager.getEvents();
+      const targetEvt = events.find(e => e.id === eventId);
+      if (targetEvt && targetEvt.noteId !== noteId) {
+        targetEvt.noteId = noteId || null;
+        targetEvt.updatedAt = new Date().toISOString();
+        StorageManager.saveEvents(events);
       }
     }
   },
@@ -2031,12 +2220,17 @@ const AgendaManager = {
       `;
     }
 
-    if (evt.noteId) {
+    const allNotesList = (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function')
+      ? StorageManager.getNotes()
+      : [];
+    const linkedNoteObj = (evt.noteId ? allNotesList.find(n => n.id === evt.noteId) : null) || allNotesList.find(n => n.linkedEventId === evt.id);
+
+    if (linkedNoteObj) {
       html += `
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" id="cmenu-note">
           <span class="item-icon">📝</span>
-          <span>Voir la note associée</span>
+          <span>Voir la note associée (${this.escapeHtml(linkedNoteObj.title)})</span>
         </div>
       `;
     }
@@ -2088,14 +2282,14 @@ const AgendaManager = {
     }
 
     const btnNote = document.getElementById('cmenu-note');
-    if (btnNote && evt.noteId) {
+    if (btnNote && linkedNoteObj) {
       btnNote.onclick = () => {
         this.hideContextMenu();
         if (window.App && typeof window.App.navigate === 'function') {
           window.App.navigate('notes');
         }
         if (window.NotesManager && typeof window.NotesManager.selectNote === 'function') {
-          window.NotesManager.selectNote(evt.noteId);
+          window.NotesManager.selectNote(linkedNoteObj.id);
         }
       };
     }

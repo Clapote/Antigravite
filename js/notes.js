@@ -13,7 +13,9 @@ const NotesManager = {
   currentNoteId: null,
   searchQuery: '',
   currentProjectFilter: 'all',
+  currentFolderFilter: 'all',
   currentViewMode: 'edit', // Conservé pour rétro-compatibilité
+  _collapsedFolders: new Set(),
   _saveTimer: null,
   _pendingNotesToSave: null,
 
@@ -26,6 +28,324 @@ const NotesManager = {
 
     this.render();
     this.bindEvents();
+  },
+
+  getFolders() {
+    const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+      ? StorageManager.getSettings()
+      : {};
+    const base = Array.isArray(settings.notesFolders) && settings.notesFolders.length > 0
+      ? [...settings.notesFolders]
+      : ['Général'];
+    const set = new Set();
+    set.add('Général');
+    base.forEach(f => {
+      const trimmed = (f || '').trim();
+      if (trimmed) set.add(trimmed);
+    });
+    return Array.from(set);
+  },
+
+  createFolder(name) {
+    if (!name || typeof name !== 'string') return null;
+    const cleanName = name.trim();
+    if (!cleanName) return null;
+
+    const folders = this.getFolders();
+    const existing = folders.find(f => f.toLowerCase() === cleanName.toLowerCase());
+    if (existing) return existing;
+
+    folders.push(cleanName);
+    this._persistFolders(folders);
+    this.renderFolderFilter();
+    if (this.currentNoteId) {
+      const note = this.getCurrentNote();
+      if (note) this.renderFolderSelector(note);
+    }
+    return cleanName;
+  },
+
+  renameFolder(oldName, newName) {
+    if (!oldName || !newName) return false;
+    const cleanOld = oldName.trim();
+    const cleanNew = newName.trim();
+    if (!cleanNew || cleanOld.toLowerCase() === cleanNew.toLowerCase()) return false;
+
+    // 1. Mettre à jour toutes les notes du dossier : préserve à 100% les identifiants, liens et dates
+    const notes = this.getAll();
+    let modified = false;
+    notes.forEach(n => {
+      if ((n.folder || 'Général').trim().toLowerCase() === cleanOld.toLowerCase()) {
+        n.folder = cleanNew;
+        modified = true;
+      }
+    });
+    if (modified) {
+      StorageManager.saveNotes(notes);
+    }
+
+    // 2. Mettre à jour la liste des dossiers
+    const folders = this.getFolders().map(f => f.toLowerCase() === cleanOld.toLowerCase() ? cleanNew : f);
+    this._persistFolders(folders);
+
+    if (this.currentFolderFilter && this.currentFolderFilter.toLowerCase() === cleanOld.toLowerCase()) {
+      this.currentFolderFilter = cleanNew;
+    }
+
+    this.renderFolderFilter();
+    this.renderNotesList();
+    if (this.currentNoteId) {
+      const note = this.getCurrentNote();
+      if (note) this.renderFolderSelector(note);
+    }
+    return true;
+  },
+
+  deleteFolder(folderName) {
+    if (!folderName) return false;
+    const clean = folderName.trim();
+    // Les notes ne sont JAMAIS supprimées : elles sont reclassées en 'Général' pour préserver l'historique et les liens
+    const notes = this.getAll();
+    let modified = false;
+    notes.forEach(n => {
+      if ((n.folder || 'Général').trim().toLowerCase() === clean.toLowerCase()) {
+        n.folder = 'Général';
+        modified = true;
+      }
+    });
+    if (modified) {
+      StorageManager.saveNotes(notes);
+    }
+
+    const folders = this.getFolders().filter(f => f.toLowerCase() !== clean.toLowerCase());
+    if (!folders.includes('Général')) folders.unshift('Général');
+    this._persistFolders(folders);
+
+    if (this.currentFolderFilter && this.currentFolderFilter.toLowerCase() === clean.toLowerCase()) {
+      this.currentFolderFilter = 'all';
+    }
+
+    this.renderFolderFilter();
+    this.renderNotesList();
+    if (this.currentNoteId) {
+      const note = this.getCurrentNote();
+      if (note) this.renderFolderSelector(note);
+    }
+    return true;
+  },
+
+  _persistFolders(folders) {
+    if (typeof StorageManager === 'undefined' || typeof StorageManager.getSettings !== 'function') return;
+    const settings = StorageManager.getSettings();
+    settings.notesFolders = Array.from(new Set(folders));
+    StorageManager.saveSettings(settings);
+  },
+
+  async promptNewFolder() {
+    let name = '';
+    if (typeof window !== 'undefined' && window.App && typeof window.App.prompt === 'function') {
+      name = await window.App.prompt({
+        title: 'Nouveau dossier de notes',
+        message: 'Entrez le nom du nouveau dossier :',
+        placeholder: 'Ex: Personnel, Idées, Travail...',
+        confirmText: 'Créer',
+        cancelText: 'Annuler'
+      });
+    } else if (typeof prompt === 'function') {
+      name = prompt('Nom du nouveau dossier de notes :', '');
+    }
+    if (!name || !name.trim()) return null;
+    const created = this.createFolder(name.trim());
+    if (created) {
+      this.currentFolderFilter = created;
+      this.renderFolderFilter();
+      this.renderNotesList();
+      if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+        window.App.showToast(`Dossier « ${created} » créé`, 'success');
+      }
+    }
+    return created;
+  },
+
+  showFolderMenu(e, folderName) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof document === 'undefined') return;
+
+    const menu = document.getElementById('notes-folder-context-menu');
+    const headerEl = document.getElementById('notes-folder-menu-header');
+    const itemsEl = document.getElementById('notes-folder-menu-items');
+    if (!menu || !headerEl || !itemsEl) return;
+
+    const cleanFolder = (folderName || 'Général').trim();
+    const isGeneral = cleanFolder.toLowerCase() === 'général';
+    const notesCount = this.getAll().filter(n => (n.folder || 'Général').trim().toLowerCase() === cleanFolder.toLowerCase()).length;
+
+    headerEl.innerHTML = `
+      <div style="font-weight:700; color:var(--text-main); font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        📁 ${this.escapeHtml(cleanFolder)}
+      </div>
+      <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">
+        ${notesCount} note${notesCount > 1 ? 's' : ''} ${isGeneral ? '• Dossier principal' : ''}
+      </div>
+    `;
+
+    let html = `
+      <div class="context-menu-item" id="cmenu-folder-rename">
+        <span class="item-icon">✏️</span>
+        <span>Renommer le dossier</span>
+      </div>
+    `;
+
+    if (!isGeneral) {
+      html += `
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item danger" id="cmenu-folder-delete">
+          <span class="item-icon">🗑️</span>
+          <span>Supprimer le dossier</span>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" style="opacity: 0.55; cursor: default;" title="Le dossier Général est le dossier de repli de l'application et ne peut pas être supprimé.">
+          <span class="item-icon">🔒</span>
+          <span style="font-size:0.8rem;">Dossier par défaut non supprimable</span>
+        </div>
+      `;
+    }
+
+    itemsEl.innerHTML = html;
+
+    // Positionnement sous le bouton ou à la position de la souris
+    let posX = 100;
+    let posY = 100;
+
+    const rect = e && e.currentTarget && typeof e.currentTarget.getBoundingClientRect === 'function'
+      ? e.currentTarget.getBoundingClientRect()
+      : null;
+
+    if (rect) {
+      posX = rect.left;
+      posY = rect.bottom + 4;
+    } else if (e && (e.clientX || e.clientY)) {
+      posX = e.clientX;
+      posY = e.clientY + 4;
+    }
+
+    menu.style.display = 'block';
+    menu.style.visibility = 'hidden';
+
+    // Empêcher tout débordement en dehors de la fenêtre
+    setTimeout(() => {
+      const menuWidth = menu.offsetWidth || 220;
+      const menuHeight = menu.offsetHeight || 110;
+      const winW = typeof window !== 'undefined' ? window.innerWidth : 1000;
+      const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
+
+      if (posX + menuWidth > winW - 10) {
+        posX = winW - menuWidth - 10;
+      }
+      if (posY + menuHeight > winH - 10) {
+        posY = rect ? Math.max(10, rect.top - menuHeight - 4) : (winH - menuHeight - 10);
+      }
+
+      menu.style.left = `${Math.max(10, posX)}px`;
+      menu.style.top = `${Math.max(10, posY)}px`;
+      menu.style.visibility = 'visible';
+    }, 0);
+
+    // Clic sur "Renommer"
+    const btnRename = document.getElementById('cmenu-folder-rename');
+    if (btnRename) {
+      btnRename.onclick = async (ev) => {
+        if (ev) ev.stopPropagation();
+        this.hideFolderMenu();
+        const newName = await (window.App && typeof window.App.prompt === 'function'
+          ? window.App.prompt({
+              title: 'Renommer le dossier',
+              message: `Entrez le nouveau nom pour le dossier « ${cleanFolder} » :`,
+              defaultValue: cleanFolder,
+              placeholder: 'Nouveau nom...',
+              confirmText: 'Renommer',
+              cancelText: 'Annuler'
+            })
+          : null);
+        if (newName && newName.trim() && newName.trim() !== cleanFolder) {
+          const ok = this.renameFolder(cleanFolder, newName.trim());
+          if (ok && typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast(`Dossier renommé en « ${newName.trim()} »`, 'success');
+          }
+        }
+      };
+    }
+
+    // Clic sur "Supprimer"
+    const btnDelete = document.getElementById('cmenu-folder-delete');
+    if (btnDelete) {
+      btnDelete.onclick = async (ev) => {
+        if (ev) ev.stopPropagation();
+        this.hideFolderMenu();
+        const confirmed = await (window.App && typeof window.App.confirm === 'function'
+          ? window.App.confirm({
+              title: 'Supprimer le dossier',
+              message: `Supprimer le dossier « ${cleanFolder} » ?\n\nToutes les notes qu'il contient (${notesCount}) seront conservées et déplacées dans le dossier « Général ».\nAucun lien ne sera perdu.`,
+              confirmText: 'Supprimer le dossier',
+              cancelText: 'Annuler',
+              danger: true,
+              icon: '🗑️'
+            })
+          : true);
+        if (confirmed) {
+          this.deleteFolder(cleanFolder);
+          if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast(`Dossier « ${cleanFolder} » supprimé`, 'info');
+          }
+        }
+      };
+    }
+  },
+
+  hideFolderMenu() {
+    if (typeof document === 'undefined') return;
+    const menu = document.getElementById('notes-folder-context-menu');
+    if (menu) menu.style.display = 'none';
+  },
+
+  toggleFolderCollapse(folderName) {
+    if (!this._collapsedFolders) this._collapsedFolders = new Set();
+    if (this._collapsedFolders.has(folderName)) {
+      this._collapsedFolders.delete(folderName);
+    } else {
+      this._collapsedFolders.add(folderName);
+    }
+    this.renderNotesList();
+  },
+
+  moveNoteToFolder(noteId, targetFolder) {
+    if (!noteId || !targetFolder) return;
+    const notes = this.getAll();
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+    const oldFolder = note.folder || 'Général';
+    if (oldFolder.toLowerCase() === targetFolder.toLowerCase()) return;
+
+    note.folder = targetFolder.trim();
+    note.updatedAt = new Date().toISOString();
+    this.saveAll(notes);
+    this.renderFolderFilter();
+    if (this.currentNoteId === note.id) {
+      this.renderFolderSelector(note);
+    }
+    this.renderNotesList();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+      window.App.showToast(`Note déplacée vers « ${targetFolder} »`, 'info');
+    }
+  },
+
+  getCurrentNote() {
+    if (!this.currentNoteId) return null;
+    return this.getAll().find(n => n.id === this.currentNoteId) || null;
   },
 
   setViewMode(mode) {
@@ -77,6 +397,42 @@ const NotesManager = {
       filterProjectSelect.addEventListener('change', (e) => {
         this.currentProjectFilter = e.target.value;
         this.renderNotesList();
+      });
+    }
+
+    const filterFolderSelect = document.getElementById('notes-filter-folder');
+    if (filterFolderSelect) {
+      filterFolderSelect.addEventListener('change', async (e) => {
+        if (e.target.value === '__new__') {
+          await this.promptNewFolder();
+          this.renderFolderFilter();
+        } else {
+          this.currentFolderFilter = e.target.value;
+          this.renderNotesList();
+        }
+      });
+    }
+
+    const btnNewFolder = document.getElementById('btn-new-folder');
+    if (btnNewFolder) {
+      btnNewFolder.addEventListener('click', () => this.promptNewFolder());
+    }
+
+    const inputFolderSelect = document.getElementById('note-input-folder');
+    if (inputFolderSelect) {
+      inputFolderSelect.addEventListener('change', async (e) => {
+        if (!this.currentNoteId) return;
+        let val = e.target.value;
+        if (val === '__new__') {
+          const created = await this.promptNewFolder();
+          if (created) {
+            val = created;
+          } else {
+            const cur = this.getCurrentNote();
+            val = cur ? (cur.folder || 'Général') : 'Général';
+          }
+        }
+        this.updateCurrentNoteFolder(val);
       });
     }
 
@@ -233,6 +589,19 @@ const NotesManager = {
     if (btnScheduleEvent) {
       btnScheduleEvent.addEventListener('click', () => this.scheduleEventForCurrentNote());
     }
+
+    // Fermeture du menu contextuel des dossiers lors d'un clic extérieur ou appui sur Échap
+    if (typeof document !== 'undefined') {
+      document.addEventListener('click', (e) => {
+        const menu = document.getElementById('notes-folder-context-menu');
+        if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+          this.hideFolderMenu();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') this.hideFolderMenu();
+      });
+    }
   },
 
   getAll() {
@@ -247,10 +616,13 @@ const NotesManager = {
   createNote() {
     this.flushPendingSave();
     const notes = this.getAll();
+    const activeFolder = (this.currentFolderFilter && this.currentFolderFilter !== 'all')
+      ? this.currentFolderFilter
+      : 'Général';
     const newNote = {
       id: 'note-' + Date.now(),
       title: 'Nouvelle note',
-      folder: 'Général',
+      folder: activeFolder,
       tags: [],
       projectId: null,
       linkedEventId: null,
@@ -260,6 +632,7 @@ const NotesManager = {
     };
     notes.unshift(newNote);
     this.saveAll(notes);
+    this.renderFolderFilter();
     this.selectNote(newNote.id);
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
       window.App.showToast("Note créée", "success");
@@ -297,9 +670,72 @@ const NotesManager = {
       if (blockSelect) blockSelect.value = 'p';
 
       this.updatePreview(note.content);
+      this.renderFolderSelector(note);
       this.renderProjectSelector(note);
       this.renderEventSelector(note);
       this.renderNotesList();
+    }
+  },
+
+  renderFolderFilter() {
+    if (typeof document === 'undefined') return;
+    const select = document.getElementById('notes-filter-folder');
+    if (!select) return;
+
+    const notes = this.getAll();
+    const folders = this.getFolders();
+    const counts = {};
+    notes.forEach(n => {
+      const f = (n.folder || 'Général').trim();
+      counts[f] = (counts[f] || 0) + 1;
+    });
+
+    let html = `<option value="all">📁 Tous les dossiers (${notes.length})</option>`;
+    folders.forEach(f => {
+      const c = counts[f] || 0;
+      const selected = (this.currentFolderFilter === f) ? 'selected' : '';
+      html += `<option value="${this.escapeHtml(f)}" ${selected}>📁 ${this.escapeHtml(f)} (${c})</option>`;
+    });
+    html += '<option value="__new__">➕ Nouveau dossier...</option>';
+    select.innerHTML = html;
+  },
+
+  renderFolderSelector(note) {
+    if (typeof document === 'undefined') return;
+    const select = document.getElementById('note-input-folder');
+    if (!select) return;
+
+    const folders = this.getFolders();
+    const currentFolder = (note && note.folder) ? note.folder.trim() : 'Général';
+    if (!folders.includes(currentFolder)) {
+      folders.unshift(currentFolder);
+    }
+
+    let html = '';
+    folders.forEach(f => {
+      const selected = (f === currentFolder) ? 'selected' : '';
+      html += `<option value="${this.escapeHtml(f)}" ${selected}>📁 ${this.escapeHtml(f)}</option>`;
+    });
+    html += '<option value="__new__">➕ Nouveau dossier...</option>';
+    select.innerHTML = html;
+  },
+
+  updateCurrentNoteFolder(folderName) {
+    if (!this.currentNoteId) return;
+    const clean = (folderName || 'Général').trim();
+    const notes = this.getAll();
+    const note = notes.find(n => n.id === this.currentNoteId);
+    if (!note) return;
+
+    note.folder = clean;
+    note.updatedAt = new Date().toISOString();
+    this.saveAll(notes);
+    this.renderFolderFilter();
+    this.renderFolderSelector(note);
+    this.renderNotesList();
+
+    if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+      window.App.showToast(`Note classée dans « ${clean} »`, 'info');
     }
   },
 
@@ -353,6 +789,7 @@ const NotesManager = {
 
   linkCurrentNoteToProject(projectId) {
     if (!this.currentNoteId) return;
+    this.flushPendingSave();
     const notes = this.getAll();
     const note = notes.find(n => n.id === this.currentNoteId);
     if (!note) return;
@@ -471,6 +908,7 @@ const NotesManager = {
 
   linkCurrentNoteToEvent(eventId) {
     if (!this.currentNoteId) return;
+    this.flushPendingSave();
     const notes = this.getAll();
     const note = notes.find(n => n.id === this.currentNoteId);
     if (!note) return;
@@ -478,6 +916,16 @@ const NotesManager = {
     const oldEventId = note.linkedEventId;
     note.linkedEventId = eventId || null;
     note.updatedAt = new Date().toISOString();
+
+    // Si une autre note était liée à ce même événement, la dissocier pour maintenir une cohérence 1-à-1
+    if (eventId) {
+      notes.forEach(n => {
+        if (n.id !== note.id && n.linkedEventId === eventId) {
+          n.linkedEventId = null;
+        }
+      });
+    }
+
     StorageManager.saveNotes(notes);
 
     // Mettre à jour la liaison réciproque sur l'événement d'agenda
@@ -500,7 +948,9 @@ const NotesManager = {
     if (btnView) btnView.style.display = eventId ? 'inline-flex' : 'none';
 
     this.renderNotesList();
-    if (typeof window !== 'undefined' && window.AgendaManager) window.AgendaManager.render();
+    if (typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.render === 'function') {
+      window.AgendaManager.render();
+    }
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
       window.App.showToast(eventId ? "Note liée au créneau d'agenda" : "Liaison retirée", "info");
     }
@@ -667,7 +1117,13 @@ const NotesManager = {
       return pId === this.currentProjectFilter;
     });
 
-    const filtered = filteredByProject.filter(n => 
+    const filteredByFolder = filteredByProject.filter(n => {
+      if (!this.currentFolderFilter || this.currentFolderFilter === 'all') return true;
+      const f = (n.folder || 'Général').trim().toLowerCase();
+      return f === this.currentFolderFilter.trim().toLowerCase();
+    });
+
+    const filtered = filteredByFolder.filter(n => 
       !this.searchQuery || 
       n.title.toLowerCase().includes(this.searchQuery) || 
       n.content.toLowerCase().includes(this.searchQuery)
@@ -701,10 +1157,16 @@ const NotesManager = {
     const frag = useFrag ? _frag : listEl;
     if (!useFrag) listEl.innerHTML = '';
 
-    filtered.forEach(note => {
+    const buildNoteItem = (note) => {
       const item = document.createElement('div');
       item.className = `note-item ${note.id === this.currentNoteId ? 'active' : ''}`;
       if (item.dataset) item.dataset.noteId = note.id;
+      item.draggable = true;
+      item.ondragstart = (e) => {
+        if (e && e.dataTransfer && typeof e.dataTransfer.setData === 'function') {
+          e.dataTransfer.setData('text/plain', note.id);
+        }
+      };
       item.onclick = () => this.selectNote(note.id);
 
       const noteProjId = note.projectId || note.linkedProjectId;
@@ -738,14 +1200,97 @@ const NotesManager = {
       item.innerHTML = `
         <div class="note-item-title">${this.escapeHtml(note.title)}</div>
         <div class="note-item-meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-          <span>📁 ${this.escapeHtml(note.folder || 'Notes')}</span>
+          <span>📁 ${this.escapeHtml(note.folder || 'Général')}</span>
           <span>• ${updatedDate}</span>
           ${projectBadge}
           ${eventBadge}
         </div>
       `;
-      frag.appendChild(item);
-    });
+      return item;
+    };
+
+    if (this.currentFolderFilter === 'all' && !this.searchQuery) {
+      // Regroupement par dossier avec arborescence et pliage/dépliage
+      const notesByFolder = new Map();
+      const allKnownFolders = this.getFolders();
+      allKnownFolders.forEach(f => notesByFolder.set(f, []));
+
+      filtered.forEach(note => {
+        const f = (note.folder || 'Général').trim();
+        if (!notesByFolder.has(f)) notesByFolder.set(f, []);
+        notesByFolder.get(f).push(note);
+      });
+
+      notesByFolder.forEach((folderNotes, folderName) => {
+        if (folderNotes.length === 0) return; // Ne pas encombrer avec des dossiers vides sans note
+        const isCollapsed = this._collapsedFolders && this._collapsedFolders.has(folderName);
+        const groupEl = document.createElement('div');
+        groupEl.className = 'note-folder-group';
+        if (groupEl.dataset) groupEl.dataset.folder = folderName;
+
+        const headerEl = document.createElement('div');
+        headerEl.className = 'note-folder-header';
+        headerEl.title = `Dossier « ${folderName} » (${folderNotes.length} note${folderNotes.length > 1 ? 's' : ''}) - Glissez une note pour la ranger ici`;
+
+        headerEl.onclick = () => {
+          this.toggleFolderCollapse(folderName);
+        };
+
+        // Zone de dépôt pour ranger une note dans ce dossier
+        headerEl.ondragover = (e) => {
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+          headerEl.classList.add('drag-over');
+        };
+        headerEl.ondragleave = () => {
+          headerEl.classList.remove('drag-over');
+        };
+        headerEl.ondrop = (e) => {
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          headerEl.classList.remove('drag-over');
+          const noteId = e && e.dataTransfer && typeof e.dataTransfer.getData === 'function' ? e.dataTransfer.getData('text/plain') : null;
+          if (noteId) {
+            this.moveNoteToFolder(noteId, folderName);
+          }
+        };
+
+        headerEl.innerHTML = `
+          <span class="note-folder-chevron">${isCollapsed ? '▸' : '▾'}</span>
+          <span class="note-folder-title">📁 ${this.escapeHtml(folderName)}</span>
+          <span class="note-folder-count">${folderNotes.length}</span>
+          <button type="button" class="note-folder-actions-btn" title="Options du dossier (Renommer / Supprimer)">⋯</button>
+        `;
+        const btnActions = headerEl.querySelector ? headerEl.querySelector('.note-folder-actions-btn') : null;
+        if (btnActions) {
+          btnActions.onclick = (e) => {
+            if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+            this.showFolderMenu(e, folderName);
+          };
+        }
+        headerEl.oncontextmenu = (e) => {
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          this.showFolderMenu(e, folderName);
+        };
+        groupEl.appendChild(headerEl);
+
+        if (!isCollapsed) {
+          const itemsContainer = document.createElement('div');
+          itemsContainer.className = 'note-folder-items';
+          folderNotes.forEach(note => {
+            itemsContainer.appendChild(buildNoteItem(note));
+          });
+          groupEl.appendChild(itemsContainer);
+        }
+
+        frag.appendChild(groupEl);
+      });
+    } else {
+      // Affichage direct (dossier filtré spécifique ou recherche textuelle active)
+      filtered.forEach(note => {
+        frag.appendChild(buildNoteItem(note));
+      });
+    }
 
     if (useFrag) {
       listEl.innerHTML = '';
@@ -770,6 +1315,14 @@ const NotesManager = {
         e.preventDefault();
       }
       const href = (typeof link.getAttribute === 'function' ? link.getAttribute('href') : link.href) || '';
+      // Liens internes de notes persistants (note://id)
+      if (href.startsWith('note://')) {
+        const noteId = href.replace('note://', '').trim();
+        if (noteId) {
+          this.selectNote(noteId);
+          return true;
+        }
+      }
       // Seuls les protocoles HTTP et HTTPS sont autorisés à ouvrir le navigateur externe
       if (/^https?:\/\//i.test(href)) {
         if (typeof window !== 'undefined' && window.AntigraviteAPI && typeof window.AntigraviteAPI.openExternal === 'function') {
@@ -779,6 +1332,25 @@ const NotesManager = {
       }
       return false;
     }
+
+    // Prise en charge permanente des Wikilinks internes Obsidian ([[Titre]] ou [[Titre|Alias]])
+    const wikilink = (target && typeof target.closest === 'function') ? target.closest('.obsidian-wikilink') : null;
+    if (wikilink && wikilink.dataset && wikilink.dataset.target) {
+      if (typeof e.preventDefault === 'function') {
+        e.preventDefault();
+      }
+      const targetName = wikilink.dataset.target.trim().toLowerCase();
+      const allNotes = this.getAll();
+      const match = allNotes.find(n => (n.title || '').trim().toLowerCase() === targetName || n.id === targetName);
+      if (match) {
+        this.selectNote(match.id);
+        if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+          window.App.showToast(`Ouverture : ${match.title}`, 'info');
+        }
+        return true;
+      }
+    }
+
     return undefined;
   },
 
@@ -1692,6 +2264,7 @@ const NotesManager = {
 
   render() {
     this.populateProjectFilter();
+    this.renderFolderFilter();
     const notes = this.getAll();
     if (!this.currentNoteId && notes.length > 0) {
       this.currentNoteId = notes[0].id;

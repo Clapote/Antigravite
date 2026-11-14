@@ -104,8 +104,37 @@ const App = {
     // 7. Afficher l'écran initial
     this.navigate('home');
 
-    // 8. Afficher les nouveautés au premier lancement après une mise à jour
+    // 8. Pré-chargement instantané des écrans principaux (Zero-lag)
+    this.preloadScreens();
+
+    // 9. Afficher les nouveautés au premier lancement après une mise à jour
     this.scheduleWhatsNewCheck();
+  },
+
+  preloadScreens() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const schedule = (typeof window.requestIdleCallback === 'function')
+      ? window.requestIdleCallback
+      : (cb) => setTimeout(cb, 120);
+
+    schedule(() => {
+      try {
+        if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') {
+          TasksManager.render();
+        }
+        if (typeof ProjectsManager !== 'undefined' && typeof ProjectsManager.render === 'function') {
+          ProjectsManager.render();
+        }
+        if (typeof NotesManager !== 'undefined' && typeof NotesManager.render === 'function') {
+          NotesManager.render();
+        }
+        if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.render === 'function') {
+          AgendaManager.render();
+        }
+      } catch (err) {
+        console.warn("[App] Préchargement doux des écrans :", err);
+      }
+    });
   },
 
   async resolveAppVersion() {
@@ -144,7 +173,7 @@ const App = {
   },
 
   _bindWhatsNewModalButtons() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const btnClose = document.getElementById('btn-whats-new-close');
     const btnCloseX = document.getElementById('btn-whats-new-close-x');
     const btnOpenSettings = document.getElementById('btn-whats-new-open-settings');
@@ -187,7 +216,7 @@ const App = {
     if (markSeen) {
       this.markWhatsNewAsSeen();
     }
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const modal = document.getElementById('whats-new-modal');
     if (modal) {
       modal.classList.remove('active');
@@ -200,7 +229,7 @@ const App = {
     if (typeof SettingsManager !== 'undefined' && typeof SettingsManager.switchTab === 'function') {
       SettingsManager.switchTab('help');
     }
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
 
     const focusChangelog = () => {
       const section = document.getElementById('settings-section-changelog');
@@ -360,13 +389,22 @@ const App = {
       item.classList.toggle('active', item.dataset.screen === screenId);
     });
 
-    // Mettre à jour les vues avec redéclenchement systématique de l'animation de transition
+    // Mettre à jour les vues avec transition fluide sans latence (Zero-lag)
+    const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+      ? StorageManager.getSettings()
+      : {};
+    const disableAnim = settings.disableAnimations === true || settings.performanceMode === 'potato';
+
     document.querySelectorAll('.screen-view').forEach(view => {
       const isTarget = (view.id === `screen-${screenId}`);
       if (isTarget) {
-        view.classList.remove('active');
-        void view.offsetWidth; // Déclencher le reflow pour relancer l'animation de transition de page
-        view.classList.add('active');
+        if (!disableAnim) {
+          view.classList.remove('active');
+          void view.offsetWidth; // Déclencher le reflow pour relancer l'animation de transition de page
+          view.classList.add('active');
+        } else {
+          view.classList.add('active');
+        }
       } else {
         view.classList.remove('active');
       }
@@ -374,7 +412,7 @@ const App = {
 
     // Déclencher la ligne de transition lumineuse balayant le haut de page
     const transitionBar = document.getElementById('page-transition-bar');
-    if (transitionBar) {
+    if (transitionBar && !disableAnim) {
       transitionBar.classList.remove('animating');
       void transitionBar.offsetWidth;
       transitionBar.classList.add('animating');
@@ -414,6 +452,9 @@ const App = {
     if (screenId === 'projects') ProjectsManager.render();
     if (screenId === 'agenda') {
       AgendaManager.render();
+      if (typeof AgendaManager.scrollToNormalHours === 'function' && (AgendaManager._lastScrollTop === null || AgendaManager._lastScrollTop === undefined)) {
+        AgendaManager.scrollToNormalHours(false);
+      }
       if (typeof GoogleSyncManager !== 'undefined') {
         GoogleSyncManager.refreshStatus();
         GoogleSyncManager.syncCalendarNow(true);
@@ -465,6 +506,7 @@ const App = {
     }
 
     this.updateThemeButtonLabel(settings.theme || 'dark');
+    this.applySidebarTabsOrder(settings.sidebarTabsOrder);
     this.applySidebarTabsVisibility(settings);
 
     // Fond d'écran (Image derrière les panneaux — désactivé en Mode PC de merde pour épargner le GPU)
@@ -519,12 +561,39 @@ const App = {
     this.updateSidebarStickyNote();
   },
 
+  // Application de la disposition personnalisée des onglets dans le volet latéral gauche
+  applySidebarTabsOrder(order) {
+    if (!order && typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function') {
+      const s = StorageManager.getSettings();
+      order = s ? s.sidebarTabsOrder : null;
+    }
+    if (!Array.isArray(order) || order.length === 0) return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+
+    const navMenu = document.querySelector('.nav-menu');
+    if (!navMenu) return;
+
+    const settingsItem = navMenu.querySelector('.nav-item[data-screen="settings"]');
+    if (!settingsItem) return;
+
+    order.forEach(screenId => {
+      const item = navMenu.querySelector(`.nav-item[data-screen="${screenId}"]`);
+      if (item) {
+        navMenu.insertBefore(item, settingsItem);
+      }
+    });
+  },
+
   // Gestion de la visibilité des onglets dans le panneau latéral
   applySidebarTabsVisibility(settings) {
     if (!settings && typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function') {
       settings = StorageManager.getSettings();
     }
     if (!settings) return;
+
+    if (settings.sidebarTabsOrder && Array.isArray(settings.sidebarTabsOrder)) {
+      this.applySidebarTabsOrder(settings.sidebarTabsOrder);
+    }
 
     const visibleScreens = settings.sidebarVisibleScreens || {};
     const defaultVisible = {
@@ -538,7 +607,7 @@ const App = {
       backups: true
     };
 
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
     document.querySelectorAll('.nav-item').forEach(item => {
       const screen = item.dataset.screen;
       if (!screen || screen === 'home' || screen === 'settings') {
@@ -560,7 +629,7 @@ const App = {
 
   // Mise à jour de la barre de progression de la journée (avec frise colorée des événements)
   updateSidebarDayProgress(targetDate = null) {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     if (document.hidden === true && !targetDate) return;
     const widget = document.getElementById('sidebar-day-progress-widget');
     if (!widget) return;
@@ -581,10 +650,10 @@ const App = {
     const currentM = now.getMinutes();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    // Plage horaire de la journée active : 07h00 à 23h00 (16h = 960 minutes)
-    const dayStartMin = 7 * 60; // 420 min
-    const dayEndMin = 23 * 60;   // 1380 min
-    const totalDayMin = dayEndMin - dayStartMin; // 960 min
+    // Plage horaire de la frise chronologique : Amplitude complète de minuit à minuit (24h = 1440 minutes)
+    const dayStartMin = 0;
+    const dayEndMin = 24 * 60; // 1440 min
+    const totalDayMin = 1440;
 
     // Déterminer la date cible à afficher (aujourd'hui ou journée spécifique sélectionnée dans l'agenda)
     let activeDateStr = todayStr;
@@ -602,32 +671,8 @@ const App = {
     }
 
     const isToday = (activeDateStr === todayStr);
-
     const currentTotalMin = currentH * 60 + currentM;
-    let pct = 0;
-    let remainingText = '';
-
-    if (isToday) {
-      if (currentTotalMin < dayStartMin) {
-        pct = 0;
-        const minsUntilStart = dayStartMin - currentTotalMin;
-        const h = Math.floor(minsUntilStart / 60);
-        const m = minsUntilStart % 60;
-        remainingText = `Débute dans ${h > 0 ? h + 'h' : ''}${m}m`;
-      } else if (currentTotalMin >= dayEndMin) {
-        pct = 100;
-        remainingText = 'Journée terminée';
-      } else {
-        const elapsed = currentTotalMin - dayStartMin;
-        pct = Math.round((elapsed / totalDayMin) * 100);
-        const remainingMin = dayEndMin - currentTotalMin;
-        const h = Math.floor(remainingMin / 60);
-        const m = remainingMin % 60;
-        remainingText = `Reste ${h}h${String(m).padStart(2, '0')}`;
-      }
-    } else {
-      pct = 0;
-    }
+    const pct = isToday ? Math.min(100, Math.max(0, Math.round((currentTotalMin / totalDayMin) * 100))) : 0;
 
     const percentEl = document.getElementById('sidebar-day-progress-percent');
     const barEl = document.getElementById('sidebar-day-progress-bar');
@@ -635,6 +680,15 @@ const App = {
     const remEl = document.getElementById('sidebar-day-progress-remaining');
     const trackEl = document.getElementById('sidebar-day-progress-track') || (widget && typeof widget.querySelector === 'function' ? widget.querySelector('.sidebar-day-progress-track') : null);
     const iconEl = (widget && typeof widget.querySelector === 'function') ? widget.querySelector('.sidebar-day-progress-icon') : null;
+
+    if (percentEl) {
+      percentEl.textContent = '';
+      if (percentEl.style) percentEl.style.display = 'none';
+    }
+    if (remEl) {
+      remEl.textContent = '';
+      if (remEl.style) remEl.style.display = 'none';
+    }
 
     // Récupération des événements pour créer la frise d'événements colorés
     const allEvents = (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function')
@@ -686,8 +740,8 @@ const App = {
 
       // Vérifier si l'événement concerne la journée active
       if (startDate <= activeDateStr && endDate >= activeDateStr) {
-        let startMin = 420; // 07:00
-        let endMin = 1380;   // 23:00
+        let startMin = 0;    // 00:00 (Minuit)
+        let endMin = 1440;   // 24:00 (Minuit)
         const isAllDay = evt.allDay || (!startStr.includes('T') && !endStr.includes('T'));
 
         if (startStr.includes('T')) {
@@ -697,7 +751,7 @@ const App = {
             const [sh, sm] = sTime.split(':').map(Number);
             if (!isNaN(sh)) startMin = sh * 60 + (sm || 0);
           } else if (sDate < activeDateStr) {
-            startMin = 420;
+            startMin = 0;
           }
         }
         if (endStr.includes('T')) {
@@ -707,15 +761,15 @@ const App = {
             const [eh, em] = eTime.split(':').map(Number);
             if (!isNaN(eh)) endMin = eh * 60 + (em || 0);
           } else if (eDate > activeDateStr) {
-            endMin = 1380;
+            endMin = 1440;
           }
         } else if (!isAllDay) {
           endMin = Math.max(endMin, startMin + 60);
         }
 
-        // Si fin <= début, accorder au minimum 45 minutes pour la lisibilité
+        // Si fin <= début, accorder au minimum 30 minutes pour la lisibilité
         if (endMin <= startMin) {
-          endMin = startMin + 45;
+          endMin = Math.min(1440, startMin + 30);
         }
 
         // Déterminer la couleur de l'événement et les informations du projet / de la tâche
@@ -749,13 +803,13 @@ const App = {
           activeEventNow = { evt, timeLabel };
         }
 
-        // Vérifier si le créneau est dans la plage active 07h00 - 23h00
-        if (endMin > dayStartMin && startMin < dayEndMin) {
-          const visStart = Math.max(dayStartMin, startMin);
-          const visEnd = Math.min(dayEndMin, Math.max(visStart + 12, endMin));
+        // Vérifier si le créneau est dans la journée complète (00:00 - 24:00)
+        if (endMin > 0 && startMin < 1440) {
+          const visStart = Math.max(0, startMin);
+          const visEnd = Math.min(1440, Math.max(visStart + 10, endMin));
 
-          const leftPct = ((visStart - dayStartMin) / totalDayMin) * 100;
-          const widthPct = Math.max(2.5, ((visEnd - visStart) / totalDayMin) * 100);
+          const leftPct = (visStart / 1440) * 100;
+          const widthPct = Math.max(1.8, ((visEnd - visStart) / 1440) * 100);
 
           todayEvents.push({
             id: evt.id,
@@ -781,31 +835,35 @@ const App = {
     // Mettre à jour l'en-tête du widget selon si c'est aujourd'hui ou un autre jour (diff avant mutation DOM)
     if (isToday) {
       const curTimeText = `${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`;
-      const curPctText = `${pct}%`;
-      const curBarWidth = `${pct}%`;
+      const curBarWidth = `${((currentTotalMin / totalDayMin) * 100).toFixed(2)}%`;
       if (iconEl && iconEl.textContent !== '⏱️') iconEl.textContent = '⏱️';
       if (timeEl && timeEl.textContent !== curTimeText) timeEl.textContent = curTimeText;
-      if (percentEl && percentEl.textContent !== curPctText) percentEl.textContent = curPctText;
-      if (barEl) {
-        if (barEl.style.width !== curBarWidth) barEl.style.width = curBarWidth;
-        if (barEl.style.display !== 'block') barEl.style.display = 'block';
+      if (percentEl) {
+        percentEl.textContent = '';
+        if (percentEl.style) percentEl.style.display = 'none';
       }
-      if (widget.title !== 'Progression de la journée en cours') widget.title = 'Progression de la journée en cours';
+      if (barEl) {
+        if (barEl.style && barEl.style.width !== curBarWidth) barEl.style.width = curBarWidth;
+        if (barEl.style && barEl.style.display !== 'block') barEl.style.display = 'block';
+      }
+      if (widget.title !== 'Frise chronologique de la journée') widget.title = 'Frise chronologique de la journée';
       if (typeof widget.removeAttribute === 'function') widget.removeAttribute('data-viewing-other-day');
       if (widget.dataset) delete widget.dataset.viewingOtherDay;
-      if (widget.style.cursor !== 'default') widget.style.cursor = 'default';
+      if (widget.style && widget.style.cursor !== 'default') widget.style.cursor = 'default';
     } else {
       if (iconEl && iconEl.textContent !== '📅') iconEl.textContent = '📅';
       const targetD = new Date(`${activeDateStr}T00:00:00`);
       const targetLabel = !isNaN(targetD.getTime())
         ? targetD.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
         : activeDateStr;
-      const evtCountText = `${todayEvents.length} évt${todayEvents.length > 1 ? 's' : ''}`;
       if (timeEl && timeEl.textContent !== targetLabel) timeEl.textContent = targetLabel;
-      if (percentEl && percentEl.textContent !== evtCountText) percentEl.textContent = evtCountText;
+      if (percentEl) {
+        percentEl.textContent = '';
+        if (percentEl.style) percentEl.style.display = 'none';
+      }
       if (barEl) {
-        if (barEl.style.width !== '0%') barEl.style.width = '0%';
-        if (barEl.style.display !== 'none') barEl.style.display = 'none';
+        if (barEl.style && barEl.style.width !== '0%') barEl.style.width = '0%';
+        if (barEl.style && barEl.style.display !== 'none') barEl.style.display = 'none';
       }
       const otherTitle = `Frise du ${targetLabel} (Cliquer pour revenir à aujourd'hui)`;
       if (widget.title !== otherTitle) widget.title = otherTitle;
@@ -833,29 +891,9 @@ const App = {
       };
     }
 
-    // Mettre à jour le texte par défaut
-    let defaultText = '';
-    if (isToday) {
-      defaultText = activeEventNow
-        ? `En cours : ${activeEventNow.evt.title || 'Événement'}`
-        : remainingText;
-    } else {
-      if (todayEvents.length === 0) {
-        defaultText = 'Aucun créneau prévu (07h-23h)';
-      } else {
-        const totalDurMin = todayEvents.reduce((acc, ev) => acc + (ev.durationMin || 0), 0);
-        const dh = Math.floor(totalDurMin / 60);
-        const dm = totalDurMin % 60;
-        const durStr = dh > 0 ? (dm > 0 ? `${dh}h${String(dm).padStart(2, '0')}` : `${dh}h`) : `${dm}m`;
-        defaultText = `${todayEvents.length} événement${todayEvents.length > 1 ? 's' : ''} (${durStr})`;
-      }
-    }
-
     if (remEl) {
-      if (remEl.dataset) remEl.dataset.defaultText = defaultText;
-      if (!widget.dataset || !widget.dataset.hovering) {
-        if (remEl.textContent !== defaultText) remEl.textContent = defaultText;
-      }
+      remEl.textContent = '';
+      if (remEl.style) remEl.style.display = 'none';
     }
 
     // Mettre à jour les segments d'événements dans le track uniquement si les événements ont changé
@@ -915,7 +953,7 @@ const App = {
           seg.addEventListener('mouseleave', () => {
             delete widget.dataset.hovering;
             if (remEl) {
-              remEl.textContent = (remEl.dataset && remEl.dataset.defaultText) || defaultText;
+              remEl.textContent = (remEl.dataset && remEl.dataset.defaultText) || '';
             }
             if (seg.dataset && seg.dataset.nativeTitle) {
               if (typeof seg.setAttribute === 'function') seg.setAttribute('title', seg.dataset.nativeTitle);
@@ -1074,7 +1112,7 @@ const App = {
 
   // Masquer la fenêtre d'information flottante
   hideTimelineTooltip() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const tooltip = document.getElementById('sidebar-day-event-tooltip');
     if (tooltip) {
       if (tooltip.classList && typeof tooltip.classList.remove === 'function') {
@@ -1090,7 +1128,7 @@ const App = {
 
   // Post-it rapide dans le volet latéral
   initSidebarStickyNote() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const textarea = document.getElementById('sidebar-sticky-note-text');
     const clearBtn = document.getElementById('sidebar-sticky-note-clear');
 
@@ -1120,7 +1158,7 @@ const App = {
   },
 
   updateSidebarStickyNote() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const widget = document.getElementById('sidebar-sticky-note-widget');
     if (!widget) return;
 
@@ -1234,6 +1272,18 @@ const App = {
           SettingsManager.switchTab('help');
         }
       }
+
+      // 7. Raccourci Agenda 'T' pour revenir à Aujourd'hui (et 07h00)
+      if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const inInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || (typeof e.target.closest === 'function' && e.target.closest('#note-body-editor')));
+        const activeModal = (typeof document !== 'undefined' && typeof document.querySelector === 'function') ? document.querySelector('.modal-overlay.active') : null;
+        if (!inInput && !activeModal && this.currentScreen === 'agenda') {
+          e.preventDefault();
+          if (typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.navigateToday === 'function') {
+            window.AgendaManager.navigateToday();
+          }
+        }
+      }
     });
 
     // Sauvegarde immédiate lors de la fermeture ou du rechargement
@@ -1261,11 +1311,6 @@ const App = {
       });
     });
 
-    // Phrase d'ambiance synchronisée avec le moment de la journée (matin, midi, soir)
-    const btnShuffleQuote = document.getElementById('btn-shuffle-quote');
-    if (btnShuffleQuote) {
-      btnShuffleQuote.addEventListener('click', () => this.shuffleDashboardQuote());
-    }
 
     // Cartes statistiques et panneaux du tableau de bord cliquables (redirection avec retour haptique non sonore)
     document.querySelectorAll('.stat-card[data-nav], .panel-header[data-nav]').forEach(el => {
@@ -1324,6 +1369,8 @@ const App = {
       if (titleEl) titleEl.textContent = title;
       if (msgEl) msgEl.textContent = message;
       if (iconEl) iconEl.innerHTML = icon;
+      const inputEl = document.getElementById('dialog-input');
+      if (inputEl) inputEl.style.display = 'none';
       btnConfirm.textContent = confirmText;
       btnConfirm.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
       btnCancel.textContent = cancelText;
@@ -1397,6 +1444,8 @@ const App = {
       if (titleEl) titleEl.textContent = title;
       if (msgEl) msgEl.textContent = message;
       if (iconEl) iconEl.innerHTML = icon;
+      const inputEl = document.getElementById('dialog-input');
+      if (inputEl) inputEl.style.display = 'none';
       btnConfirm.textContent = okText;
       btnConfirm.className = (type === 'error') ? 'btn btn-danger' : 'btn btn-primary';
       if (btnCancel) btnCancel.style.display = 'none';
@@ -1426,6 +1475,99 @@ const App = {
 
       modal.classList.add('active');
       if (typeof btnConfirm.focus === 'function') btnConfirm.focus();
+    });
+  },
+
+  // Modale unifiée de saisie textuelle (Prompt) selon la charte graphique
+  prompt(options = {}) {
+    const title = typeof options === 'string' ? 'Saisie' : (options.title || 'Saisie');
+    const message = typeof options === 'string' ? options : (options.message || '');
+    const defaultValue = (typeof options === 'object' && options.defaultValue !== undefined && options.defaultValue !== null) ? String(options.defaultValue) : '';
+    const placeholder = (typeof options === 'object' && options.placeholder) ? options.placeholder : '';
+    const confirmText = (typeof options === 'object' && options.confirmText) ? options.confirmText : 'Valider';
+    const cancelText = (typeof options === 'object' && options.cancelText) ? options.cancelText : 'Annuler';
+    const defaultIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+    const icon = (typeof options === 'object' && options.icon) ? options.icon : defaultIcon;
+
+    return new Promise((resolve) => {
+      if (typeof document === 'undefined') {
+        const fallback = typeof prompt === 'function' ? prompt(message, defaultValue) : defaultValue;
+        return resolve(fallback);
+      }
+      const modal = document.getElementById('dialog-modal');
+      const titleEl = document.getElementById('dialog-title');
+      const msgEl = document.getElementById('dialog-message');
+      const iconEl = document.getElementById('dialog-icon');
+      const btnConfirm = document.getElementById('dialog-btn-confirm');
+      const btnCancel = document.getElementById('dialog-btn-cancel');
+      const btnClose = document.getElementById('dialog-btn-close');
+      let inputEl = document.getElementById('dialog-input');
+
+      if (!modal || !btnConfirm || !btnCancel) {
+        const fallback = typeof prompt === 'function' ? prompt(message, defaultValue) : defaultValue;
+        return resolve(fallback);
+      }
+
+      if (!inputEl) {
+        inputEl = document.createElement('input');
+        inputEl.type = 'text';
+        inputEl.id = 'dialog-input';
+        inputEl.className = 'form-input';
+        inputEl.style.width = '100%';
+        inputEl.style.marginTop = '14px';
+        const modalBody = modal.querySelector ? modal.querySelector('.modal-body') : null;
+        if (modalBody && typeof modalBody.appendChild === 'function') {
+          modalBody.appendChild(inputEl);
+        }
+      }
+
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) msgEl.textContent = message;
+      if (iconEl) iconEl.innerHTML = icon;
+
+      inputEl.style.display = 'block';
+      inputEl.value = defaultValue;
+      inputEl.placeholder = placeholder;
+
+      btnConfirm.textContent = confirmText;
+      btnConfirm.className = 'btn btn-primary';
+      btnCancel.textContent = cancelText;
+      btnCancel.style.display = 'inline-flex';
+
+      const cleanup = (result) => {
+        modal.classList.remove('active');
+        inputEl.style.display = 'none';
+        if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
+          document.removeEventListener('keydown', onKeyDown);
+        }
+        btnConfirm.onclick = null;
+        btnCancel.onclick = null;
+        if (btnClose) btnClose.onclick = null;
+        resolve(result);
+      };
+
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup(null);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          cleanup(inputEl.value);
+        }
+      };
+
+      btnConfirm.onclick = () => cleanup(inputEl.value);
+      btnCancel.onclick = () => cleanup(null);
+      if (btnClose) btnClose.onclick = () => cleanup(null);
+      if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+        document.addEventListener('keydown', onKeyDown);
+      }
+
+      modal.classList.add('active');
+      setTimeout(() => {
+        if (typeof inputEl.focus === 'function') inputEl.focus();
+        if (typeof inputEl.select === 'function') inputEl.select();
+      }, 50);
     });
   },
 
@@ -1470,7 +1612,7 @@ const App = {
   },
 
   initSidebarRailTooltips() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
 
     let tooltip = document.getElementById('sidebar-rail-tooltip');
     if (!tooltip) {
@@ -1753,7 +1895,7 @@ const App = {
   },
 
   updateDashboardQuote(forceNew = false) {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const subtitleEl = document.getElementById('dashboard-subtitle');
     if (!subtitleEl) return;
 
@@ -1784,7 +1926,7 @@ const App = {
   },
 
   shuffleDashboardQuote() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const subtitleEl = document.getElementById('dashboard-subtitle');
     if (subtitleEl && subtitleEl.style) {
       subtitleEl.style.opacity = '0';
@@ -2023,7 +2165,7 @@ const App = {
 
   // Système de Toasts / Notifications Windows
   showToast(message, type = 'info') {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
     const container = document.getElementById('toast-container');
     if (!container) return;
 

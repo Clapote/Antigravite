@@ -2,7 +2,7 @@
   {
     "id": "note-1",
     "title": "Principes fondateurs d'Antigravité",
-    "folder": "Méthode",
+    "folder": "Général",
     "tags": ["architecture", "antigravite", "principes"],
     "linkedProjectId": "proj-1",
     "linkedTaskId": null,
@@ -13,7 +13,7 @@
   {
     "id": "note-2",
     "title": "Idées d'évolutions futures",
-    "folder": "Projets",
+    "folder": "Général",
     "tags": ["roadmap", "google-calendar", "obsidian"],
     "linkedProjectId": "proj-1",
     "linkedTaskId": null,

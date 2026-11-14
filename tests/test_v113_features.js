@@ -496,9 +496,10 @@ async function runTests() {
 
   await it("9.2 NotesManager.renderEventSelector trie chronologiquement et affiche la date/heure au début", () => {
     const NotesManager = require('../js/notes.js');
+    const futureDateStr = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
     const testEvents = [
-      { id: 'evt-later', title: 'Réunion Plus Tard', start: '2026-11-20T16:00' },
-      { id: 'evt-earlier', title: 'Réunion Plus Tôt', start: '2026-11-20T09:00' },
+      { id: 'evt-later', title: 'Réunion Plus Tard', start: `${futureDateStr}T16:00` },
+      { id: 'evt-earlier', title: 'Réunion Plus Tôt', start: `${futureDateStr}T09:00` },
       { id: 'evt-past', title: 'Réunion Passée', start: '2025-01-01T14:00' }
     ];
     StorageManager.saveEvents(testEvents);
@@ -514,25 +515,27 @@ async function runTests() {
 
     // Simulation de optgroup et option pour createElement dans node
     const origCreate = global.document.createElement;
-    global.document.createElement = (tag) => {
-      const el = {
-        tagName: tag.toUpperCase(),
-        children: [],
-        appendChild(child) { this.children.push(child); }
+    try {
+      global.document.createElement = (tag) => {
+        const el = {
+          tagName: tag.toUpperCase(),
+          children: [],
+          appendChild(child) { this.children.push(child); }
+        };
+        return el;
       };
-      return el;
-    };
 
-    NotesManager.renderEventSelector(null);
+      NotesManager.renderEventSelector(null);
 
-    // Vérifier que les créneaux à venir sont bien ordonnés (09:00 avant 16:00)
-    const grpUpcoming = selectEl.children.find(g => g.label && g.label.includes("venir"));
-    assert(grpUpcoming && grpUpcoming.children.length === 2, "2 événements dans le groupe à venir");
-    assert(grpUpcoming.children[0].textContent.includes('09:00'), "L'événement de 09:00 est en premier");
-    assert(grpUpcoming.children[1].textContent.includes('16:00'), "L'événement de 16:00 est en second");
-    assert(grpUpcoming.children[0].textContent.startsWith('Ven.'), "Le libellé commence par le jour et la date");
-
-    global.document.createElement = origCreate;
+      // Vérifier que les créneaux à venir sont bien ordonnés (09:00 avant 16:00)
+      const grpUpcoming = selectEl.children.find(g => g.label && g.label.includes("venir"));
+      assert(grpUpcoming && grpUpcoming.children.length === 2, "2 événements dans le groupe à venir");
+      assert(grpUpcoming.children[0].textContent.includes('09:00'), "L'événement de 09:00 est en premier");
+      assert(grpUpcoming.children[1].textContent.includes('16:00'), "L'événement de 16:00 est en second");
+      assert(grpUpcoming.children[0].textContent.includes('/'), "Le libellé comporte la date formatée");
+    } finally {
+      global.document.createElement = origCreate;
+    }
   });
 
   await it("9.3 Signification de l'appartenance à un projet par la couleur (Tâches et Notes)", () => {
@@ -563,59 +566,75 @@ async function runTests() {
     domStore['tasks-tree-container'] = treeContainer;
 
     const origCreate = global.document.createElement;
-    global.document.createElement = (tag) => {
-      return {
-        tagName: tag.toUpperCase(),
-        className: '',
-        style: {
-          setProperty() {}
-        },
-        dataset: {},
-        children: [],
-        appendChild(c) { this.children.push(c); },
-        addEventListener() {},
-        querySelectorAll() { return []; },
-        querySelector() { return null; }
+    try {
+      global.document.createElement = (tag) => {
+        return {
+          tagName: tag.toUpperCase(),
+          className: '',
+          style: {
+            setProperty() {}
+          },
+          dataset: {},
+          attributes: {},
+          setAttribute(k, v) { this.attributes[k] = v; },
+          getAttribute(k) { return this.attributes[k] || null; },
+          children: [],
+          appendChild(c) { this.children.push(c); },
+          addEventListener() {},
+          querySelectorAll() { return []; },
+          querySelector() { return null; }
+        };
       };
-    };
 
-    TasksManager.render();
-    assert(capturedItemStyle && capturedItemStyle.borderLeft && capturedItemStyle.borderLeft.includes('#10b981'), "La tâche prend la couleur de son projet en bordure gauche");
+      TasksManager.render();
+      assert(capturedItemStyle && capturedItemStyle.borderLeft && capturedItemStyle.borderLeft.includes('#10b981'), "La tâche prend la couleur de son projet en bordure gauche");
 
-    // Test Note
-    const testNote = {
-      id: 'note-colored',
-      title: 'Note avec couleur',
-      projectId: 'proj-emerald',
-      content: 'Contenu'
-    };
-    StorageManager.saveNotes([testNote]);
+      // Test Note
+      const testNote = {
+        id: 'note-colored',
+        title: 'Note avec couleur',
+        projectId: 'proj-emerald',
+        content: 'Contenu'
+      };
+      StorageManager.saveNotes([testNote]);
 
-    let capturedNoteStyle = null;
-    const notesListContainer = {
-      innerHTML: '',
-      appendChild(item) {
-        capturedNoteStyle = item.style;
-      }
-    };
-    domStore['notes-list-container'] = notesListContainer;
+      let capturedNoteStyle = null;
+      const notesListContainer = {
+        innerHTML: '',
+        appendChild(item) {
+          const findNote = (el) => {
+            if (el && el.className && el.className.includes('note-item')) return el;
+            if (el && el.children) {
+              for (const c of el.children) {
+                const res = findNote(c);
+                if (res) return res;
+              }
+            }
+            return null;
+          };
+          const found = findNote(item);
+          capturedNoteStyle = found ? found.style : item.style;
+        }
+      };
+      domStore['notes-list-container'] = notesListContainer;
 
-    NotesManager.renderNotesList();
-    assert(capturedNoteStyle && capturedNoteStyle.borderLeft && capturedNoteStyle.borderLeft.includes('#10b981'), "La note prend la couleur de son projet en bordure gauche");
+      NotesManager.renderNotesList();
+      assert(capturedNoteStyle && capturedNoteStyle.borderLeft && capturedNoteStyle.borderLeft.includes('#10b981'), "La note prend la couleur de son projet en bordure gauche");
 
-    // Test Note Project Selector
-    const projSelect = {
-      innerHTML: '',
-      style: {},
-      children: [],
-      appendChild(opt) { this.children.push(opt); }
-    };
-    domStore['note-input-project'] = projSelect;
+      // Test Note Project Selector
+      const projSelect = {
+        innerHTML: '',
+        style: {},
+        children: [],
+        appendChild(opt) { this.children.push(opt); }
+      };
+      domStore['note-input-project'] = projSelect;
 
-    NotesManager.renderProjectSelector(testNote);
-    assert.strictEqual(projSelect.style.borderColor, '#10b981', "Le sélecteur de projet est bordé de la couleur du projet");
-
-    global.document.createElement = origCreate;
+      NotesManager.renderProjectSelector(testNote);
+      assert.strictEqual(projSelect.style.borderColor, '#10b981', "Le sélecteur de projet est bordé de la couleur du projet");
+    } finally {
+      global.document.createElement = origCreate;
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -1350,8 +1369,8 @@ async function runTests() {
 
     // 25.4 Logique de calcul et création des segments colorés dans app.js
     assert(appCode.includes("updateSidebarDayProgress()"), "Méthode updateSidebarDayProgress présente dans App");
-    assert(appCode.includes("const dayStartMin = 7 * 60;"), "Début de journée calibré à 07h00");
-    assert(appCode.includes("const dayEndMin = 23 * 60;"), "Fin de journée calibrée à 23h00");
+    assert(appCode.includes("const dayStartMin = 0;") || appCode.includes("dayStartMin = 0"), "Début de journée calibré à minuit (00h00)");
+    assert(appCode.includes("const dayEndMin = 24 * 60;") || appCode.includes("dayEndMin = 24 * 60"), "Fin de journée calibrée à minuit (24h00)");
     assert(appCode.includes("sidebar-day-event-segment"), "Segments d'événements créés avec classe sidebar-day-event-segment");
     assert(appCode.includes("sidebar-day-cursor"), "Indicateur vertical d'heure actuelle sidebar-day-cursor présent");
 
@@ -1752,79 +1771,81 @@ async function runTests() {
     ]);
 
     const origCreate = global.document.createElement;
-    global.document.createElement = (tag) => {
-      const el = {
-        tagName: tag.toUpperCase(),
-        className: '',
-        style: {},
-        dataset: {},
-        classList: {
-          _classes: new Set(),
-          add(c) { this._classes.add(c); },
-          remove(c) { this._classes.delete(c); },
-          contains(c) { return this._classes.has(c); },
-          toggle(c, cond) { if (cond !== undefined ? cond : !this._classes.has(c)) this._classes.add(c); else this._classes.delete(c); }
-        },
-        attributes: {},
-        eventListeners: {},
-        setAttribute(k, v) { this.attributes[k] = v; },
-        getAttribute(k) { return this.attributes[k]; },
-        removeAttribute(k) { delete this.attributes[k]; },
-        addEventListener(evt, fn) { this.eventListeners[evt] = fn; },
-        remove() {
-          const idx = trackChildren.indexOf(this);
-          if (idx !== -1) trackChildren.splice(idx, 1);
+    try {
+      global.document.createElement = (tag) => {
+        const el = {
+          tagName: tag.toUpperCase(),
+          className: '',
+          style: {},
+          dataset: {},
+          classList: {
+            _classes: new Set(),
+            add(c) { this._classes.add(c); },
+            remove(c) { this._classes.delete(c); },
+            contains(c) { return this._classes.has(c); },
+            toggle(c, cond) { if (cond !== undefined ? cond : !this._classes.has(c)) this._classes.add(c); else this._classes.delete(c); }
+          },
+          attributes: {},
+          eventListeners: {},
+          setAttribute(k, v) { this.attributes[k] = v; },
+          getAttribute(k) { return this.attributes[k]; },
+          removeAttribute(k) { delete this.attributes[k]; },
+          addEventListener(evt, fn) { this.eventListeners[evt] = fn; },
+          remove() {
+            const idx = trackChildren.indexOf(this);
+            if (idx !== -1) trackChildren.splice(idx, 1);
+          }
+        };
+        return el;
+      };
+
+      trackChildren.length = 0;
+      App.updateSidebarDayProgress(today);
+
+      const segments = trackChildren.filter(c => c.className === 'sidebar-day-event-segment');
+      assert(segments.length >= 1, "Un segment d'événement a été créé et injecté dans la frise");
+      const seg = segments[0];
+      assert.strictEqual(seg.style.backgroundColor, '#f59e0b', "La couleur de l'événement est appliquée au segment");
+      assert(parseFloat(seg.style.left) > 0, "Le décalage horizontal (left) est calculé pour 09h00");
+      assert(parseFloat(seg.style.width) > 0, "La largeur (width) est calculée pour 2h de durée");
+      assert(seg.getAttribute('title').includes('Atelier Design'), "Le titre de l'événement est présent dans l'attribut title");
+
+      // 33.4 Fenêtre d'information flottante (tooltip) respectant la charte graphique
+      const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+      const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
+      assert(css.includes('.sidebar-event-tooltip'), "Styles .sidebar-event-tooltip présents dans styles.css");
+      assert(css.includes('.sidebar-event-tooltip-badge'), "Styles .sidebar-event-tooltip-badge présents dans styles.css");
+      assert(css.includes('.sidebar-event-tooltip-title'), "Styles .sidebar-event-tooltip-title présents dans styles.css");
+      assert(appCode.includes("showTimelineTooltip("), "Méthode showTimelineTooltip présente dans App");
+      assert(appCode.includes("hideTimelineTooltip()"), "Méthode hideTimelineTooltip présente dans App");
+
+      // Simuler le survol du segment (mouseenter)
+      let createdTooltip = null;
+      domStore['sidebar-day-event-tooltip'] = null;
+      global.document.body = global.document.body || {
+        appendChild(child) {
+          createdTooltip = child;
         }
       };
-      return el;
-    };
 
-    trackChildren.length = 0;
-    App.updateSidebarDayProgress(today);
-
-    const segments = trackChildren.filter(c => c.className === 'sidebar-day-event-segment');
-    assert(segments.length >= 1, "Un segment d'événement a été créé et injecté dans la frise");
-    const seg = segments[0];
-    assert.strictEqual(seg.style.backgroundColor, '#f59e0b', "La couleur de l'événement est appliquée au segment");
-    assert(parseFloat(seg.style.left) > 0, "Le décalage horizontal (left) est calculé pour 09h00");
-    assert(parseFloat(seg.style.width) > 0, "La largeur (width) est calculée pour 2h de durée");
-    assert(seg.getAttribute('title').includes('Atelier Design'), "Le titre de l'événement est présent dans l'attribut title");
-
-    // 33.4 Fenêtre d'information flottante (tooltip) respectant la charte graphique
-    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
-    const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
-    assert(css.includes('.sidebar-event-tooltip'), "Styles .sidebar-event-tooltip présents dans styles.css");
-    assert(css.includes('.sidebar-event-tooltip-badge'), "Styles .sidebar-event-tooltip-badge présents dans styles.css");
-    assert(css.includes('.sidebar-event-tooltip-title'), "Styles .sidebar-event-tooltip-title présents dans styles.css");
-    assert(appCode.includes("showTimelineTooltip("), "Méthode showTimelineTooltip présente dans App");
-    assert(appCode.includes("hideTimelineTooltip()"), "Méthode hideTimelineTooltip présente dans App");
-
-    // Simuler le survol du segment (mouseenter)
-    let createdTooltip = null;
-    domStore['sidebar-day-event-tooltip'] = null;
-    global.document.body = global.document.body || {
-      appendChild(child) {
-        createdTooltip = child;
+      if (seg.eventListeners && seg.eventListeners['mouseenter']) {
+        seg.eventListeners['mouseenter']();
+        const tooltip = createdTooltip || domStore['sidebar-day-event-tooltip'];
+        assert(tooltip, "La fenêtre d'information a été créée au survol du segment");
+        assert(tooltip.innerHTML.includes('Atelier Design'), "L'infobulle affiche le titre de l'événement");
+        assert(tooltip.innerHTML.includes('09:00 - 11:00'), "L'infobulle affiche le créneau horaire");
+        assert(tooltip.innerHTML.includes('#f59e0b'), "L'infobulle intègre la couleur d'accentuation du projet/créneau");
+        assert(tooltip.classList.contains('visible'), "La classe 'visible' est appliquée à l'infobulle");
       }
-    };
 
-    if (seg.eventListeners && seg.eventListeners['mouseenter']) {
-      seg.eventListeners['mouseenter']();
-      const tooltip = createdTooltip || domStore['sidebar-day-event-tooltip'];
-      assert(tooltip, "La fenêtre d'information a été créée au survol du segment");
-      assert(tooltip.innerHTML.includes('Atelier Design'), "L'infobulle affiche le titre de l'événement");
-      assert(tooltip.innerHTML.includes('09:00 - 11:00'), "L'infobulle affiche le créneau horaire");
-      assert(tooltip.innerHTML.includes('#f59e0b'), "L'infobulle intègre la couleur d'accentuation du projet/créneau");
-      assert(tooltip.classList.contains('visible'), "La classe 'visible' est appliquée à l'infobulle");
+      if (seg.eventListeners && seg.eventListeners['mouseleave']) {
+        seg.eventListeners['mouseleave']();
+        const tooltip = createdTooltip || domStore['sidebar-day-event-tooltip'];
+        assert(!tooltip.classList.contains('visible'), "La classe 'visible' est retirée à la sortie du curseur");
+      }
+    } finally {
+      global.document.createElement = origCreate;
     }
-
-    if (seg.eventListeners && seg.eventListeners['mouseleave']) {
-      seg.eventListeners['mouseleave']();
-      const tooltip = createdTooltip || domStore['sidebar-day-event-tooltip'];
-      assert(!tooltip.classList.contains('visible'), "La classe 'visible' est retirée à la sortie du curseur");
-    }
-
-    global.document.createElement = origCreate;
   });
 
   // ---------------------------------------------------------------------------
@@ -2656,6 +2677,511 @@ async function runTests() {
       global.SettingsManager = prevSettingsManager;
       window.AntigraviteAPI = prevAntigraviteApi;
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 44. Correctifs d'usage v1.2.0 (Orthographe, Liaison Notes/Agenda, Fond tâches, Top-bar)
+  // ---------------------------------------------------------------------------
+
+  await it("44.1 Correction orthographique & menu contextuel d'édition dans main.js", () => {
+    const mainCode = fs.readFileSync(path.join(rootDir, 'main.js'), 'utf8');
+    assert(mainCode.includes("webContents.on('context-menu'"), "Écouteur d'événement context-menu sur mainWindow.webContents présent");
+    assert(mainCode.includes('replaceMisspelling'), "Remplacement du mot mal orthographié présent dans le menu");
+    assert(mainCode.includes('addWordToSpellcheckerDictionary'), "Option d'ajout au dictionnaire présente");
+    assert(mainCode.includes("role: 'copy'") && mainCode.includes("role: 'paste'"), "Actions standards de presse-papier présentes");
+  });
+
+  await it("44.2 Liaison bidirectionnelle stricte Notes <-> Agenda", () => {
+    const NotesManager = require('../js/notes.js');
+    const AgendaManager = require('../js/agenda.js');
+
+    const testEvent = {
+      id: 'evt-bidir-1',
+      title: 'Séance de travail partagée',
+      start: '2026-11-25T10:00',
+      end: '2026-11-25T11:30',
+      noteId: null
+    };
+    StorageManager.saveEvents([testEvent]);
+
+    const testNote = {
+      id: 'note-bidir-1',
+      title: 'Compte-rendu de séance',
+      content: 'Points abordés...',
+      linkedEventId: null
+    };
+    StorageManager.saveNotes([testNote]);
+
+    NotesManager.currentNoteId = testNote.id;
+    // Liaison depuis l'onglet Note
+    NotesManager.linkCurrentNoteToEvent(testEvent.id);
+
+    // 1. La note doit pointer vers l'événement
+    const savedNotes = StorageManager.getNotes();
+    const updatedNote = savedNotes.find(n => n.id === testNote.id);
+    assert.strictEqual(updatedNote.linkedEventId, testEvent.id, "La note est reliée à l'événement");
+
+    // 2. L'événement d'agenda doit réciproquement pointer vers la note
+    const savedEvents = StorageManager.getEvents();
+    const updatedEvt = savedEvents.find(e => e.id === testEvent.id);
+    assert.strictEqual(updatedEvt.noteId, testNote.id, "L'événement d'agenda est réciproquement relié à la note");
+
+    // 3. Dissociation depuis l'Agenda
+    AgendaManager.syncNoteEventLink(testEvent.id, null);
+    const notesAfterUnlink = StorageManager.getNotes();
+    assert.strictEqual(notesAfterUnlink.find(n => n.id === testNote.id).linkedEventId, null, "La note est dissociée");
+  });
+
+  await it("44.3 Suppression du fond de boîte conteneur derrière les items de tâche dans css/styles.css", () => {
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+    assert(css.includes('.task-tree {') && css.includes('background: transparent !important;'), ".task-tree est forcé en fond transparent sans boîte opaque");
+    assert(!css.includes('body.has-custom-wallpaper .task-tree,'), "La classe .task-tree a été retirée des conteneurs opaques de fond d'écran");
+    assert(!css.includes('[data-glass="solid"] .task-tree,'), "La classe .task-tree a été retirée des cartes opaques solides");
+  });
+
+  await it("44.4 Dégagement sécurisé de la barre supérieure sous les contrôles Windows (Réduire/Agrandir/Fermer)", () => {
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+    assert(css.includes('padding-right: 165px;'), "Dégagement par défaut de la top-bar d'au moins 165px");
+    assert(css.includes('[data-density="compact"] .top-bar {') && css.includes('165px'), "Densité compacte préserve le dégagement de 165px pour les boutons natifs");
+    assert(css.includes('.top-bar-actions {') && css.includes('margin-left: auto;'), ".top-bar-actions positionné proprement avec marge auto");
+  });
+
+  await it("45.1 Défilement horizontal sur réduction de fenêtre sans déplacer le volet latéral", () => {
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+    const mainJs = fs.readFileSync(path.join(rootDir, 'main.js'), 'utf8');
+
+    // Vérification que le minWidth d'Electron permet la réduction de fenêtre
+    assert(mainJs.includes('minWidth: 720'), "main.js autorise la réduction de la fenêtre principale avec minWidth: 720");
+
+    // Vérification du conteneur #main-content avec overflow horizontal
+    assert(css.includes('#main-content {') && css.includes('overflow-x: auto;'), "#main-content dispose de overflow-x: auto");
+    assert(css.includes('overflow-y: hidden;'), "#main-content empêche le double scroll vertical");
+
+    // Vérification que les vues et la top-bar définissent une largeur minimale pour déclencher le défilement
+    assert(css.includes('.top-bar {') && css.includes('min-width: 860px;'), ".top-bar a min-width: 860px pour rester alignée");
+    assert(css.includes('.screen-view {') && css.includes('min-width: 860px;'), ".screen-view a min-width: 860px");
+
+    // Vérification que le sidebar reste fixe et indépendant du scroll
+    assert(css.includes('#sidebar {') && css.includes('flex-shrink: 0;'), "#sidebar est figé avec flex-shrink: 0");
+    assert(css.includes('#sidebar {') && css.includes('overflow-x: hidden;'), "#sidebar ne défile jamais horizontalement");
+  });
+
+  await it("45.2 Modale de créneau d'agenda anti-coupure et défilement vertical complet", () => {
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+
+    assert(css.includes('#event-modal .modal-content-lg') && css.includes('max-height: calc(100vh - 48px);'), "La modale d'événement est bornée en hauteur");
+    assert(css.includes('#event-modal .modal-body') && css.includes('overflow-y: auto;'), "Le corps de la modale d'événement possède son propre défilement vertical");
+
+    // Champs de création directe de tâche et liaison de projet
+    assert(html.includes('id="event-check-create-task"'), "Case à cocher pour créer une tâche simultanée");
+    assert(html.includes('id="event-task-project"'), "Sélecteur de projet pour la tâche créée dans l'agenda");
+    assert(html.includes('id="event-task-priority"'), "Sélecteur de priorité pour la tâche créée dans l'agenda");
+  });
+
+  await it("45.3 Récurrence avec fin paramétrable (Pour toujours vs Date limite)", () => {
+    const AgendaManager = require('../js/agenda.js');
+
+    // 1. Événement récurrent hebdomadaire "Pour toujours" (recurrenceEnd: null)
+    const infiniteEvt = AgendaManager.addEvent({
+      title: 'Point d\'équipe récurrent infini',
+      start: '2026-11-02T10:00',
+      end: '2026-11-02T11:00',
+      recurrence: 'weekly',
+      recurrenceEnd: null
+    });
+    assert.strictEqual(infiniteEvt.recurrence, 'weekly');
+    assert.strictEqual(infiniteEvt.recurrenceEnd, null);
+
+    // Vérification que le créneau se répète les lundis même 6 mois plus tard
+    assert.strictEqual(AgendaManager.isEventOnDate(infiniteEvt, '2026-11-02'), true, "Premier lundi");
+    assert.strictEqual(AgendaManager.isEventOnDate(infiniteEvt, '2026-11-09'), true, "Deuxième lundi");
+    assert.strictEqual(AgendaManager.isEventOnDate(infiniteEvt, '2027-05-03'), true, "Lundi dans le futur lointain");
+    assert.strictEqual(AgendaManager.isEventOnDate(infiniteEvt, '2026-11-10'), false, "Mardi (non récurrent)");
+
+    // 2. Événement récurrent hebdomadaire avec date limite (recurrenceEnd: '2026-11-16')
+    const finiteEvt = AgendaManager.addEvent({
+      title: 'Cours récurrent limité',
+      start: '2026-11-02T14:00',
+      end: '2026-11-02T16:00',
+      recurrence: 'weekly',
+      recurrenceEnd: '2026-11-16'
+    });
+    assert.strictEqual(finiteEvt.recurrenceEnd, '2026-11-16');
+
+    // Doit être actif le 2 et le 9 et le 16 novembre, mais inactif à partir du 23 novembre
+    assert.strictEqual(AgendaManager.isEventOnDate(finiteEvt, '2026-11-02'), true, "2 nov actif");
+    assert.strictEqual(AgendaManager.isEventOnDate(finiteEvt, '2026-11-09'), true, "9 nov actif");
+    assert.strictEqual(AgendaManager.isEventOnDate(finiteEvt, '2026-11-16'), true, "16 nov (dernier jour) actif");
+    assert.strictEqual(AgendaManager.isEventOnDate(finiteEvt, '2026-11-23'), false, "23 nov (après date limite) inactif");
+
+    // 3. Mise à jour de la date de fin via updateEvent
+    AgendaManager.updateEvent(finiteEvt.id, {
+      title: 'Cours récurrent limité prolongé',
+      recurrenceEnd: '2026-11-30'
+    });
+    const updated = AgendaManager.getAll().find(e => e.id === finiteEvt.id);
+    assert.strictEqual(updated.recurrenceEnd, '2026-11-30');
+    assert.strictEqual(AgendaManager.isEventOnDate(updated, '2026-11-23'), true, "23 nov devient actif après prolongation");
+    assert.strictEqual(AgendaManager.isEventOnDate(updated, '2026-11-30'), true, "30 nov actif");
+    assert.strictEqual(AgendaManager.isEventOnDate(updated, '2026-12-07'), false, "7 déc inactif");
+
+    // 4. Passage de récurrent à 'none' réinitialise recurrenceEnd à null
+    AgendaManager.updateEvent(finiteEvt.id, {
+      title: 'Créneau devenu unique',
+      recurrence: 'none'
+    });
+    const uniqueEvt = AgendaManager.getAll().find(e => e.id === finiteEvt.id);
+    assert.strictEqual(uniqueEvt.recurrence, 'none');
+    assert.strictEqual(uniqueEvt.recurrenceEnd, null, "recurrenceEnd réinitialisé à null quand recurrence='none'");
+
+    // Nettoyage des événements de test
+    AgendaManager.deleteEvent(infiniteEvt.id);
+    AgendaManager.deleteEvent(finiteEvt.id);
+  });
+
+  await it("45.4 Redesign esthétique et ordonné de la modale de créneau d'agenda", () => {
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+
+    // Section 1 : Titre & Couleur
+    assert(html.includes('class="event-modal-section event-modal-main-info"'), "Section 1 : Titre & Couleur");
+    assert(html.includes('id="event-input-title"'), "Champ de titre principal");
+    assert(html.includes('id="event-color-swatches"'), "Palette de pastilles de couleurs");
+
+    // Section 2 : Planification & Récurrence
+    assert(html.includes('id="event-input-start"') && html.includes('id="event-input-end"'), "Champs Début et Fin");
+    assert(html.includes('id="event-input-allday"'), "Case Journée entière");
+    assert(html.includes('id="event-input-recurrence"'), "Sélecteur de récurrence");
+    assert(html.includes('id="event-recurrence-end-container"'), "Conteneur fin de récurrence");
+    assert(html.includes('id="btn-rec-end-forever"'), "Bouton Pour toujours");
+    assert(html.includes('id="btn-rec-end-date"'), "Bouton Jusqu'au date");
+    assert(html.includes('id="event-input-recurrence-end"'), "Champ de date de fin de récurrence");
+
+    // Section 3 : Lieu & Description
+    assert(html.includes('id="event-input-location"'), "Champ Lieu avec préfixe icône");
+    assert(html.includes('id="event-input-desc"'), "Zone de texte Description");
+
+    // Section 4 : Liaisons Antigravité
+    assert(html.includes('class="event-modal-section event-modal-links-section"'), "Section 4 : Liaisons Antigravité");
+    assert(html.includes('id="event-input-task"'), "Sélecteur tâche rattachée");
+    assert(html.includes('id="btn-event-open-task"'), "Bouton voir tâche");
+    assert(html.includes('id="event-input-note"'), "Sélecteur note associée");
+    assert(html.includes('id="btn-event-open-note"'), "Bouton ouvrir note");
+  });
+
+  await it("46.1 Amplitude 24h de l'Agenda (minuit à minuit) avec focus visuel sur les heures normales (07h00)", () => {
+    const agendaCode = fs.readFileSync(path.join(rootDir, 'js', 'agenda.js'), 'utf8');
+    const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
+
+    // Vérifier les constantes de l'objet AgendaManager
+    assert(agendaCode.includes('dayHoursStart: 0'), "dayHoursStart est configuré à 0 (minuit)");
+    assert(agendaCode.includes('dayHoursEnd: 24'), "dayHoursEnd est configuré à 24 (minuit - 24h complètes)");
+
+    // Méthode scrollToNormalHours présente
+    assert(agendaCode.includes('scrollToNormalHours(smooth = false)'), "Méthode scrollToNormalHours définie");
+    assert(agendaCode.includes('Math.round(7 * (this.slotHeight || 50))'), "Focus calculé sur 07h00");
+
+    // Préservation du défilement et restauration
+    assert(agendaCode.includes('_preserveScrollTop'), "Mémorisation du scroll utilisateur active");
+    assert(agendaCode.includes('_lastScrollTop'), "Historique de scroll conservé");
+
+    // Intégration dans App.navigate('agenda')
+    assert(appCode.includes("screenId === 'agenda'"), "Navigation agenda gérée");
+    assert(appCode.includes("AgendaManager.scrollToNormalHours"), "Appel de centrage automatique sur 07h00");
+  });
+
+  await it("46.2 Modale de créneau d'agenda anti-troncature des options et champs larges", () => {
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+
+    // Modale élargie à 720px
+    assert(css.includes('max-width: 720px;'), "Modale d'événement élargie à 720px pour un confort de lecture optimal");
+
+    // Section Liaisons Antigravité en pile verticale pleine largeur
+    assert(html.includes('class="event-links-stack"'), "Structure en pile verticale event-links-stack présente");
+    assert(html.includes('class="event-link-row-card"'), "Cartes pleine largeur pour tâche et note");
+    assert(css.includes('.event-links-stack'), "Styles de pile verticale event-links-stack définis dans css");
+    assert(css.includes('.event-link-row-card'), "Styles de carte event-link-row-card définis dans css");
+
+    // Sélecteurs configurés pour un affichage lisible sans coupure
+    assert(css.includes('.event-full-select'), "Classe event-full-select présente");
+    assert(css.includes('.event-select-link'), "Classe event-select-link présente");
+    assert(css.includes('font-size: 0.84rem;'), "Taille de police optimisée pour sélecteurs d'événements");
+    assert(css.includes('text-overflow: ellipsis;'), "Gestion anti-débordement par ellipsis sur les sélecteurs");
+  });
+
+  await it("47.1 Réorganisation par glisser-déposer des onglets du volet latéral (Persistance et défauts)", () => {
+    const storageCode = fs.readFileSync(path.join(rootDir, 'js', 'storage.js'), 'utf8');
+    const settingsJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'data', 'settings.json'), 'utf8'));
+
+    // sidebarTabsOrder présent dans DEFAULT_SETTINGS
+    assert(storageCode.includes('sidebarTabsOrder:'), "sidebarTabsOrder présent dans DEFAULT_SETTINGS");
+    assert(Array.isArray(settingsJson.sidebarTabsOrder), "sidebarTabsOrder est un tableau dans settings.json");
+    assert.strictEqual(settingsJson.sidebarTabsOrder.length, 8, "Les 8 onglets configurables sont listés par défaut");
+    assert(settingsJson.sidebarTabsOrder.includes('tasks'), "Tâches présent dans l'ordre par défaut");
+    assert(settingsJson.sidebarTabsOrder.includes('agenda'), "Agenda présent dans l'ordre par défaut");
+    assert(settingsJson.sidebarTabsOrder.includes('notes'), "Notes présent dans l'ordre par défaut");
+  });
+
+  await it("47.2 Application de la disposition personnalisée sur le menu du volet latéral (App.applySidebarTabsOrder)", () => {
+    const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
+
+    // Vérifier la méthode applySidebarTabsOrder
+    assert(appCode.includes('applySidebarTabsOrder(order)'), "Méthode applySidebarTabsOrder définie dans App");
+    assert(appCode.includes('settingsItem'), "Point d'ancrage Paramètres respecté");
+    assert(appCode.includes('navMenu.insertBefore(item, settingsItem)'), "Réagencement propre des items avant Paramètres");
+    assert(appCode.includes('this.applySidebarTabsOrder(settings.sidebarTabsOrder)'), "Appelé lors de l'application des réglages");
+
+    // Test unitaire de re-ordonnancement DOM simulé
+    const customOrder = ['notes', 'tasks', 'music', 'agenda', 'projects', 'focus', 'trash', 'backups'];
+    const fakeNavMenu = {
+      children: [
+        { dataset: { screen: 'home' } },
+        { dataset: { screen: 'tasks' } },
+        { dataset: { screen: 'projects' } },
+        { dataset: { screen: 'agenda' } },
+        { dataset: { screen: 'notes' } },
+        { dataset: { screen: 'focus' } },
+        { dataset: { screen: 'music' } },
+        { dataset: { screen: 'trash' } },
+        { dataset: { screen: 'backups' } },
+        { dataset: { screen: 'settings' } }
+      ],
+      querySelector(selector) {
+        const match = selector.match(/data-screen="([^"]+)"/);
+        if (match) {
+          return this.children.find(c => c.dataset.screen === match[1]) || null;
+        }
+        return null;
+      },
+      insertBefore(item, ref) {
+        const fromIdx = this.children.indexOf(item);
+        if (fromIdx !== -1) this.children.splice(fromIdx, 1);
+        const toIdx = this.children.indexOf(ref);
+        this.children.splice(toIdx, 0, item);
+      }
+    };
+
+    const settingsItem = fakeNavMenu.querySelector('.nav-item[data-screen="settings"]');
+    customOrder.forEach(screenId => {
+      const item = fakeNavMenu.querySelector(`.nav-item[data-screen="${screenId}"]`);
+      if (item) fakeNavMenu.insertBefore(item, settingsItem);
+    });
+
+    const screensInOrder = fakeNavMenu.children.map(c => c.dataset.screen);
+    assert.strictEqual(screensInOrder[0], 'home', "Accueil reste en première position");
+    assert.strictEqual(screensInOrder[screensInOrder.length - 1], 'settings', "Paramètres reste en dernière position");
+    assert.strictEqual(screensInOrder[1], 'notes', "Le premier onglet réorganisé est bien Notes");
+    assert.strictEqual(screensInOrder[2], 'tasks', "Le deuxième onglet réorganisé est bien Tâches");
+    assert.strictEqual(screensInOrder[3], 'music', "Le troisième onglet réorganisé est bien Musique");
+  });
+
+  await it("47.3 Interface du carré des paramètres (glisser-déposer, poignées et styles)", () => {
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+    const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
+
+    // Structure HTML
+    assert(html.includes('class="sidebar-tab-toggle-card" draggable="true"'), "Cartes configurées avec draggable='true'");
+    assert(html.includes('class="tab-drag-handle"'), "Poignées de déplacement visuelles présentes");
+    assert(html.includes('id="btn-reset-sidebar-tabs-order"'), "Bouton de rétablissement de l'ordre par défaut présent");
+
+    // Styles CSS de glisser-déposer
+    assert(css.includes('.sidebar-tab-toggle-card.dragging'), "Styles de carte en cours de déplacement (.dragging)");
+    assert(css.includes('.sidebar-tab-toggle-card.drag-over-before'), "Indicateur avant drop (.drag-over-before)");
+    assert(css.includes('.sidebar-tab-toggle-card.drag-over-after'), "Indicateur après drop (.drag-over-after)");
+    assert(css.includes('.tab-drag-handle'), "Styles de poignée de glissement");
+
+    // Logique JS dans SettingsManager
+    assert(settingsCode.includes('initSidebarTabsDragAndDrop()'), "Méthode initSidebarTabsDragAndDrop présente");
+    assert(settingsCode.includes('btn-reset-sidebar-tabs-order'), "Gestion du bouton de réinitialisation");
+    assert(settingsCode.includes('currentSettings.sidebarTabsOrder = newOrder'), "Sauvegarde du nouvel ordre dans les réglages");
+  });
+
+  await it("47.4 Agenda : Indicateur visuel des tâches achevées et pastille '✓ Fait'", () => {
+    const agendaCode = fs.readFileSync(path.join(rootDir, 'js', 'agenda.js'), 'utf8');
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+
+    assert(agendaCode.includes('task-completed-event'), "Classe task-completed-event injectée sur les événements");
+    assert(agendaCode.includes('event-done-pill'), "Pastille event-done-pill présente pour signaler la tâche accomplie");
+    assert(agendaCode.includes('task-completed-pill'), "Pastille de mois task-completed-pill prise en compte");
+    assert(css.includes('.calendar-event.task-completed-event'), "Styles CSS pour créneau d'agenda achevé");
+  });
+
+  await it("47.5 Agenda : Raccourci clavier 'T' (revenir à aujourd'hui et 07h00)", () => {
+    const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+
+    assert(appCode.includes("e.key === 't' || e.key === 'T'"), "Écoute de la touche T dans app.js");
+    assert(appCode.includes('AgendaManager.navigateToday'), "Appel de navigateToday sur appui de T");
+    assert(html.includes('Revenir à aujourd\'hui (dans l\'Agenda)'), "Raccourci T documenté dans l'Aide");
+  });
+
+  await it("47.6 Note de mise à jour v1.2.1 présente dans le Changelog", () => {
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+
+    assert(html.includes('Version 1.2.1'), "Mention de Version 1.2.1 présente");
+    assert(html.includes('Correctifs d\'usage, confort &amp; personnalisation'), "Sous-titre de la version 1.2.1 présent");
+    assert(html.includes('Réorganisation des onglets par glisser-déposer'), "Section glisser-déposer présente");
+    assert(html.includes('Amplitude complète 24h'), "Section 24h présente");
+    assert(html.includes('Dossiers personnalisés pour les notes'), "Section dossiers de notes présente");
+    assert(html.includes('Fondu sonore doux'), "Section fondu sonore présente");
+    assert(html.includes('Pré-chargement instantané des écrans'), "Section pré-chargement présente");
+  });
+
+  // ---------------------------------------------------------------------------
+  // 48. Nouveautés v1.2.1 : Fondu sonore, Navigation Zero-Lag & Dossiers de Notes
+  // ---------------------------------------------------------------------------
+
+  await it("48.1 Fondu sonore doux (fade audio) dans MusicManager", async () => {
+    assert(typeof MusicManager._fadeAudioTo === 'function', "MusicManager._fadeAudioTo est bien défini");
+
+    // Test de l'atténuation progressive
+    let completed = false;
+    MusicManager.audio = {
+      volume: 0,
+      play() { return Promise.resolve(); },
+      pause() {}
+    };
+    MusicManager.volume = 0.8;
+
+    MusicManager._fadeAudioTo(0.8, 40, true, () => {
+      completed = true;
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 60));
+    assert(completed, "Le callback de fondu sonore a été invoqué");
+    assert(Math.abs(MusicManager.audio.volume - 0.8) < 0.05, "Le volume cible a bien été atteint");
+
+    // Test pause avec fondu
+    let paused = false;
+    MusicManager.audio.pause = () => { paused = true; };
+    MusicManager.isPlaying = true;
+    MusicManager.pause();
+    assert.strictEqual(MusicManager.isPlaying, false, "L'état isPlaying passe immédiatement à false");
+  });
+
+  await it("48.2 Pré-chargement instantané des écrans (App.preloadScreens)", () => {
+    assert(typeof App.preloadScreens === 'function', "App.preloadScreens est défini");
+
+    // Exécution sécurisée sans exception
+    App.preloadScreens();
+
+    const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
+    assert(appCode.includes('preloadScreens()'), "preloadScreens est invoqué au cycle de vie initial");
+    assert(appCode.includes('disableAnimations') && appCode.includes('potato'), "navigate prend en compte la désactivation des animations ou le mode potato");
+  });
+
+  await it("48.3 Gestion des dossiers dans l'onglet Notes avec persistance des liens", () => {
+    const NotesManager = require('../js/notes.js');
+    const defaultSettings = StorageManager.DEFAULT_SETTINGS;
+    assert(Array.isArray(defaultSettings.notesFolders), "DEFAULT_SETTINGS définit notesFolders");
+    assert(defaultSettings.notesFolders.includes('Général'), "notesFolders contient 'Général' par défaut");
+
+    const folders = NotesManager.getFolders();
+    assert(Array.isArray(folders), "NotesManager.getFolders() renvoie un tableau de dossiers");
+    assert(folders.includes('Général'), "Le dossier Général est présent");
+
+    // Création d'un nouveau dossier
+    const newFolderName = "Dossier Test 121";
+    const okCreate = NotesManager.createFolder(newFolderName);
+    assert(okCreate, "NotesManager.createFolder renvoie true");
+    assert(NotesManager.getFolders().includes(newFolderName), "Le nouveau dossier est bien enregistré");
+
+    // Création d'une note dans ce dossier liée à un projet et à un créneau
+    const testNote = {
+      id: 'note-folder-test-1',
+      title: 'Note Test Liens',
+      folder: newFolderName,
+      projectId: 'proj-demo',
+      linkedEventId: 'event-demo',
+      content: 'Contenu avec lien wikilink vers [[Autre Note]]'
+    };
+    StorageManager.saveNotes([testNote]);
+
+    // Renommage du dossier : la note doit suivre vers le nouveau nom
+    const renamedFolder = "Dossier Test Renommé";
+    NotesManager.renameFolder(newFolderName, renamedFolder);
+    assert(NotesManager.getFolders().includes(renamedFolder), "Le dossier renommé est présent");
+    assert(!NotesManager.getFolders().includes(newFolderName), "L'ancien nom de dossier n'est plus présent");
+
+    let savedNotes = StorageManager.getNotes();
+    let updatedNote = savedNotes.find(n => n.id === testNote.id);
+    assert.strictEqual(updatedNote.folder, renamedFolder, "La note a suivi le renommage du dossier");
+    assert.strictEqual(updatedNote.projectId, 'proj-demo', "Le projectId est scrupuleusement conservé");
+    assert.strictEqual(updatedNote.linkedEventId, 'event-demo', "Le linkedEventId est scrupuleusement conservé");
+    assert(updatedNote.content.includes('[[Autre Note]]'), "Les Wikilinks sont conservés");
+
+    // Suppression du dossier : la note bascule sur 'Général' sans être détruite
+    NotesManager.deleteFolder(renamedFolder);
+    assert(!NotesManager.getFolders().includes(renamedFolder), "Le dossier a bien été supprimé");
+    savedNotes = StorageManager.getNotes();
+    updatedNote = savedNotes.find(n => n.id === testNote.id);
+    assert.ok(updatedNote, "La note n'a pas été supprimée lors de la suppression de son dossier");
+    assert.strictEqual(updatedNote.folder, 'Général', "La note a été rebasculée en sécurité sur le dossier 'Général'");
+    assert.strictEqual(updatedNote.projectId, 'proj-demo', "Le lien projet perdure");
+    assert.strictEqual(updatedNote.linkedEventId, 'event-demo', "Le lien événement perdure");
+  });
+
+  await it("48.4 App.prompt unifié et menu contextuel des dossiers de notes", async () => {
+    assert(typeof App.prompt === 'function', "App.prompt est une méthode définie");
+
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    assert(html.includes('id="dialog-input"'), "Champ de saisie dialog-input présent dans dialog-modal");
+    assert(html.includes('id="notes-folder-context-menu"'), "Menu contextuel notes-folder-context-menu présent dans index.html");
+    assert(html.includes('id="btn-new-folder"'), "Bouton de création de dossier présent");
+
+    const notesCode = fs.readFileSync(path.join(rootDir, 'js', 'notes.js'), 'utf8');
+    assert(notesCode.includes('promptNewFolder()'), "promptNewFolder est défini dans notes.js");
+    assert(notesCode.includes('showFolderMenu('), "showFolderMenu est défini dans notes.js");
+    assert(notesCode.includes('Renommer le dossier'), "Option de renommage explicite dans le menu");
+    assert(notesCode.includes('Supprimer le dossier'), "Option de suppression explicite dans le menu");
+
+    // Test de simulation App.prompt
+    let inputEl = document.getElementById('dialog-input');
+    if (!inputEl) {
+      inputEl = { style: {}, value: '', focus() {}, select() {} };
+      domStore['dialog-input'] = inputEl;
+    }
+    const btnConfirm = document.getElementById('dialog-btn-confirm');
+
+    const promptPromise = App.prompt({
+      title: "Nouveau dossier",
+      message: "Nom :",
+      defaultValue: "Dossier Alpha"
+    });
+
+    if (btnConfirm && typeof btnConfirm.onclick === 'function') {
+      inputEl.value = "Dossier Alpha Saisi";
+      btnConfirm.onclick();
+    }
+
+    const promptRes = await promptPromise;
+    assert.strictEqual(promptRes, "Dossier Alpha Saisi", "App.prompt retourne la valeur saisie lors de la confirmation");
+  });
+
+  await it("48.5 Frise chronologique de la journée (minuit à minuit) et dossier unique Général par défaut", () => {
+    // 1. Unicité du dossier Général par défaut
+    const defaultSettings = StorageManager.DEFAULT_SETTINGS;
+    assert.deepStrictEqual(defaultSettings.notesFolders, ['Général'], "Seul le dossier Général existe par défaut");
+
+    const settingsJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'data', 'settings.json'), 'utf8'));
+    assert.deepStrictEqual(settingsJson.notesFolders, ['Général'], "data/settings.json ne contient que le dossier Général");
+
+    // 2. Intitulé dans les paramètres
+    const html = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    assert(html.includes('Frise chronologique de la journée</span>'), "Intitulé 'Frise chronologique de la journée' dans les paramètres");
+    assert(!html.includes('Frise chronologique de la journée (07h - 23h)'), "Mention 07h-23h retirée de l'intitulé de la frise");
+
+    // 3. Masquage du pourcentage et du temps restant
+    const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
+    assert(css.includes('.sidebar-day-progress-percent') && css.includes('display: none !important'), "Pourcentage et temps restant masqués en CSS");
+
+    // 4. Amplitude de minuit à minuit (1440 minutes) dans js/app.js
+    const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
+    assert(appCode.includes('dayStartMin = 0'), "dayStartMin commence à 0 (minuit)");
+    assert(appCode.includes('dayEndMin = 24 * 60'), "dayEndMin s'étend jusqu'à 24h (minuit)");
+    assert(appCode.includes('totalDayMin = 1440'), "totalDayMin couvre 1440 minutes");
   });
 
   console.log("==========================================================");

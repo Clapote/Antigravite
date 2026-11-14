@@ -23,6 +23,19 @@
     "trash": true,
     "backups": true
   },
+  "sidebarTabsOrder": [
+    "tasks",
+    "projects",
+    "agenda",
+    "notes",
+    "focus",
+    "music",
+    "trash",
+    "backups"
+  ],
+  "notesFolders": [
+    "Général"
+  ],
   "userName": "",
   "greetingMood": "mixed",
   "customGreetingPhrase": "",

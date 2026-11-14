@@ -511,6 +511,9 @@ const SettingsManager = {
       });
     });
 
+    // 12-bis. Glisser-déposer pour réorganiser la disposition des onglets du volet latéral
+    this.initSidebarTabsDragAndDrop();
+
     // 13. Paramètres sérieux — Bouton Retour aux paramètres d'usine & contrôles dédiés
     const btnSeriousFactory = document.getElementById('btn-reset-serious-factory');
     if (btnSeriousFactory) {
@@ -655,6 +658,152 @@ const SettingsManager = {
       phraseText = "Vos tâches n'ont qu'à bien se tenir : vous êtes aux commandes aujourd'hui.";
     }
     if (previewPhrase) previewPhrase.textContent = phraseText;
+  },
+
+  // Initialisation du Glisser-Déposer pour réorganiser la disposition des onglets du volet latéral
+  initSidebarTabsDragAndDrop() {
+    const grid = document.querySelector('.sidebar-tabs-toggle-grid');
+    if (!grid || grid._dndInitialized) return;
+    grid._dndInitialized = true;
+
+    let draggedCard = null;
+    let isDragging = false;
+
+    // Bouton de réinitialisation de l'ordre par défaut
+    const btnResetOrder = document.getElementById('btn-reset-sidebar-tabs-order');
+    if (btnResetOrder && !btnResetOrder._listenerBound) {
+      btnResetOrder._listenerBound = true;
+      btnResetOrder.addEventListener('click', (e) => {
+        e.preventDefault();
+        const defaultOrder = (StorageManager.DEFAULT_SETTINGS && StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder)
+          ? StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder
+          : ['tasks', 'projects', 'agenda', 'notes', 'focus', 'music', 'trash', 'backups'];
+
+        defaultOrder.forEach(tabName => {
+          const card = grid.querySelector(`.sidebar-tab-toggle-card[data-tab-name="${tabName}"]`);
+          if (card) grid.appendChild(card);
+        });
+
+        const currentSettings = StorageManager.getSettings();
+        currentSettings.sidebarTabsOrder = [...defaultOrder];
+        StorageManager.saveSettings(currentSettings);
+
+        if (typeof App !== 'undefined') {
+          if (typeof App.applySidebarTabsOrder === 'function') {
+            App.applySidebarTabsOrder(currentSettings.sidebarTabsOrder);
+          }
+          if (typeof App.triggerHapticFeedback === 'function') {
+            App.triggerHapticFeedback();
+          }
+          if (typeof App.showToast === 'function') {
+            App.showToast("Disposition d'origine du volet latéral rétablie", "info");
+          }
+        }
+      });
+    }
+
+    const cards = grid.querySelectorAll('.sidebar-tab-toggle-card');
+    cards.forEach(card => {
+      // Clic sur la carte (hors case à cocher et poignée) pour cocher/décocher confortablement
+      card.addEventListener('click', (e) => {
+        if (isDragging) return;
+        if (e.target && (e.target.closest('input[type="checkbox"]') || e.target.closest('.tab-drag-handle'))) {
+          return;
+        }
+        const chk = card.querySelector('input[type="checkbox"]');
+        if (chk) {
+          chk.checked = !chk.checked;
+          chk.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+
+      // Événements Glisser-Déposer
+      card.addEventListener('dragstart', (e) => {
+        if (e.target && e.target.closest('input[type="checkbox"]')) {
+          e.preventDefault();
+          return;
+        }
+        draggedCard = card;
+        isDragging = true;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData('text/plain', card.dataset.tabName || '');
+          e.dataTransfer.effectAllowed = 'move';
+        }
+        setTimeout(() => {
+          if (draggedCard) draggedCard.classList.add('dragging');
+        }, 0);
+      });
+
+      card.addEventListener('dragend', () => {
+        if (draggedCard) draggedCard.classList.remove('dragging');
+        grid.querySelectorAll('.sidebar-tab-toggle-card').forEach(c => c.classList.remove('drag-over-before', 'drag-over-after'));
+        draggedCard = null;
+        setTimeout(() => {
+          isDragging = false;
+        }, 150);
+      });
+
+      card.addEventListener('dragover', (e) => {
+        if (!draggedCard || draggedCard === card) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+
+        const rect = card.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        const midY = rect.top + rect.height / 2;
+        const isAfter = (e.clientX > midX) || (e.clientY > midY && Math.abs(e.clientX - midX) < 40);
+
+        card.classList.toggle('drag-over-before', !isAfter);
+        card.classList.toggle('drag-over-after', isAfter);
+      });
+
+      card.addEventListener('dragleave', (e) => {
+        if (card.contains(e.relatedTarget)) return;
+        card.classList.remove('drag-over-before', 'drag-over-after');
+      });
+
+      card.addEventListener('drop', (e) => {
+        if (!draggedCard || draggedCard === card) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const rect = card.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        const midY = rect.top + rect.height / 2;
+        const isAfter = (e.clientX > midX) || (e.clientY > midY && Math.abs(e.clientX - midX) < 40);
+
+        grid.querySelectorAll('.sidebar-tab-toggle-card').forEach(c => c.classList.remove('drag-over-before', 'drag-over-after'));
+
+        if (isAfter) {
+          card.after(draggedCard);
+        } else {
+          card.before(draggedCard);
+        }
+
+        // Calculer le nouvel ordre des onglets
+        const newOrder = Array.from(grid.querySelectorAll('.sidebar-tab-toggle-card'))
+          .map(c => c.dataset.tabName)
+          .filter(Boolean);
+
+        const currentSettings = StorageManager.getSettings();
+        currentSettings.sidebarTabsOrder = newOrder;
+        StorageManager.saveSettings(currentSettings);
+
+        // Répercuter immédiatement sur le volet des onglets en direct
+        if (typeof App !== 'undefined') {
+          if (typeof App.applySidebarTabsOrder === 'function') {
+            App.applySidebarTabsOrder(newOrder);
+          }
+          if (typeof App.triggerHapticFeedback === 'function') {
+            App.triggerHapticFeedback();
+          }
+          if (typeof App.showToast === 'function') {
+            const movedName = draggedCard.querySelector('.tab-toggle-name')?.textContent || draggedCard.dataset.tabName;
+            App.showToast(`Disposition du volet mise à jour (${movedName})`, 'info');
+          }
+        }
+      });
+    });
   },
 
   // Traitement et optimisation locale d'une image choisie par l'utilisateur
@@ -853,6 +1002,20 @@ const SettingsManager = {
         chk.checked = (visibleScreens[tabName] !== undefined) ? visibleScreens[tabName] : true;
       }
     });
+
+    // 11-ter. Synchroniser la disposition des cartes d'onglets du volet latéral
+    const grid = document.querySelector('.sidebar-tabs-toggle-grid');
+    const tabsOrder = (settings && Array.isArray(settings.sidebarTabsOrder))
+      ? settings.sidebarTabsOrder
+      : (StorageManager.DEFAULT_SETTINGS ? StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder : null);
+    if (grid && Array.isArray(tabsOrder)) {
+      tabsOrder.forEach(tabName => {
+        const card = grid.querySelector(`.sidebar-tab-toggle-card[data-tab-name="${tabName}"]`);
+        if (card) {
+          grid.appendChild(card);
+        }
+      });
+    }
 
     // 12. Mise à jour de la section Mises à jour
     if (this.updater && typeof this.updater.render === 'function') {

@@ -3,11 +3,12 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
 
+// Définir immédiatement le nom d'application pour que app.getPath('userData') soit garanti et immuable dès l'import des modules
+app.setName('Antigravite');
+
 const googleAuth = require('./services/google-auth-service');
 const googleCalendar = require('./services/google-calendar-service');
 const updateService = require('./services/update-service');
-
-app.setName('Antigravite');
 
 // Définir l'AppUserModelId pour garantir la délivrance des notifications Windows et l'association de l'icône dans la barre des tâches
 if (process.platform === 'win32') {
@@ -240,8 +241,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
-    minWidth: 1000,
-    minHeight: 650,
+    minWidth: 720,
+    minHeight: 520,
     show: false, // Optimisation : affichage fluide sans flash blanc
     title: 'Antigravité',
     icon: appIconPath,
@@ -278,6 +279,56 @@ function createWindow() {
   }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  // Menu contextuel natif pour la correction orthographique des notes et les actions d'édition
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const template = [];
+
+    // 1. Suggestions orthographiques si un mot est souligné / mal orthographié
+    if (params.misspelledWord) {
+      if (params.dictionarySuggestions && params.dictionarySuggestions.length > 0) {
+        params.dictionarySuggestions.slice(0, 5).forEach((suggestion) => {
+          template.push({
+            label: suggestion,
+            click: () => mainWindow.webContents.replaceMisspelling(suggestion)
+          });
+        });
+      } else {
+        template.push({
+          label: 'Aucune suggestion',
+          enabled: false
+        });
+      }
+
+      template.push({ type: 'separator' });
+      template.push({
+        label: `Ajouter « ${params.misspelledWord} » au dictionnaire`,
+        click: () => mainWindow.webContents.session.addWordToSpellcheckerDictionary(params.misspelledWord)
+      });
+      template.push({ type: 'separator' });
+    }
+
+    // 2. Actions standards d'édition de texte (si zone éditable ou sélection présente)
+    if (params.isEditable) {
+      template.push({ role: 'undo', label: 'Annuler' });
+      template.push({ role: 'redo', label: 'Rétablir' });
+      template.push({ type: 'separator' });
+      template.push({ role: 'cut', label: 'Couper' });
+      template.push({ role: 'copy', label: 'Copier' });
+      template.push({ role: 'paste', label: 'Coller' });
+      template.push({ type: 'separator' });
+      template.push({ role: 'selectAll', label: 'Tout sélectionner' });
+    } else if (params.selectionText && params.selectionText.trim().length > 0) {
+      template.push({ role: 'copy', label: 'Copier' });
+      template.push({ role: 'selectAll', label: 'Tout sélectionner' });
+    }
+
+    // N'afficher le menu contextuel que s'il contient au moins une action pertinente
+    if (template.length > 0) {
+      const contextMenu = Menu.buildFromTemplate(template);
+      contextMenu.popup({ window: mainWindow });
+    }
+  });
 
   // Comportement à la fermeture de la fenêtre : soit rester actif dans le tray, soit quitter complètement
   mainWindow.on('close', (event) => {

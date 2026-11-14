@@ -397,20 +397,22 @@ it("L'agenda distingue visuellement les événements Google des événements Ant
 });
 
 // -----------------------------------------------------------------------------
-// Test 16 : Calcul dynamique du calendrier pour occuper toute la fenêtre
+// Test 16 : Calcul dynamique du calendrier pour une amplitude 24h (minuit à minuit)
 // -----------------------------------------------------------------------------
-it("Le calcul de slotHeight adapte la hauteur des créneaux pour occuper toute la fenêtre sans défilement", () => {
+it("L'amplitude de l'agenda est de 24h (minuit à minuit) avec focus visuel normal", () => {
   const Agenda = require('../js/agenda.js');
 
-  const totalHours = Agenda.dayHoursEnd - Agenda.dayHoursStart; // 16 heures
-  assert.strictEqual(totalHours, 16);
+  const totalHours = Agenda.dayHoursEnd - Agenda.dayHoursStart; // 24 heures complètes
+  assert.strictEqual(totalHours, 24);
+  assert.strictEqual(Agenda.dayHoursStart, 0);
+  assert.strictEqual(Agenda.dayHoursEnd, 24);
 
   const availableHeight = 800; // Simuler une hauteur de conteneur
-  const slotHeight = Math.max(34, Math.floor(availableHeight / totalHours));
-  assert.strictEqual(slotHeight, 50);
+  const slotHeight = Math.max(44, Math.floor(availableHeight / 15.5));
+  assert.strictEqual(slotHeight, 51);
 
   const totalGrid = slotHeight * totalHours;
-  assert.strictEqual(totalGrid, 800, "La grille doit correspondre exactement à l'espace disponible");
+  assert.strictEqual(totalGrid, 51 * 24);
 });
 
 // -----------------------------------------------------------------------------

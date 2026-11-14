@@ -209,6 +209,77 @@ const MusicManager = {
     return null;
   },
 
+  _fadeTimer: null,
+
+  _clearFadeTimer() {
+    if (this._fadeTimer) {
+      clearInterval(this._fadeTimer);
+      this._fadeTimer = null;
+    }
+  },
+
+  _isTestOrHeadless() {
+    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') return true;
+    if (typeof window === 'undefined') return true;
+    if (!window.document || typeof window.document.querySelector !== 'function') return true;
+    return false;
+  },
+
+  _fadeAudioTo(targetVolume, durationMs = 450, startFromZero = false, onComplete = null) {
+    this._clearFadeTimer();
+    if (!this.audio) {
+      if (typeof onComplete === 'function') onComplete();
+      return;
+    }
+
+    const safeTarget = Math.max(0, Math.min(1, Number(targetVolume)));
+    if (this._isTestOrHeadless() || durationMs <= 20) {
+      this.audio.volume = safeTarget;
+      if (typeof onComplete === 'function') onComplete();
+      return;
+    }
+
+    const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+      ? StorageManager.getSettings()
+      : {};
+    if (settings.disableAnimations === true || settings.performanceMode === 'potato') {
+      this.audio.volume = safeTarget;
+      if (typeof onComplete === 'function') onComplete();
+      return;
+    }
+
+    const startVol = startFromZero ? 0 : (typeof this.audio.volume === 'number' ? this.audio.volume : safeTarget);
+    if (startFromZero) {
+      this.audio.volume = 0;
+    }
+    const delta = safeTarget - startVol;
+    if (Math.abs(delta) < 0.01) {
+      this.audio.volume = safeTarget;
+      if (typeof onComplete === 'function') onComplete();
+      return;
+    }
+
+    const intervalMs = 25;
+    const steps = Math.max(1, Math.floor(durationMs / intervalMs));
+    let step = 0;
+
+    this._fadeTimer = setInterval(() => {
+      step++;
+      const progress = Math.min(1, step / steps);
+      // Interpolation sinusoidale douce (ease-in-out)
+      const ease = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const cur = Math.max(0, Math.min(1, startVol + delta * ease));
+      if (this.audio) {
+        this.audio.volume = cur;
+      }
+      if (progress >= 1) {
+        this._clearFadeTimer();
+        if (this.audio) this.audio.volume = safeTarget;
+        if (typeof onComplete === 'function') onComplete();
+      }
+    }, intervalMs);
+  },
+
   play(index = null) {
     if (index !== null && index >= 0 && index < this.tracks.length) {
       if (this.currentIndex !== index) {
@@ -234,10 +305,14 @@ const MusicManager = {
         this.loadTrackSource(current);
       }
       try {
+        const targetVol = this.isMuted ? 0 : (this.volume !== undefined ? this.volume : 0.7);
+        // Fondu sonore doux à l'entrée
+        this._fadeAudioTo(targetVol, 450, true);
         const playPromise = this.audio.play();
         if (playPromise !== undefined && typeof playPromise.then === 'function') {
           playPromise.catch(err => {
             console.warn("[MusicManager] Lecture différée ou bloquée :", err);
+            this._clearFadeTimer();
             this.isPlaying = false;
             this.updatePlayerUI();
             this.updateSidebarMiniPlayer();
@@ -251,25 +326,54 @@ const MusicManager = {
     this.updateMediaSessionMetadata(current);
   },
 
-  pause() {
-    if (this.audio) {
-      this.audio.pause();
-    }
+  pause(instant = false) {
     this.isPlaying = false;
     this.updatePlayerUI();
     this.updateSidebarMiniPlayer();
+
+    if (this.audio) {
+      const normalVol = this.isMuted ? 0 : (this.volume !== undefined ? this.volume : 0.7);
+      if (instant || this._isTestOrHeadless() || this.audio.paused || this.isMuted || this.audio.volume <= 0.05) {
+        this._clearFadeTimer();
+        this.audio.pause();
+        this.audio.volume = normalVol;
+      } else {
+        // Fondu sonore doux à la pause
+        this._fadeAudioTo(0, 380, false, () => {
+          if (this.audio && !this.isPlaying) {
+            this.audio.pause();
+            this.audio.volume = normalVol;
+          }
+        });
+      }
+    }
   },
 
-  stop() {
-    if (this.audio) {
-      this.audio.pause();
-      this.audio.currentTime = 0;
-    }
+  stop(instant = false) {
     this.isPlaying = false;
     this.hasStarted = false;
     this.onTimeUpdate();
     this.updatePlayerUI();
     this.updateSidebarMiniPlayer();
+
+    if (this.audio) {
+      const normalVol = this.isMuted ? 0 : (this.volume !== undefined ? this.volume : 0.7);
+      if (instant || this._isTestOrHeadless() || this.audio.paused || this.isMuted || this.audio.volume <= 0.05) {
+        this._clearFadeTimer();
+        this.audio.pause();
+        this.audio.currentTime = 0;
+        this.audio.volume = normalVol;
+      } else {
+        // Fondu sonore doux à l'arrêt
+        this._fadeAudioTo(0, 300, false, () => {
+          if (this.audio) {
+            this.audio.pause();
+            this.audio.currentTime = 0;
+            this.audio.volume = normalVol;
+          }
+        });
+      }
+    }
 
     if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
       window.App.triggerHapticFeedback();
@@ -454,6 +558,7 @@ const MusicManager = {
   },
 
   setVolume(val) {
+    this._clearFadeTimer();
     this.volume = Math.max(0, Math.min(1, Number(val)));
     if (this.audio) {
       this.audio.volume = this.isMuted ? 0 : this.volume;
@@ -465,6 +570,7 @@ const MusicManager = {
   },
 
   toggleMute() {
+    this._clearFadeTimer();
     this.isMuted = !this.isMuted;
     if (this.audio) {
       this.audio.volume = this.isMuted ? 0 : this.volume;
