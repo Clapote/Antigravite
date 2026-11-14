@@ -1595,7 +1595,7 @@ const SettingsManager = {
 const UpdateManager = {
   initialized: false,
   isBusy: false,
-  currentVersion: '1.2.0',
+  currentVersion: '1.2.1',
   isPackaged: false,
   status: 'idle',
   updateInfo: null,
@@ -1669,7 +1669,7 @@ const UpdateManager = {
   async refreshStatus() {
     const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
     if (!updaterApi) {
-      this.currentVersion = '1.2.0';
+      this.currentVersion = '1.2.1';
       this.isPackaged = false;
       this.render();
       return;

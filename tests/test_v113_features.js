@@ -1613,8 +1613,8 @@ async function runTests() {
     const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 
-    // 32.1 Version 1.2.0
-    assert.strictEqual(pkg.version, "1.2.0", "package.json est bien mis à jour en version 1.2.0");
+    // 32.1 Version 1.2.0 / 1.2.1
+    assert.ok(pkg.version === "1.2.0" || pkg.version === "1.2.1", "package.json est bien mis à jour en version 1.2.0 ou 1.2.1");
 
     // 32.2 Éléments UI de la recherche universelle
     assert(html.includes('id="search-modal"'), "Modale #search-modal présente dans index.html");

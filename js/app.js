@@ -4,7 +4,7 @@
 
 const App = {
   currentScreen: 'home',
-  APP_VERSION: '1.2.0',
+  APP_VERSION: '1.2.1',
   WHATS_NEW_STORAGE_KEY: 'antigravite_last_seen_version',
   _activeWhatsNewVersion: null,
 
