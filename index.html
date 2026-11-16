@@ -1899,7 +1899,7 @@
               </div>
               <div id="updater-version-chip" class="status-chip status-disconnected" style="font-size: 0.82rem; font-weight: 600;">
                 <span id="updater-version-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--text-dim);"></span>
-                <span>Version <strong id="updater-current-version-label">1.2.2</strong></span>
+                <span>Version <strong id="updater-current-version-label">1.2.3</strong></span>
               </div>
             </div>
 
@@ -1932,7 +1932,7 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
                     <span>Redémarrer et installer</span>
                   </button>
-                  <button type="button" id="btn-open-changelog-from-updates" class="btn btn-secondary btn-sm" onclick="if(window.App) window.App.openChangelogInSettings();" title="Afficher les notes complètes de la version 1.2.2">
+                  <button type="button" id="btn-open-changelog-from-updates" class="btn btn-secondary btn-sm" onclick="if(window.App) window.App.openChangelogInSettings();" title="Afficher les notes complètes de la version 1.2.3">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     <span>Notes de version</span>
                   </button>
@@ -2142,12 +2142,50 @@
               <p class="settings-section-desc">Historique détaillé des évolutions majeures de la version 1.2.0 pour organiser vos projets, votre temps et vos performances.</p>
 
               <div class="changelog-container">
-                <!-- Version 1.2.2 (Identité Visuelle SVG, Journée Entière & Optimisations) -->
+                <!-- Version 1.2.3 (Correctifs Débriefing, Créativité & Agenda) -->
                 <div class="changelog-release-card" style="border-color: var(--accent);">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                      <span class="changelog-version-tag" style="background: var(--accent); color: #fff;">Version 1.2.2</span>
+                      <span class="changelog-version-tag" style="background: var(--accent); color: #fff;">Version 1.2.3</span>
                       <span class="changelog-badge-current">Actuelle</span>
+                      <span style="font-size: 0.76rem; color: var(--text-dim);">(Correctifs Débriefing, Créativité, Notes &amp; Mise à jour fluide)</span>
+                    </div>
+                    <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
+                  </div>
+                  <p class="changelog-release-lead">Mise à jour de réactivité et d'enrichissement suite aux premiers retours de la v1.2.2 : rétablissement complet des boutons de fin de journée, intégration détaillée de la section « Temps dédié à la créativité » avec affichage précis de chaque créneau d'agenda honoré, valorisation des notes rédigées aujourd'hui et perfectionnement du débriefing bienveillant.</p>
+
+                  <div class="changelog-categories">
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/></svg>Correctifs Débriefing : Boutons &amp; Validation</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Boutons « Terminer ma journée » &amp; « Plus tard ce soir » :</strong> Rétablissement immédiat du fonctionnement au clic avec liaison globale et événements directs.</li>
+                        <li><strong>Extinction du témoin lumineux du soir :</strong> En cliquant sur « Terminer ma journée », la pastille lumineuse du volet s'éteint pour la soirée et l'application vous ramène en douceur vers l'accueil.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Section « Temps dédié à la créativité »</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Détail chronologique des créneaux :</strong> Le bilan présente désormais chaque créneau d'agenda honoré au cours de la journée avec son horaire exact (ex: <em>09:30 - 11:00</em> ou <em>Journée entière 24h</em>), son titre, son badge projet et sa durée calculée.</li>
+                        <li><strong>Sessions Focus associées :</strong> Décompte clair des séances de concentration menées au cours de la journée.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Pensées, Écrits &amp; Notes du jour</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Mise en lumière des notes rédigées :</strong> Affichage des notes créées ou modifiées aujourd'hui avec leur dossier (ex: <em>📁 Général</em>), un aperçu de leur contenu et un lien rapide d'ouverture en un clic.</li>
+                        <li><strong>Agencement approfondi &amp; carte zen :</strong> L'ensemble du bilan est articulé en trois volets soignés, tout en conservant une carte zen apaisante en cas de journée de pur repos.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Version 1.2.2 (Identité Visuelle SVG, Journée Entière & Optimisations) -->
+                <div class="changelog-release-card">
+                  <div class="changelog-release-header">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                      <span class="changelog-version-tag">Version 1.2.2</span>
                       <span style="font-size: 0.76rem; color: var(--text-dim);">(Identité visuelle vectorielle, Journée entière &amp; Fluidité)</span>
                     </div>
                     <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>

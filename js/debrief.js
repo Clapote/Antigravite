@@ -88,7 +88,29 @@ const DebriefManager = {
   STORAGE_KEY_SEEN: 'antigravite_debrief_seen',
 
   init() {
+    this.bindEvents();
     this.updateTabVisibility();
+  },
+
+  bindEvents() {
+    if (typeof document === 'undefined') return;
+    const btnDismiss = document.getElementById('btn-debrief-dismiss-today');
+    if (btnDismiss && typeof btnDismiss.addEventListener === 'function' && !btnDismiss._hasDebriefListener) {
+      btnDismiss._hasDebriefListener = true;
+      btnDismiss.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.completeForToday();
+      });
+    }
+
+    const btnSnooze = document.getElementById('btn-debrief-snooze');
+    if (btnSnooze && typeof btnSnooze.addEventListener === 'function' && !btnSnooze._hasDebriefListener) {
+      btnSnooze._hasDebriefListener = true;
+      btnSnooze.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.snooze();
+      });
+    }
   },
 
   /**
@@ -198,9 +220,13 @@ const DebriefManager = {
    */
   completeForToday() {
     this.markAsSeenToday();
-    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
-      App.showToast("Excellente soirée ! Votre journée est bien clôturée.", "success");
-      App.navigate('home');
+    if (typeof App !== 'undefined') {
+      if (typeof App.showToast === 'function') {
+        App.showToast("Excellente soirée ! Votre journée est bien clôturée. À demain !", "success", 4500);
+      }
+      if (typeof App.navigate === 'function') {
+        App.navigate('home');
+      }
     }
   },
 
@@ -208,9 +234,13 @@ const DebriefManager = {
    * Action : Reporter à plus tard.
    */
   snooze() {
-    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
-      App.showToast("Bilan mis de côté pour ce soir", "info");
-      App.navigate('home');
+    if (typeof App !== 'undefined') {
+      if (typeof App.showToast === 'function') {
+        App.showToast("Bilan mis de côté pour ce soir. Bonne soirée !", "info", 3500);
+      }
+      if (typeof App.navigate === 'function') {
+        App.navigate('home');
+      }
     }
   },
 
@@ -274,6 +304,52 @@ const DebriefManager = {
       return (e.start && e.start.startsWith(todayStr));
     });
 
+    // Trier les créneaux d'agenda (journée entière puis ordre chronologique)
+    dayEvents.sort((a, b) => {
+      if (a.isAllDay && !b.isAllDay) return -1;
+      if (!a.isAllDay && b.isAllDay) return 1;
+      return (a.start || '').localeCompare(b.start || '');
+    });
+
+    const formattedEvents = dayEvents.map(e => {
+      const p = e.projectId ? projectMap.get(e.projectId) : null;
+      let timeLabel = 'Journée entière';
+      let durationStr = '24h';
+      if (!e.isAllDay && e.start) {
+        const sTime = e.start.includes('T') ? e.start.split('T')[1].slice(0, 5) : '00:00';
+        const eTime = e.end && e.end.includes('T') ? e.end.split('T')[1].slice(0, 5) : '';
+        timeLabel = eTime ? `${sTime} - ${eTime}` : `Dès ${sTime}`;
+        if (e.end) {
+          const sDate = new Date(e.start);
+          const eDate = new Date(e.end);
+          const diffMs = eDate - sDate;
+          if (!isNaN(diffMs) && diffMs > 0) {
+            const mins = Math.round(diffMs / 60000);
+            if (mins >= 60) {
+              const h = Math.floor(mins / 60);
+              const m = mins % 60;
+              durationStr = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+            } else {
+              durationStr = `${mins} min`;
+            }
+          } else {
+            durationStr = '';
+          }
+        } else {
+          durationStr = '';
+        }
+      }
+      return {
+        id: e.id,
+        title: e.title || 'Créneau sans titre',
+        isAllDay: !!e.isAllDay,
+        timeLabel,
+        durationStr,
+        project: p || null,
+        color: (p && p.color) || e.color || '#38bdf8'
+      };
+    });
+
     // Sessions Focus
     let focusCount = 0;
     try {
@@ -298,13 +374,39 @@ const DebriefManager = {
       return c || u;
     });
 
+    // Trier les notes de la plus récente à la plus ancienne
+    dayNotes.sort((a, b) => {
+      const dateA = a.updatedAt || a.createdAt || '';
+      const dateB = b.updatedAt || b.createdAt || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    const formattedNotes = dayNotes.map(n => {
+      const p = n.projectId ? projectMap.get(n.projectId) : null;
+      const cleanText = (n.content || '').replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+      const snippet = cleanText.length > 95 ? cleanText.slice(0, 95) + '...' : (cleanText || 'Note sans texte');
+      const wasCreatedToday = (n.createdAt && n.createdAt.slice(0, 10) === todayStr);
+      const timeStr = n.updatedAt ? n.updatedAt.slice(11, 16) : (n.createdAt ? n.createdAt.slice(11, 16) : '');
+      return {
+        id: n.id,
+        title: n.title || 'Note sans titre',
+        folder: n.folder || 'Général',
+        snippet,
+        wasCreatedToday,
+        timeStr,
+        project: p || null
+      };
+    });
+
     return {
       date: todayStr,
       mode: 'daily',
       completedTasks,
       byProject: Array.from(byProject.values()),
+      events: formattedEvents,
       eventsCount: dayEvents.length,
       focusCount,
+      notes: formattedNotes,
       notesCount: dayNotes.length
     };
   },
@@ -377,6 +479,29 @@ const DebriefManager = {
       byProject.get(pId).tasks.push(t);
     });
 
+    // Créneaux de la semaine
+    const allEvents = (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function')
+      ? StorageManager.getEvents()
+      : [];
+    const weekEvents = allEvents.filter(e => {
+      const startD = e.start ? e.start.slice(0, 10) : '';
+      return (startD && startD >= startDateStr && startD <= endDateStr);
+    });
+
+    const formattedWeekEvents = weekEvents.map(e => {
+      const p = e.projectId ? projectMap.get(e.projectId) : null;
+      let timeLabel = e.isAllDay ? 'Journée entière' : (e.start && e.start.includes('T') ? e.start.split('T')[1].slice(0, 5) : 'Créneau');
+      return {
+        id: e.id,
+        title: e.title || 'Créneau sans titre',
+        isAllDay: !!e.isAllDay,
+        timeLabel,
+        durationStr: '',
+        project: p || null,
+        color: (p && p.color) || e.color || '#38bdf8'
+      };
+    });
+
     // Notes créées ou mises à jour
     const notes = (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function')
       ? StorageManager.getNotes()
@@ -387,6 +512,21 @@ const DebriefManager = {
       return (c && c >= startDateStr && c <= endDateStr) || (u && u >= startDateStr && u <= endDateStr);
     });
 
+    const formattedWeekNotes = weekNotes.map(n => {
+      const p = n.projectId ? projectMap.get(n.projectId) : null;
+      const cleanText = (n.content || '').replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+      const snippet = cleanText.length > 95 ? cleanText.slice(0, 95) + '...' : (cleanText || 'Note sans texte');
+      return {
+        id: n.id,
+        title: n.title || 'Note sans titre',
+        folder: n.folder || 'Général',
+        snippet,
+        wasCreatedToday: false,
+        timeStr: '',
+        project: p || null
+      };
+    });
+
     return {
       startDate: startDateStr,
       endDate: endDateStr,
@@ -394,6 +534,10 @@ const DebriefManager = {
       mode: 'weekly',
       completedTasks,
       byProject: Array.from(byProject.values()),
+      events: formattedWeekEvents,
+      eventsCount: weekEvents.length,
+      focusCount: 0,
+      notes: formattedWeekNotes,
       notesCount: weekNotes.length
     };
   },
@@ -432,6 +576,9 @@ const DebriefManager = {
     const container = document.getElementById('debrief-content-area');
     if (!container) return;
 
+    // S'assurer que les boutons sont attachés
+    this.bindEvents();
+
     const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
       ? StorageManager.getSettings()
       : {};
@@ -453,7 +600,7 @@ const DebriefManager = {
     const periodLabel = document.getElementById('debrief-period-label');
     const completeBtnText = document.getElementById('btn-debrief-complete-text');
 
-    const hasAccomplishments = (data.completedTasks.length > 0 || data.eventsCount > 0 || data.focusCount > 0 || data.notesCount > 0);
+    const hasAccomplishments = (data.completedTasks.length > 0 || (data.eventsCount && data.eventsCount > 0) || (data.focusCount && data.focusCount > 0) || (data.notesCount && data.notesCount > 0));
     const phrase = this.getRandomDebriefPhrase(mode, hasAccomplishments);
 
     if (heroTitle) {
@@ -476,14 +623,20 @@ const DebriefManager = {
       completeBtnText.textContent = (mode === 'weekly') ? "Savourer mon week-end" : "Terminer ma journée";
     }
 
-    // Construction du contenu
+    // Construction du contenu ordonné, élégant et approfondi
     let html = '';
 
-    if (data.completedTasks.length > 0) {
+    const hasTasks = data.completedTasks.length > 0;
+    const hasEvents = (data.events && data.events.length > 0) || (data.eventsCount > 0);
+    const hasNotes = (data.notes && data.notes.length > 0) || (data.notesCount > 0);
+    const hasFocus = (data.focusCount > 0);
+
+    // 1. SECTION ACCOMPLISSEMENTS & TÂCHES MENÉES À BIEN
+    if (hasTasks) {
       html += `
         <div class="debrief-section-header">
           <h3 class="debrief-section-title">
-            <svg class="app-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg class="app-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:#10b981;"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Ce qui a avancé avec succès</span>
           </h3>
           <span class="badge badge-accent" style="font-weight:600;">${data.completedTasks.length} accomplissement${data.completedTasks.length > 1 ? 's' : ''}</span>
@@ -507,7 +660,7 @@ const DebriefManager = {
         group.tasks.forEach(t => {
           html += `
             <div class="debrief-task-row">
-              <span class="debrief-task-check"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="debrief-task-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
               <span class="debrief-task-label">${this.escapeHtml(t.title)}</span>
             </div>
           `;
@@ -520,63 +673,134 @@ const DebriefManager = {
       });
 
       html += `</div>`;
-    } else {
-      // Cas zen : aucune tâche enregistrée (Zéro culpabilité)
+    }
+
+    // 2. SECTION TEMPS DÉDIÉ À LA CRÉATIVITÉ (Créneaux d'agenda & Sessions Focus)
+    if (hasEvents || hasFocus) {
+      const evtsList = data.events || [];
+      const evtsCount = evtsList.length || data.eventsCount || 0;
       html += `
+        <div class="debrief-section-header" style="margin-top: ${hasTasks ? '14px' : '4px'};">
+          <h3 class="debrief-section-title">
+            <svg class="app-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span>Temps dédié à la créativité</span>
+          </h3>
+          <span class="badge badge-accent" style="font-weight:600;">${evtsCount} créneau${evtsCount > 1 ? 's' : ''} honoré${evtsCount > 1 ? 's' : ''}</span>
+        </div>
+        <div class="debrief-agenda-card">
+      `;
+
+      if (evtsList.length > 0) {
+        html += `<div class="debrief-agenda-list">`;
+        evtsList.forEach(evt => {
+          const projBadge = evt.project
+            ? `<span class="badge" style="font-size:0.7rem; padding:1px 7px; border-radius:var(--radius-pill); border:1px solid ${evt.color}50; color:${evt.color}; background-color:${evt.color}15; font-weight:600;"><span style="display:inline-block; width:5px; height:5px; border-radius:50%; background-color:${evt.color}; margin-right:4px;"></span>${this.escapeHtml(evt.project.title)}</span>`
+            : '';
+          const durBadge = evt.durationStr
+            ? `<span style="font-size:0.75rem; color:var(--text-dim); font-weight:500;">(${evt.durationStr})</span>`
+            : '';
+
+          html += `
+            <div class="debrief-agenda-row">
+              <div class="debrief-agenda-row-left">
+                <span class="debrief-agenda-time">
+                  ${evt.isAllDay ? '<svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>' : '<svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'}
+                  ${this.escapeHtml(evt.timeLabel)}
+                </span>
+                <span class="debrief-agenda-title">${this.escapeHtml(evt.title)}</span>
+              </div>
+              <div class="debrief-agenda-row-right">
+                ${projBadge}
+                ${durBadge}
+                <span class="debrief-agenda-honored-badge">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span>Honoré</span>
+                </span>
+              </div>
+            </div>
+          `;
+        });
+        html += `</div>`;
+      } else if (evtsCount > 0) {
+        html += `
+          <div style="font-size:0.86rem; color:var(--text-dim); padding:6px 0;">
+            ${evtsCount} créneau${evtsCount > 1 ? 's' : ''} de votre agenda ont rythmé cette période.
+          </div>
+        `;
+      }
+
+      if (hasFocus) {
+        html += `
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color); display: flex; align-items: center; justify-content: space-between; font-size: 0.84rem; color: var(--text-dim); flex-wrap: wrap; gap: 8px;">
+            <div style="display:inline-flex; align-items:center; gap:6px;">
+              <svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>Sessions de travail profond Focus menées :</span>
+            </div>
+            <strong style="color:var(--text-main);">${data.focusCount} session${data.focusCount > 1 ? 's' : ''} validée${data.focusCount > 1 ? 's' : ''}</strong>
+          </div>
+        `;
+      }
+
+      html += `</div>`;
+    }
+
+    // 3. SECTION PENSÉES, ÉCRITS & NOTES DU JOUR
+    if (hasNotes) {
+      const notesList = data.notes || [];
+      const notesCount = notesList.length || data.notesCount || 0;
+      html += `
+        <div class="debrief-section-header" style="margin-top: ${(hasTasks || hasEvents || hasFocus) ? '14px' : '4px'};">
+          <h3 class="debrief-section-title">
+            <svg class="app-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:#a855f7;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span>Pensées, Écrits &amp; Notes</span>
+          </h3>
+          <span class="badge" style="background: rgba(168, 85, 247, 0.12); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); font-weight:600;">${notesCount} note${notesCount > 1 ? 's' : ''}</span>
+        </div>
+        <div class="debrief-notes-grid">
+      `;
+
+      if (notesList.length > 0) {
+        notesList.forEach(note => {
+          html += `
+            <div class="debrief-note-card" onclick="if(window.App &amp;&amp; window.NotesManager){ window.App.navigate('notes'); window.NotesManager.selectNote('${note.id}'); }" title="Cliquer pour ouvrir cette note dans l'éditeur">
+              <div class="debrief-note-header">
+                <span class="debrief-note-folder-badge">
+                  <svg class="app-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span>${this.escapeHtml(note.folder)}</span>
+                </span>
+                <span style="font-size:0.72rem; color:var(--text-muted);">${note.timeStr || ''}</span>
+              </div>
+              <h4 class="debrief-note-title">${this.escapeHtml(note.title)}</h4>
+              <p class="debrief-note-snippet">${this.escapeHtml(note.snippet)}</p>
+              <div class="debrief-note-footer">
+                <span>${note.wasCreatedToday ? '✨ Rédigée aujourd\'hui' : '✏️ Enrichie aujourd\'hui'}</span>
+                <span style="color:var(--accent); font-weight:500;">Consulter ➔</span>
+              </div>
+            </div>
+          `;
+        });
+      } else {
+        html += `
+          <div class="debrief-note-card" style="grid-column: 1 / -1;">
+            <p style="margin:0; font-size:0.86rem; color:var(--text-dim);">
+              <strong>${notesCount}</strong> note${notesCount > 1 ? 's' : ''} ont été rédigées ou enrichies durant cette période.
+            </p>
+          </div>
+        `;
+      }
+
+      html += `</div>`;
+    }
+
+    // 4. SI AUCUNE ACTIVITÉ DU TOUT : CARTE ZEN
+    if (!hasTasks && !hasEvents && !hasNotes && !hasFocus) {
+      html = `
         <div class="debrief-zen-card">
           <div class="debrief-zen-icon">
-            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
-              <path d="M17 18a5 5 0 0 0-10 0"/>
-              <line x1="12" y1="2" x2="12" y2="9"/>
-              <line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/>
-              <line x1="1" y1="18" x2="23" y2="18"/>
-              <line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/>
-              <line x1="23" y1="22" x2="1" y2="22"/>
-              <polyline points="8 6 12 2 16 6"/>
-            </svg>
+            <svg class="app-icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: #10b981;"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
           </div>
-          <h4 class="debrief-zen-title">Un temps précieux de calme et de respiration</h4>
-          <p class="debrief-zen-text">
-            Aucune tâche enregistrée pour cette période, et c'est parfaitement sain.
-            Les temps de pause, de réflexion ou d'imprévus font partie intégrante de votre équilibre.
-            Accordez-vous un moment paisible pour vous reposer et recharger vos batteries.
-          </p>
-        </div>
-      `;
-    }
-
-    // Section des moments de concentration & d'écriture (si présents)
-    const extraHighlights = [];
-    if (data.focusCount > 0) {
-      extraHighlights.push({
-        icon: '<svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
-        text: `<strong>${data.focusCount}</strong> session${data.focusCount > 1 ? 's' : ''} de concentration (Focus)`
-      });
-    }
-    if (data.eventsCount > 0) {
-      extraHighlights.push({
-        icon: '<svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
-        text: `<strong>${data.eventsCount}</strong> créneau${data.eventsCount > 1 ? 's' : ''} honoré${data.eventsCount > 1 ? 's' : ''} dans l'agenda`
-      });
-    }
-    if (data.notesCount > 0) {
-      extraHighlights.push({
-        icon: '<svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
-        text: `<strong>${data.notesCount}</strong> note${data.notesCount > 1 ? 's' : ''} rédigée${data.notesCount > 1 ? 's' : ''} ou enrichie${data.notesCount > 1 ? 's' : ''}`
-      });
-    }
-
-    if (extraHighlights.length > 0) {
-      html += `
-        <div class="debrief-highlights-banner">
-          <div class="debrief-highlights-title">Temps dédié &amp; Créativité :</div>
-          <div class="debrief-highlights-chips">
-      `;
-      extraHighlights.forEach(h => {
-        html += `<div class="debrief-stat-chip">${h.icon} <span>${h.text}</span></div>`;
-      });
-      html += `
-          </div>
+          <h4 class="debrief-zen-title">Une respiration bienfaisante</h4>
+          <p class="debrief-zen-text">Aucun créneau ni tâche programmée n'ont exigé votre énergie aujourd'hui. Ces temps de pause sont essentiels pour préserver votre clarté et préparer vos prochains élans en toute sérénité.</p>
         </div>
       `;
     }
@@ -584,6 +808,11 @@ const DebriefManager = {
     container.innerHTML = html;
   }
 };
+
+// Exposition globale pour l'application navigateur (inline onclick et appels globaux)
+if (typeof window !== 'undefined') {
+  window.DebriefManager = DebriefManager;
+}
 
 // Export pour l'environnement de test Node.js
 if (typeof module !== 'undefined' && module.exports) {

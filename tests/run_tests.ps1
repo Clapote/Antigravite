@@ -454,6 +454,18 @@ if (Test-Path $nodePath) {
 Assert-Test "Système de Mise à Jour au Démarrage & Installation Silencieuse (Vérification non bloquante, pop-up, téléchargement in-app et silent install)" $startupUpdaterPass
 
 # -----------------------------------------------------------------------------
+# TEST 31 : Fonctionnalités & Correctifs v1.2.3 (Débriefing Créativité, Notes & Boutons)
+# -----------------------------------------------------------------------------
+Write-Host "`n31. Vérification des fonctionnalités et correctifs v1.2.3..." -ForegroundColor Yellow
+
+$v123FeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v123_features.js")
+    $v123FeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités v1.2.3 (Boutons débriefing réparés, Temps dédié à la créativité avec créneaux honorés, Notes du jour et bat 1.2.3)" $v123FeaturesPass
+
+# -----------------------------------------------------------------------------
 # BILAN
 # -----------------------------------------------------------------------------
 Write-Host "`n==========================================================" -ForegroundColor Cyan

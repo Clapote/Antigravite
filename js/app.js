@@ -4,7 +4,7 @@
 
 const App = {
   currentScreen: 'home',
-  APP_VERSION: '1.2.2',
+  APP_VERSION: '1.2.3',
   WHATS_NEW_STORAGE_KEY: 'antigravite_last_seen_version',
   _activeWhatsNewVersion: null,
   // Versions majeures justifiant l'affichage automatique de la modale "Quoi de neuf" au premier démarrage

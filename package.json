@@ -1,6 +1,6 @@
 {
   "name": "antigravite",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Application personnelle de gestion des tâches",
   "private": true,
   "main": "main.js",

@@ -142,7 +142,7 @@ async function runTests() {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
     assert.strictEqual(pkg.build.appId, 'fr.antigravite.app', "package.json doit avoir fr.antigravite.app");
     assert.ok(pkg.build.win.icon === 'assets/icon.ico' || pkg.build.win.icon === 'assets/icon.png', "package.json doit référencer assets/icon.ico ou assets/icon.png");
-    assert.ok(pkg.version === '1.1.2' || pkg.version === '1.2.0' || pkg.version === '1.2.1' || pkg.version === '1.2.2', "package.json doit être en version 1.1.2 ou supérieure");
+    assert.ok(pkg.version === '1.1.2' || pkg.version === '1.2.0' || pkg.version === '1.2.1' || pkg.version === '1.2.2' || pkg.version === '1.2.3', "package.json doit être en version 1.1.2 ou supérieure");
   });
 
   // ---------------------------------------------------------------------------
@@ -343,7 +343,7 @@ async function runTests() {
   // ---------------------------------------------------------------------------
   await it("9.1 Version cohérente dans package.json, index.html et settings.js", async () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-    assert.ok(pkg.version === '1.1.2' || pkg.version === '1.2.0' || pkg.version === '1.2.1' || pkg.version === '1.2.2');
+    assert.ok(pkg.version === '1.1.2' || pkg.version === '1.2.0' || pkg.version === '1.2.1' || pkg.version === '1.2.2' || pkg.version === '1.2.3');
 
     const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
     assert(indexHtml.includes(`id="updater-current-version-label">${pkg.version}</strong>`), "index.html doit afficher la version courante");
