@@ -655,6 +655,19 @@ button, input, select, textarea {
   box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent) !important;
 }
 
+/* Surlignage et sélection de texte harmonisés avec la couleur d'accent active */
+::selection {
+  background-color: var(--accent);
+  color: #ffffff;
+  text-shadow: none;
+}
+
+::-moz-selection {
+  background-color: var(--accent);
+  color: #ffffff;
+  text-shadow: none;
+}
+
 /* ==========================================================
    Écran d'Accueil & Chargement Initial (Splash Screen)
    ========================================================== */
@@ -3304,13 +3317,15 @@ body.sidebar-collapsed .btn-toggle-sidebar svg,
 
 .badge {
   font-size: 0.72rem;
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.015em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform 0.15s ease, filter 0.15s ease;
 }
 
 .badge-project {
@@ -4291,6 +4306,150 @@ button.project-parent-pill:hover {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+}
+
+/* ==========================================================
+   Section Événements "Journée entière" (All-Day Row)
+   ========================================================== */
+.calendar-allday-row {
+  display: grid;
+  grid-template-columns: 55px repeat(7, 1fr);
+  min-width: 680px;
+  max-height: 110px;
+  overflow-y: auto;
+  background-color: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-color);
+  flex-shrink: 0;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+  z-index: 5;
+  transition: all 0.2s ease;
+}
+
+.calendar-allday-gutter {
+  padding: 6px 4px;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .calendar-allday-gutter {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.calendar-allday-gutter-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  padding: 2px 5px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.calendar-allday-cell {
+  padding: 4px 6px;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 34px;
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.calendar-allday-cell:last-child {
+  border-right: none;
+}
+
+.calendar-allday-cell.today {
+  background-color: var(--accent-light);
+}
+
+.calendar-allday-cell:hover {
+  background-color: rgba(255, 255, 255, 0.025);
+}
+
+[data-theme="light"] .calendar-allday-cell:hover {
+  background-color: rgba(0, 0, 0, 0.025);
+}
+
+/* Badge / Pastille Événement Journée Entière */
+.allday-event-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  min-height: 25px;
+  border-radius: 6px;
+  color: #ffffff !important;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+  border-left: 4px solid #ffffff !important;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, filter 0.15s ease;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.allday-event-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.12);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.allday-event-pill:active {
+  transform: translateY(0);
+}
+
+.allday-event-pill .allday-pill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.60rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.allday-event-pill .allday-pill-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.allday-event-pill .allday-pill-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+}
+
+.allday-event-pill.task-completed-pill {
+  opacity: 0.78;
+}
+
+.allday-event-pill.task-completed-pill .allday-pill-title {
+  text-decoration: line-through;
+  opacity: 0.9;
 }
 
 .calendar-body {
@@ -5932,8 +6091,9 @@ button.project-parent-pill:hover {
   z-index: 1000;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
-  backdrop-filter: blur(4px);
+  transition: opacity 0.22s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   padding: 16px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -5951,12 +6111,12 @@ button.project-parent-pill:hover {
   width: 90%;
   max-width: 520px;
   max-height: calc(100vh - 32px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--shadow-lg), 0 20px 48px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transform: translateY(14px) scale(0.98);
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateY(12px) scale(0.975);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
 }
 
 .modal-content-lg {
@@ -10141,7 +10301,9 @@ kbd {
 /* 3. Isolation de layout/style pour limiter les recalculs en cascade */
 .screen-view,
 .project-card,
-.calendar-event {
+.calendar-event,
+.task-tree-node.is-root,
+.allday-event-pill {
   contain: layout style;
 }
 
@@ -10591,4 +10753,439 @@ kbd {
 
 [data-disable-hover="true"] .stat-card:hover::after {
   opacity: 0 !important;
+}
+
+/* ==========================================================
+   Icônes Vectorielles SVG Unifiées (Identité Graphique Qualitative)
+   ========================================================== */
+.app-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -0.125em;
+  stroke-width: 2px;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.app-icon-filled {
+  fill: currentColor;
+}
+
+/* Alignements contextuels fins */
+.dashboard-item-icon .app-icon {
+  vertical-align: middle;
+  color: var(--accent);
+}
+
+.allday-pill-tag .app-icon {
+  vertical-align: -0.1em;
+}
+
+.allday-pill-badges .app-icon,
+.month-event-pill .app-icon,
+.event-compact-row .app-icon {
+  vertical-align: -0.12em;
+}
+
+.context-menu-item .item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-menu-item .item-icon .app-icon {
+  vertical-align: middle;
+  width: 15px;
+  height: 15px;
+}
+
+.badge .app-icon {
+  vertical-align: -0.15em;
+  margin-right: 3px;
+}
+
+.note-folder-title .app-icon {
+  vertical-align: -0.15em;
+  margin-right: 5px;
+  color: var(--accent);
+}
+
+.obsidian-callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.obsidian-callout-icon .app-icon {
+  vertical-align: middle;
+  stroke-width: 2.2px;
+}
+
+/* ==========================================================
+   Finitions Esthétiques Haut de Gamme (Profondeur & Tactile)
+   ========================================================== */
+
+/* 1. Micro-reflets de bordure supérieure (Effet verre taillé & relief) */
+.stat-card,
+.dashboard-panel,
+.dashboard-card,
+.project-card,
+.task-item,
+.note-item,
+.shortcut-group-card,
+.tip-card,
+.perf-mode-card,
+.serious-choice-card,
+.wallpaper-card,
+.dialog-modal-content {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--shadow-sm);
+}
+
+[data-theme="light"] .stat-card,
+[data-theme="light"] .dashboard-panel,
+[data-theme="light"] .dashboard-card,
+[data-theme="light"] .project-card,
+[data-theme="light"] .task-item,
+[data-theme="light"] .note-item,
+[data-theme="light"] .shortcut-group-card,
+[data-theme="light"] .tip-card,
+[data-theme="light"] .perf-mode-card,
+[data-theme="light"] .serious-choice-card,
+[data-theme="light"] .wallpaper-card,
+[data-theme="light"] .dialog-modal-content {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), var(--shadow-sm);
+}
+
+/* 2. Micro-interactions tactiles au clic (Feedback haptique) */
+.btn:active,
+.btn-primary:active,
+.btn-secondary:active,
+.btn-icon:active,
+.filter-btn:active,
+.view-toggle-btn:active,
+.allday-event-pill:active,
+.btn-rec-end:active,
+.task-checkbox:active,
+.music-ctrl-btn:active {
+  transform: scale(0.975);
+  transition: transform 0.08s ease;
+}
+
+/* 3. Respect absolu de l'option de désactivation des animations et des survols */
+[data-disable-animations="true"] .btn:active,
+[data-disable-animations="true"] .btn-primary:active,
+[data-disable-animations="true"] .btn-secondary:active,
+[data-disable-animations="true"] .btn-icon:active,
+[data-disable-animations="true"] .filter-btn:active,
+[data-disable-animations="true"] .view-toggle-btn:active,
+[data-disable-animations="true"] .allday-event-pill:active,
+[data-disable-animations="true"] .btn-rec-end:active,
+[data-disable-animations="true"] .task-checkbox:active,
+[data-disable-animations="true"] .music-ctrl-btn:active,
+[data-disable-animations="true"] button:active,
+[data-disable-animations="true"] .modal-content,
+[data-disable-animations="true"] .modal-overlay,
+[data-disable-animations="true"] .modal-overlay.active .modal-content,
+[data-disable-animations="true"] .badge,
+[data-disable-hover="true"] .btn:active,
+[data-disable-hover="true"] .btn-primary:active,
+[data-disable-hover="true"] .btn-secondary:active,
+[data-disable-hover="true"] .btn-icon:active,
+[data-disable-hover="true"] .filter-btn:active,
+[data-disable-hover="true"] .view-toggle-btn:active,
+[data-disable-hover="true"] .allday-event-pill:active,
+[data-disable-hover="true"] .btn-rec-end:active,
+[data-disable-hover="true"] .task-checkbox:active,
+[data-disable-hover="true"] .music-ctrl-btn:active,
+[data-disable-hover="true"] button:active {
+  transform: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:active,
+  .btn-primary:active,
+  .btn-secondary:active,
+  .btn-icon:active,
+  .filter-btn:active,
+  .view-toggle-btn:active,
+  .allday-event-pill:active,
+  .btn-rec-end:active,
+  .task-checkbox:active,
+  .music-ctrl-btn:active,
+  button:active,
+  .modal-content,
+  .modal-overlay {
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ==========================================================
+   MODULE DE DÉBRIEFING ET BILAN
+   ========================================================== */
+
+.nav-debrief-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.debrief-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 20px 48px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+.debrief-hero-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.debrief-hero-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.debrief-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  padding: 4px 10px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.debrief-hero-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.debrief-hero-phrase {
+  font-size: 0.95rem;
+  font-style: italic;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.5;
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+}
+
+.debrief-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.debrief-section-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.debrief-projects-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.debrief-project-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--shadow-sm);
+  contain: layout style;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.debrief-project-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.debrief-project-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.debrief-project-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 1;
+}
+
+.debrief-count-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.debrief-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.debrief-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--text-main);
+}
+
+.debrief-task-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  flex-shrink: 0;
+}
+
+.debrief-task-label {
+  line-height: 1.4;
+}
+
+/* Carte Zen en l'absence de tâches */
+.debrief-zen-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 36px 28px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), var(--shadow-sm);
+}
+
+.debrief-zen-icon {
+  margin-bottom: 4px;
+}
+
+.debrief-zen-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.debrief-zen-text {
+  font-size: 0.92rem;
+  color: var(--text-dim);
+  max-width: 580px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Bannière des temps forts */
+.debrief-highlights-banner {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.debrief-highlights-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.debrief-highlights-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.debrief-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
+}
+
+/* Barre d'action basse */
+.debrief-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+[data-disable-animations="true"] .nav-debrief-dot,
+[data-perf-mode="potato"] .nav-debrief-dot {
+  box-shadow: none !important;
+}
+
+[data-theme="light"] .debrief-hero-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), var(--shadow-sm);
 }

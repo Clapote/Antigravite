@@ -491,6 +491,38 @@ const SettingsManager = {
       });
     }
 
+    // 11-quater. Contrôles du Débriefing positif
+    const chkDebriefEnabled = document.getElementById('setting-debrief-enabled');
+    if (chkDebriefEnabled) {
+      chkDebriefEnabled.addEventListener('change', (e) => {
+        this.updateSetting('debriefEnabled', e.target.checked);
+        if (typeof DebriefManager !== 'undefined') DebriefManager.updateTabVisibility();
+      });
+    }
+
+    const selDebriefHour = document.getElementById('setting-debrief-hour');
+    if (selDebriefHour) {
+      selDebriefHour.addEventListener('change', (e) => {
+        this.updateSetting('debriefHour', e.target.value);
+        if (typeof DebriefManager !== 'undefined') DebriefManager.updateTabVisibility();
+      });
+    }
+
+    const selDebriefRange = document.getElementById('setting-debrief-weekend-range');
+    if (selDebriefRange) {
+      selDebriefRange.addEventListener('change', (e) => {
+        this.updateSetting('debriefWeekendRange', e.target.value);
+      });
+    }
+
+    const chkDebriefAlways = document.getElementById('setting-debrief-always-show');
+    if (chkDebriefAlways) {
+      chkDebriefAlways.addEventListener('change', (e) => {
+        this.updateSetting('debriefAlwaysShowTab', e.target.checked);
+        if (typeof DebriefManager !== 'undefined') DebriefManager.updateTabVisibility();
+      });
+    }
+
     // 12. Toggles d'activation / désactivation des onglets du volet latéral
     document.querySelectorAll('.sidebar-tabs-toggle-grid input[type="checkbox"]').forEach(chk => {
       chk.addEventListener('change', (e) => {
@@ -992,6 +1024,24 @@ const SettingsManager = {
     const chkStickyNote = document.getElementById('setting-sidebar-sticky-note');
     if (chkStickyNote) {
       chkStickyNote.checked = settings.sidebarStickyNoteEnabled !== false;
+    }
+
+    // 11-quater. Débriefing et bilan
+    const chkDebriefEnabled = document.getElementById('setting-debrief-enabled');
+    if (chkDebriefEnabled) {
+      chkDebriefEnabled.checked = settings.debriefEnabled !== false;
+    }
+    const selDebriefHour = document.getElementById('setting-debrief-hour');
+    if (selDebriefHour) {
+      selDebriefHour.value = settings.debriefHour || '17:00';
+    }
+    const selDebriefRange = document.getElementById('setting-debrief-weekend-range');
+    if (selDebriefRange) {
+      selDebriefRange.value = settings.debriefWeekendRange || 'mon-fri';
+    }
+    const chkDebriefAlways = document.getElementById('setting-debrief-always-show');
+    if (chkDebriefAlways) {
+      chkDebriefAlways.checked = !!settings.debriefAlwaysShowTab;
     }
 
     // 11-bis. Synchroniser l'état des toggles d'onglets du volet latéral
@@ -1595,7 +1645,7 @@ const SettingsManager = {
 const UpdateManager = {
   initialized: false,
   isBusy: false,
-  currentVersion: '1.2.1',
+  currentVersion: '1.2.2',
   isPackaged: false,
   status: 'idle',
   updateInfo: null,
@@ -1650,11 +1700,16 @@ const UpdateManager = {
       }
       this._unsubscribe = updaterApi.onStatusChanged((data) => {
         if (!data) return;
+        const prevStatus = this.status;
         this.status = data.status || this.status;
         if (data.updateInfo) this.updateInfo = data.updateInfo;
         if (data.progress) this.downloadProgress = data.progress;
         if (data.error) this.lastError = data.error;
         this.render();
+
+        if (prevStatus !== 'downloaded' && this.status === 'downloaded') {
+          this.promptRestartChoice();
+        }
       });
     }
   },
@@ -1669,7 +1724,7 @@ const UpdateManager = {
   async refreshStatus() {
     const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
     if (!updaterApi) {
-      this.currentVersion = '1.2.1';
+      this.currentVersion = '1.2.2';
       this.isPackaged = false;
       this.render();
       return;
@@ -1752,6 +1807,42 @@ const UpdateManager = {
     } finally {
       this.isBusy = false;
       this.render();
+      if (this.status === 'downloaded') {
+        this.promptRestartChoice();
+      }
+    }
+  },
+
+  async promptRestartChoice() {
+    if (this._promptActive) return;
+    this._promptActive = true;
+    try {
+      if (typeof window === 'undefined') return;
+      const versionStr = this.updateInfo?.version ? ` (v${this.updateInfo.version})` : '';
+      const message = `La mise à jour${versionStr} a été téléchargée avec succès !\n\nSouhaitez-vous redémarrer Antigravité maintenant pour l'installer en toute discrétion en arrière-plan, ou préférez-vous continuer à travailler ?`;
+
+      if (window.App && typeof window.App.confirm === 'function') {
+        const shouldRestart = await window.App.confirm(
+          message,
+          "Mise à jour prête à installer",
+          {
+            confirmText: "Redémarrer maintenant",
+            cancelText: "Continuer à travailler",
+            isDanger: false,
+            icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
+          }
+        );
+
+        if (shouldRestart) {
+          this.installUpdate();
+        } else {
+          if (window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast("Mise à jour prête. Vous pouvez redémarrer à tout moment depuis les Paramètres.", "info", 6000);
+          }
+        }
+      }
+    } finally {
+      this._promptActive = false;
     }
   },
 
@@ -1766,6 +1857,15 @@ const UpdateManager = {
     }
 
     try {
+      if (typeof document !== 'undefined') {
+        const desc = document.getElementById('updater-status-desc');
+        const btnInstall = document.getElementById('btn-install-update');
+        if (desc) desc.textContent = "Installation silencieuse en arrière-plan et redémarrage automatique en cours...";
+        if (btnInstall) {
+          btnInstall.disabled = true;
+          btnInstall.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin-icon"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>Redémarrage en cours...</span>';
+        }
+      }
       await updaterApi.installUpdate();
     } catch (err) {
       this.status = 'error';
@@ -1893,7 +1993,7 @@ const UpdateManager = {
       case 'downloaded':
         if (icon) icon.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
         title.textContent = 'Téléchargement terminé !';
-        desc.textContent = 'La mise à jour a été téléchargée avec succès. Cliquez sur Redémarrer pour finaliser l\'installation.';
+        desc.textContent = 'La mise à jour a été téléchargée avec succès. Vous pouvez redémarrer pour l\'installer en arrière-plan, ou continuer à travailler normalement.';
         if (chip) chip.classList.add('status-connected');
         if (dot) dot.style.backgroundColor = '#10b981';
 
@@ -1901,6 +2001,7 @@ const UpdateManager = {
         if (btnInstall) {
           btnInstall.style.display = 'inline-flex';
           btnInstall.disabled = this.isBusy;
+          btnInstall.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Redémarrer et installer</span>';
         }
         break;
 

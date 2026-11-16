@@ -4,9 +4,12 @@
 
 const App = {
   currentScreen: 'home',
-  APP_VERSION: '1.2.1',
+  APP_VERSION: '1.2.2',
   WHATS_NEW_STORAGE_KEY: 'antigravite_last_seen_version',
   _activeWhatsNewVersion: null,
+  // Versions majeures justifiant l'affichage automatique de la modale "Quoi de neuf" au premier démarrage
+  // Les versions d'ajustements et de finitions (ex: 1.2.2) n'affichent pas de pop-up intrusif à l'ouverture
+  MAJOR_ANNOUNCED_VERSIONS: ['1.2.0'],
 
   // Messages de chargement variés affichés aléatoirement au démarrage
   LOADING_PHRASES: [
@@ -19,7 +22,41 @@ const App = {
     "Synchronisation de vos pensées...",
     "Alignement des priorités du jour...",
     "Préparation de votre flux de travail...",
-    "Décollage en douceur..."
+    "Décollage en douceur...",
+    "Négociation diplomatique avec vos to-do lists récalcitrantes...",
+    "Conviction du café qu'il est la pièce maîtresse de votre succès...",
+    "Défiance polie mais ferme des lois universelles de la gravité...",
+    "Recherche de la motivation (elle était cachée derrière un paquet de gâteaux)...",
+    "Téléchargement d'une dose massive de volonté...",
+    "Dépoussiérage bienveillant des projets commencés il y a trois mois...",
+    "Alignement des chakras, des pixels et des priorités...",
+    "Chauffage des neurones à température idéale de travail...",
+    "Dissimulation stratégique des distractions d'Internet...",
+    "Calcul de l'angle optimal pour dompter la journée...",
+    "Rangement virtuel du bureau pour faire semblant d'être prêt...",
+    "Vérification que votre boisson chaude est toujours à température...",
+    "Polissage du bouton magique pour cocher les tâches...",
+    "Brouillage des excuses bidons en cours...",
+    "Calibrage du radar à productivité sereine...",
+    "Promis, l'application tourne plus vite que l'envie de faire une pause...",
+    "Injection d'ondes positives dans l'interface...",
+    "Négociation avec le chat pour qu'il libère enfin le clavier...",
+    "Vérification des stocks d'énergie et de caféine dans le secteur 4...",
+    "Téléportation des bonnes idées directement vers vos neurones...",
+    "Dissimulation des onglets de shopping avant que quiconque ne regarde...",
+    "Ajustement de l'antigravité pour alléger instantanément vos to-do lists...",
+    "Convocation du conseil des neurones pour valider le plan de vol...",
+    "Enlèvement de la poussière cosmique sur vos meilleures résolutions...",
+    "Injection d'une pincée d'optimisme déraisonnable dans le moteur...",
+    "Synchronisation avec l'univers (qui prend parfois un peu de temps)...",
+    "Activation du bouclier anti-flemme de niveau 5...",
+    "Chargement de la bonne humeur... veuillez patienter pendant le dégel...",
+    "Vérification que personne n'a osé voler votre stylo fétiche...",
+    "Programmation d'une journée productive (ou au moins très honorable)...",
+    "Étalonnage du détecteur de victoires quotidiennes...",
+    "Calcul de la vitesse de fuite face aux corvées administratives...",
+    "Domptage des notifications intempestives en cours...",
+    "Recrutement de fées du logis virtuelles pour ranger vos idées..."
   ],
 
   getRandomLoadingPhrases(count = 3) {
@@ -35,6 +72,7 @@ const App = {
     this._bootStartTs = Date.now();
     // 0. Configurer le message d'accueil dynamique sur l'écran de chargement
     this.initSplashScreen();
+    this.checkForStartupUpdate();
 
     // Sélection aléatoire de 3 messages de chargement pour l'animation
     const loadingPhrases = this.getRandomLoadingPhrases(3);
@@ -57,6 +95,7 @@ const App = {
       if (typeof FocusManager !== 'undefined') FocusManager.init();
       if (typeof TrashManager !== 'undefined') TrashManager.init();
       if (typeof SearchManager !== 'undefined') SearchManager.init();
+      if (typeof DebriefManager !== 'undefined') DebriefManager.init();
 
       this.bindNavigation();
       this.bindGlobalActions();
@@ -100,6 +139,14 @@ const App = {
     // Temps de lecture de la validation finale et fermeture en douceur (4200ms -> 4800ms)
     await new Promise(resolve => setTimeout(resolve, 600));
     this.hideSplashScreen();
+    this._splashHidden = true;
+
+    // Vérifier si une mise à jour est disponible pour l'afficher en douceur après le chargement
+    if (this._availableUpdate && !this._updatePostponed) {
+      setTimeout(() => {
+        this.openUpdatePromptModal(this._availableUpdate);
+      }, 350);
+    }
 
     // 7. Afficher l'écran initial
     this.navigate('home');
@@ -131,6 +178,9 @@ const App = {
         if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.render === 'function') {
           AgendaManager.render();
         }
+        if (typeof DebriefManager !== 'undefined' && typeof DebriefManager.render === 'function') {
+          DebriefManager.render();
+        }
       } catch (err) {
         console.warn("[App] Préchargement doux des écrans :", err);
       }
@@ -155,6 +205,8 @@ const App = {
 
   shouldShowWhatsNew(version = this.APP_VERSION) {
     if (!version) return false;
+    // N'afficher le panneau de mise à jour au démarrage que pour les versions majeures annoncées
+    if (!this.MAJOR_ANNOUNCED_VERSIONS.includes(String(version))) return false;
     try {
       if (typeof localStorage === 'undefined') return false;
       return localStorage.getItem(this.WHATS_NEW_STORAGE_KEY) !== String(version);
@@ -274,6 +326,161 @@ const App = {
     }, delayMs);
   },
 
+  // =========================================================================
+  // GESTION PROACTIVE DES MISES À JOUR (Vérification au démarrage & Modale fluide)
+  // =========================================================================
+
+  async checkForStartupUpdate() {
+    if (typeof window === 'undefined' || !window.AntigraviteAPI || !window.AntigraviteAPI.updater) return;
+
+    try {
+      if (typeof window.AntigraviteAPI.updater.onTriggerMockUpdate === 'function') {
+        window.AntigraviteAPI.updater.onTriggerMockUpdate(async () => {
+          const res = await window.AntigraviteAPI.updater.checkForUpdates(true);
+          if (res && res.updateInfo) {
+            this._availableUpdate = res.updateInfo;
+            this._updatePostponed = false;
+            this.openUpdatePromptModal(res.updateInfo);
+          }
+        });
+      }
+
+      if (typeof window.AntigraviteAPI.updater.onStatusChanged === 'function') {
+        window.AntigraviteAPI.updater.onStatusChanged((data) => {
+          if (!data) return;
+          if (data.status === 'available' && data.updateInfo) {
+            this._availableUpdate = data.updateInfo;
+            if (this._splashHidden && !this._updatePostponed) {
+              setTimeout(() => {
+                this.openUpdatePromptModal(data.updateInfo);
+              }, 250);
+            }
+          }
+          if (data.status === 'downloading' && data.progress) {
+            this.updatePromptDownloadProgress(data.progress);
+          }
+          if (data.status === 'downloaded') {
+            this.onPromptUpdateDownloaded();
+          }
+        });
+      }
+
+      // Requête non bloquante avec timeout strict de 2.5s maximum
+      const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2500));
+      const checkPromise = window.AntigraviteAPI.updater.checkForUpdates();
+      const res = await Promise.race([checkPromise, timeoutPromise]);
+      if (res && res.updateInfo) {
+        this._availableUpdate = res.updateInfo;
+      }
+    } catch (_err) {
+      // Ignorer silencieusement pour ne jamais bloquer le chargement
+    }
+  },
+
+  openUpdatePromptModal(updateInfo) {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('modal-update-prompt');
+    if (!modal) return;
+
+    const badge = document.getElementById('update-prompt-version-badge');
+    if (badge && updateInfo && updateInfo.version) {
+      badge.textContent = `Version ${updateInfo.version} disponible`;
+    }
+
+    const notes = document.getElementById('update-prompt-notes');
+    if (notes && updateInfo && updateInfo.releaseNotes) {
+      notes.textContent = updateInfo.releaseNotes;
+    }
+
+    const btnCloseX = document.getElementById('btn-update-prompt-close-x');
+    const btnLater = document.getElementById('btn-update-prompt-later');
+    const btnNow = document.getElementById('btn-update-prompt-now');
+
+    const closeModal = () => {
+      this._updatePostponed = true;
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+      this.showPendingUpdateIndicator();
+    };
+
+    if (btnCloseX && !btnCloseX._promptBound) {
+      btnCloseX._promptBound = true;
+      btnCloseX.addEventListener('click', closeModal);
+    }
+    if (btnLater && !btnLater._promptBound) {
+      btnLater._promptBound = true;
+      btnLater.addEventListener('click', closeModal);
+    }
+
+    if (btnNow && !btnNow._promptBound) {
+      btnNow._promptBound = true;
+      btnNow.addEventListener('click', async () => {
+        if (btnLater) btnLater.disabled = true;
+        if (btnNow) btnNow.disabled = true;
+        const progressBox = document.getElementById('update-prompt-progress-box');
+        if (progressBox) progressBox.style.display = 'block';
+        const actionsBox = document.getElementById('update-prompt-actions');
+        if (actionsBox) actionsBox.style.display = 'none';
+
+        try {
+          await window.AntigraviteAPI.updater.downloadUpdate();
+        } catch (err) {
+          const label = document.getElementById('update-prompt-progress-label');
+          if (label) label.textContent = "Erreur de téléchargement. Réessayez depuis les paramètres.";
+          setTimeout(closeModal, 2500);
+        }
+      });
+    }
+
+    modal.style.display = 'flex';
+    modal.offsetHeight; // Forcer le reflow
+    modal.classList.add('active');
+  },
+
+  updatePromptDownloadProgress(progress) {
+    if (typeof document === 'undefined') return;
+    const bar = document.getElementById('update-prompt-progress-bar');
+    const percentEl = document.getElementById('update-prompt-progress-percent');
+    const labelEl = document.getElementById('update-prompt-progress-label');
+    const pct = Math.round(progress && progress.percent !== undefined ? progress.percent : 0);
+
+    if (bar) bar.style.width = `${pct}%`;
+    if (percentEl) percentEl.textContent = `${pct} %`;
+    if (labelEl) labelEl.textContent = `Téléchargement en cours... (${pct} %)`;
+  },
+
+  async onPromptUpdateDownloaded() {
+    if (typeof document === 'undefined') return;
+    const bar = document.getElementById('update-prompt-progress-bar');
+    const percentEl = document.getElementById('update-prompt-progress-percent');
+    const labelEl = document.getElementById('update-prompt-progress-label');
+    const sublabelEl = document.getElementById('update-prompt-progress-sublabel');
+
+    if (bar) bar.style.width = '100%';
+    if (percentEl) percentEl.textContent = '100 %';
+    if (labelEl) labelEl.textContent = 'Téléchargement terminé !';
+    if (sublabelEl) sublabelEl.textContent = 'Installation silencieuse et redémarrage automatique en cours...';
+
+    await new Promise(r => setTimeout(r, 600));
+    try {
+      await window.AntigraviteAPI.updater.installUpdate();
+    } catch (_err) {}
+  },
+
+  showPendingUpdateIndicator() {
+    if (typeof document === 'undefined') return;
+    const navSettings = document.querySelector('.nav-item[data-screen="settings"]');
+    if (navSettings && !document.getElementById('nav-update-dot')) {
+      const dot = document.createElement('span');
+      dot.id = 'nav-update-dot';
+      dot.className = 'nav-debrief-dot';
+      dot.style.backgroundColor = 'var(--accent)';
+      dot.style.boxShadow = '0 0 8px var(--accent)';
+      dot.title = 'Mise à jour disponible';
+      navSettings.appendChild(dot);
+    }
+  },
+
   getUserName() {
     try {
       if (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function') {
@@ -285,6 +492,128 @@ const App = {
       }
     } catch (_e) {}
     return '';
+  },
+
+  // Dictionnaire centralisé d'icônes vectorielles SVG (Identité visuelle qualitative)
+  getSvgIcon(name, size = 14, extraClass = '') {
+    const cls = extraClass ? `app-icon ${extraClass}` : 'app-icon';
+    switch (name) {
+      case 'pin':
+      case '📌':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
+      case 'note':
+      case '📝':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`;
+      case 'calendar':
+      case '📅':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`;
+      case 'clock':
+      case '⏱️':
+      case '⏱':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+      case 'sun':
+      case '☀️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
+      case 'repeat':
+      case '🔁':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
+      case 'location':
+      case '📍':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+      case 'folder':
+      case '📁':
+      case '📂':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`;
+      case 'trash':
+      case '🗑️':
+      case '🗑':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
+      case 'edit':
+      case '✏️':
+      case '✏':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
+      case 'globe':
+      case '🌐':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+      case 'debrief':
+      case 'sunset':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/></svg>`;
+      case 'sparkles':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>`;
+      case 'check':
+      case '✓':
+      case '✅':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      case 'palette':
+      case '🎨':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>`;
+      case 'restore':
+      case '📥':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`;
+      case 'broom':
+      case '🧹':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/></svg>`;
+      case 'lock':
+      case '🔒':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+      case 'lightbulb':
+      case '💡':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>`;
+      case 'plus':
+      case '➕':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+      case 'zap':
+      case '⚡':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+      case 'infinity':
+      case '♾️':
+      case '♾':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-2.695 0-4.71-3.613-6.178-5.333C10.533 12.387 8.518 16 5.822 16c-5.096 0-5.096-8 0-8 2.695 0 4.71 3.613 6.178 5.333C13.467 11.613 15.482 8 18.178 8z"/></svg>`;
+      case 'target':
+      case '🎯':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`;
+      case 'keyboard':
+      case '⌨️':
+      case '⌨':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M6 12h.001M10 12h.001M14 12h.001M18 12h.001M7 16h10"/></svg>`;
+      case 'tag':
+      case '🏷️':
+      case '🏷':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>`;
+      case 'warning':
+      case '⚠️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+      case 'alert':
+      case 'danger':
+      case 'error':
+      case '🚨':
+      case '❌':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+      case 'important':
+      case '❗':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+      case 'shield':
+      case '🛡️':
+      case '🛡':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+      case 'book':
+      case '📖':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 2v20"/></svg>`;
+      case 'refresh':
+      case '🔄':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
+      case 'user':
+      case '👤':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`;
+      default:
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+    }
+  },
+
+  resolveDialogIcon(icon, defaultIcon) {
+    if (!icon) return defaultIcon;
+    if (typeof icon === 'string' && (icon.startsWith('<svg') || icon.startsWith('<img'))) return icon;
+    return this.getSvgIcon(icon, 24);
   },
 
   getGreetingMessage(hours = new Date().getHours()) {
@@ -431,6 +760,7 @@ const App = {
       notes: 'Notes personnelles',
       focus: 'Mode Focus & Pomodoro',
       music: 'Espace Musique & Ambiance',
+      debrief: 'Bilan & Débriefing',
       trash: 'Corbeille',
       backups: 'Sauvegardes locales',
       settings: 'Paramètres & Apparence'
@@ -468,6 +798,7 @@ const App = {
     if (screenId === 'notes') NotesManager.render();
     if (screenId === 'focus' && typeof FocusManager !== 'undefined') FocusManager.render();
     if (screenId === 'music' && typeof MusicManager !== 'undefined') MusicManager.render();
+    if (screenId === 'debrief' && typeof DebriefManager !== 'undefined') DebriefManager.render();
     if (screenId === 'trash' && typeof TrashManager !== 'undefined') TrashManager.render();
     if (screenId === 'backups') BackupManager.render();
     if (screenId === 'settings') {
@@ -576,12 +907,18 @@ const App = {
     const settingsItem = navMenu.querySelector('.nav-item[data-screen="settings"]');
     if (!settingsItem) return;
 
+    const debriefItem = navMenu.querySelector('.nav-item[data-screen="debrief"]');
+
     order.forEach(screenId => {
       const item = navMenu.querySelector(`.nav-item[data-screen="${screenId}"]`);
       if (item) {
         navMenu.insertBefore(item, settingsItem);
       }
     });
+
+    if (debriefItem) {
+      navMenu.insertBefore(debriefItem, settingsItem);
+    }
   },
 
   // Gestion de la visibilité des onglets dans le panneau latéral
@@ -612,6 +949,16 @@ const App = {
       const screen = item.dataset.screen;
       if (!screen || screen === 'home' || screen === 'settings') {
         item.style.display = '';
+        return;
+      }
+      if (screen === 'debrief') {
+        const debriefVisible = (typeof DebriefManager !== 'undefined')
+          ? DebriefManager.shouldShowTab(settings)
+          : false;
+        item.style.display = debriefVisible ? '' : 'none';
+        if (!debriefVisible && this.currentScreen === 'debrief') {
+          this.navigate('home');
+        }
         return;
       }
       const isVisible = (visibleScreens[screen] !== undefined)
@@ -1346,7 +1693,7 @@ const App = {
     const defaultIcon = isDanger
       ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
       : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-    const icon = options.icon || defaultIcon;
+    const icon = this.resolveDialogIcon(options.icon, defaultIcon);
 
     return new Promise((resolve) => {
       if (typeof document === 'undefined') {
@@ -1421,7 +1768,8 @@ const App = {
       success: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
       info: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
     };
-    const icon = options.icon || defaultAlertIcons[type] || defaultAlertIcons.info;
+    const defaultIcon = defaultAlertIcons[type] || defaultAlertIcons.info;
+    const icon = this.resolveDialogIcon(options.icon, defaultIcon);
 
     return new Promise((resolve) => {
       if (typeof document === 'undefined') {
@@ -1487,7 +1835,7 @@ const App = {
     const confirmText = (typeof options === 'object' && options.confirmText) ? options.confirmText : 'Valider';
     const cancelText = (typeof options === 'object' && options.cancelText) ? options.cancelText : 'Annuler';
     const defaultIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
-    const icon = (typeof options === 'object' && options.icon) ? options.icon : defaultIcon;
+    const icon = this.resolveDialogIcon(options.icon, defaultIcon);
 
     return new Promise((resolve) => {
       if (typeof document === 'undefined') {
@@ -1774,6 +2122,9 @@ const App = {
       this._dayProgressTimer = setInterval(() => {
         if (typeof document !== 'undefined' && !document.hidden) {
           this.updateSidebarDayProgress();
+          if (typeof DebriefManager !== 'undefined' && typeof DebriefManager.updateTabVisibility === 'function') {
+            DebriefManager.updateTabVisibility();
+          }
         }
       }, dayMs);
     }
@@ -1831,28 +2182,72 @@ const App = {
       "Nouvelle matinée, belle opportunité de faire ce qui compte vraiment.",
       "Prenez une grande inspiration matinale : vous avez tout sous contrôle.",
       "Vos tâches n'ont qu'à bien se tenir : vous êtes aux commandes aujourd'hui.",
-      "Défier les lois de la gravité dès le réveil, c'est un bel exploit."
+      "Défier les lois de la gravité dès le réveil, c'est un bel exploit.",
+      "Le réveil a sonné, vos projets ont tremblé. Café d'abord, conquête du monde ensuite.",
+      "Une journée commence toujours mieux quand on fait semblant de savoir exactement ce qu'on fait.",
+      "Rappelez-vous : même les astronautes commencent leur journée en cherchant leurs chaussettes.",
+      "Statistiquement, 90 % des grands projets commencent par un soupir et une bonne gorgée de café.",
+      "La gravité essaie de vous clouer au lit : montrez-lui poliment qui est le chef ici.",
+      "Règle numéro 1 du matin : adresser la parole au café avant d'adresser la parole aux humains ☕.",
+      "Votre réveil a sonné, vous avez survécu. Étape 1 validée avec brio, le reste n'est qu'une formalité.",
+      "Le matin, c'est ce moment magique où l'on est convaincu de pouvoir plier 14 projets avant midi.",
+      "Mettez vos baskets mentales : le marathon des coches de cases est officiellement ouvert !",
+      "Bonjour ! Vos objectifs du jour vous attendent avec impatience et une petite pancarte d'encouragement.",
+      "Le secret d'un matin réussi ? Regarder sa to-do list avec l'assurance d'un grand chef étoilé."
     ],
     lunch: [
       "Prenez une vraie pause déjeuner : l'esprit a besoin de souffler pour rester vif 🍽️.",
       "Il paraît que les personnes les plus organisées savourent aussi leur pause midi.",
       "Faites le plein d'énergie, vos projets vous attendront sagement après le repas.",
       "Une petite pause bien méritée avant d'attaquer la deuxième partie de journée.",
-      "Rassurez-vous, même Rome ne s'est pas organisée entre midi et deux."
+      "Rassurez-vous, même Rome ne s'est pas organisée entre midi et deux.",
+      "Manger devant son écran ne compte pas comme un gain de productivité, lâchez ce clavier !",
+      "Votre estomac a voté à l'unanimité : arrêt temporaire des hostilités professionnelles.",
+      "Règle d'or : les calories de la pause déjeuner n'ont aucun impact sur vos deadlines.",
+      "Une légende urbaine raconte que quelqu'un a déjà trouvé une idée de génie en dégustant un dessert.",
+      "Pause déjeuner : le seul moment où l'on a le droit légal de ne penser qu'à son assiette.",
+      "Avis médical unanime : travailler en mâchant réduit le plaisir de 100 %. Bon appétit !",
+      "La pause déjeuner n'est pas une perte de temps, c'est une recharge tactique en glucides.",
+      "Si vous hésitez entre terminer une tâche et savourer un bon plat, votre assiette a toujours raison.",
+      "Rappelez-vous : un estomac vide ne produit que des idées creuses. À table !",
+      "Pause midi : moment officiel de dégustation et de non-assistance à projet en détresse.",
+      "Le cerveau a besoin de calories pour être génial. Ne le faites pas attendre !"
     ],
     afternoon: [
       "Concentration et efficacité : chaque tâche cochée cet après-midi est une victoire.",
       "Une étape à la fois : avancez à votre rythme, avec constance et clarté.",
       "Cocher une tâche procure une dose de dopamine 100 % locale et garantie sans sucre.",
       "Moins de charge mentale, plus de sérénité (et zéro pub sur vos données personnelles).",
-      "Si une tâche vous effraie, regardez-la droit dans les yeux et cochez-la."
+      "Si une tâche vous effraie, regardez-la droit dans les yeux et cochez-la.",
+      "C'est l'heure fatidique où le canapé vous appelle par votre prénom. Résistez vaillamment !",
+      "Si vous fixez votre écran avec un air très concentré, tout le monde croira à un coup de génie.",
+      "La productivité de l'après-midi, c'est 20 % de caféine et 80 % de fierté personnelle.",
+      "Le secret d'un grand projet ? Le découper en petites étapes jusqu'à ce que la première soit facile comme respirer.",
+      "Respirez : chaque minute de travail maintenant vous rapproche d'une soirée sans remords.",
+      "C'est l'heure du fameux coup de barre de 14h30. Un grand verre d'eau, un étirement et c'est reparti !",
+      "L'après-midi : l'art subtil de fixer l'écran avec un air passionné pour masquer une envie de sieste.",
+      "Ne comptez pas les heures, faites en sorte que chaque heure compte (et préparez un thé).",
+      "Votre énergie est renouvelable : offrez-vous une mini-victoire dès maintenant !",
+      "Une tâche cochée à 15h vaut deux soupirs de soulagement à 17h. Allez, on fonce !",
+      "La concentration de l'après-midi, c'est comme le wifi : parfois il faut juste se reconnecter en douceur."
     ],
     evening: [
       "La journée touche à sa fin : bravo pour tout le travail accompli aujourd'hui !",
       "Déconnectez l'esprit en toute sérénité : tout est soigneusement sauvegardé en local.",
       "Le repos du soir est la clé d'une journée productive demain.",
       "Vos tâches sont au chaud pour la nuit, profitez d'une excellente soirée.",
-      "Bilan de fin de journée : votre temps est précieux, savourez ce moment de calme."
+      "Bilan de fin de journée : votre temps est précieux, savourez ce moment de calme.",
+      "Rangez les crayons et fermez les onglets : le travail est fait, le canapé a gagné la manche.",
+      "Votre lit vous envoie un signal urgent : votre présence est requise sous la couette.",
+      "Félicitations, vous avez survécu à une journée entière de décisions d'adulte. C'est déjà admirable.",
+      "Tout est soigneusement sauvegardé sur votre disque dur. Vous pouvez éteindre vos neurones en toute légalité.",
+      "Si une idée brillante vous vient maintenant, notez-la dans le mémo rapide et filez vous reposer !",
+      "Arrêt des machines ! Les projets sont sagement au lit, il ne manque plus que vous.",
+      "Votre écran vous remercie pour votre charmante compagnie mais suggère poliment d'aller voir ailleurs.",
+      "Vous avez fait ce que vous avez pu, demain fera ce qu'il voudra. Très belle soirée !",
+      "La touche 'Éteindre' est la plus belle invention depuis le pain tranché. Savourez !",
+      "Félicitations : vous avez officiellement le droit de vous transformer en loque sur le canapé sans remords.",
+      "Déconnexion validée par les autorités du bien-être. Passez une soirée 100 % reposante !"
     ],
     warm: [
       "J'espère que vous passez une excellente journée.",
@@ -1860,7 +2255,15 @@ const App = {
       "Une étape à la fois : chaque tâche cochée est une victoire.",
       "Prenez une grande inspiration : vous avez tout sous contrôle.",
       "Votre temps est précieux, savourez chaque moment aujourd'hui.",
-      "Prenez soin de vous entre deux sessions de travail !"
+      "Prenez soin de vous entre deux sessions de travail !",
+      "Vous faites de votre mieux, et c'est amplement suffisant pour aujourd'hui.",
+      "Une pensée bienveillante pour vous accompagner dans vos projets du jour.",
+      "Un petit coucou amical pour vous rappeler que vous faites déjà un travail formidable.",
+      "Rien ne presse : les plus belles constructions se tissent dans le calme et la patience.",
+      "Prenez un instant pour respirer : vous êtes exactement là où vous devez être.",
+      "Un sourire, une gorgée d'eau, et chaque tâche devient un jeu d'enfant.",
+      "Votre motivation a le droit de respirer : avancez un pas après l'autre, avec le sourire.",
+      "Chaque effort compte, même les plus discrets. Soyez fier de ce que vous entreprenez !"
     ],
     witty: [
       "Ne remettez pas à demain ce que vous pouvez faire... après un bon café ☕.",
@@ -1868,7 +2271,23 @@ const App = {
       "Défier les lois de la gravité, c'est bien. Vaincre la procrastination, c'est un exploit.",
       "Une to-do list bien remplie, c'est la preuve d'un optimisme sans limite.",
       "Rassurez-vous, même Rome ne s'est pas organisée en un jour.",
-      "Moins de charge mentale, plus de sérénité (et zéro pub sur vos données)."
+      "Moins de charge mentale, plus de sérénité (et zéro pub sur vos données).",
+      "La to-do list est pleine, la tasse est vide : nous sommes exactement là où nous devions être.",
+      "Procrastiner, c'est l'art subtil de garder son calme pendant que le futur s'inquiète pour nous.",
+      "Ne remettez pas à demain ce que vous pouvez cocher en deux minutes chrono !",
+      "Vos données restent 100 % sur votre machine : personne ne saura combien de fois vous avez décalé cette tâche.",
+      "Faire semblant d'être débordé demande parfois plus d'énergie que de simplement faire la tâche.",
+      "La perfection n'existe pas, sauf dans le doux son d'une case qu'on valide.",
+      "Le travail d'équipe, c'est bien. Mais une to-do list où l'on est le seul chef à bord, c'est encore mieux !",
+      "La to-do list est un pont entre vos rêves et votre envie furieuse de faire la sieste.",
+      "La procrastination intelligente consiste à faire une autre tâche utile pour éviter la première.",
+      "Si le plan A ne fonctionne pas, il reste encore 25 lettres dans l'alphabet (et l'alphabet grec si besoin).",
+      "Une to-do list sans café, c'est comme une fusée sans carburant : joli sur le papier, mais cloué au sol.",
+      "Ne dites pas 'je suis débordé', dites 'je vis une expérience de multitâche immersive à haute intensité'.",
+      "Le meilleur moyen de ne rien oublier, c'est de le faire tout de suite... ou de le noter ici avec style !",
+      "Travailler intelligemment, c'est aussi savoir quand fermer son ordinateur avec fierté.",
+      "Il n'y a pas de problème que 15 minutes de marche ou un carré de chocolat ne puissent relativiser.",
+      "Votre to-do list vous admire en secret : elle sait que vous finirez toujours par l'apprivoiser."
     ]
   },
 
@@ -2037,12 +2456,12 @@ const App = {
           return `
             <div class="dashboard-item dashboard-task-item" style="${projectBorder}">
               <div class="dashboard-item-main">
-                <span class="dashboard-item-icon">📌</span>
+                <span class="dashboard-item-icon">${this.getSvgIcon('pin', 14)}</span>
                 <span class="dashboard-item-title" onclick="TasksManager.openTaskModal('${t.id}')" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
               </div>
               <div class="dashboard-item-meta" style="display:flex; align-items:center; gap:5px;">
                 ${projectBadge}
-                ${TasksManager.getPriorityBadge(t.priority)}
+                ${typeof TasksManager !== 'undefined' && typeof TasksManager.getPriorityBadge === 'function' ? TasksManager.getPriorityBadge(t.priority) : ''}
               </div>
             </div>
           `;
@@ -2096,9 +2515,9 @@ const App = {
               </div>
               <div class="dashboard-item-meta">
                 <span class="dashboard-source-pill ${isGoogle ? 'pill-google' : 'pill-antigravite'}">
-                  ${isGoogle ? '🌐 Google' : '<img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité'}
+                  ${isGoogle ? '<span class="source-icon">' + this.getSvgIcon('globe', 12) + '</span> Google' : '<img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité'}
                 </span>
-                <span class="dashboard-time-badge" title="Créneau horaire : ${timeBadge}">⏱️ ${timeBadge}</span>
+                <span class="dashboard-time-badge" title="Créneau horaire : ${timeBadge}"><span class="badge-time-icon">${this.getSvgIcon('clock', 12)}</span> <span class="badge-time-text">${timeBadge}</span></span>
               </div>
             </div>
           `;
@@ -2144,11 +2563,11 @@ const App = {
             <div class="dashboard-item dashboard-note-item" style="${projectBorder}">
               <div class="dashboard-item-main" style="flex-direction:column; align-items:flex-start; gap:2px;">
                 <div style="display:flex; align-items:center; gap:6px; width:100%; min-width:0;">
-                  <span class="dashboard-item-icon">📝</span>
+                  <span class="dashboard-item-icon">${this.getSvgIcon('note', 14)}</span>
                   <span class="dashboard-item-title" onclick="App.openNoteFromDashboard('${n.id}')" title="${this.escapeHtml(n.title || 'Note sans titre')}">
                     ${this.escapeHtml(n.title || 'Note sans titre')}
                   </span>
-                  ${n.linkedEventId ? '<span title="Liée à un créneau d\'agenda" style="font-size:0.7rem; color:var(--accent); flex-shrink:0;">📅</span>' : ''}
+                  ${n.linkedEventId ? '<span title="Liée à un créneau d\'agenda" style="color:var(--accent); display:inline-flex; align-items:center; flex-shrink:0;">' + this.getSvgIcon('calendar', 12) + '</span>' : ''}
                 </div>
                 ${preview ? `<div class="dashboard-note-preview" style="font-size:0.76rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${this.escapeHtml(preview)}</div>` : ''}
               </div>

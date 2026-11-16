@@ -32,8 +32,16 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, commandLine) => {
     restoreAndFocusWindow();
+    if (commandLine && Array.isArray(commandLine) && commandLine.some(arg => typeof arg === 'string' && arg.includes('--mock-update-available'))) {
+      if (updateService) {
+        updateService.isMockMode = true;
+      }
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+        mainWindow.webContents.send('antigravite:trigger-mock-update');
+      }
+    }
   });
 }
 
@@ -269,6 +277,13 @@ function createWindow() {
       mainWindow.show();
     }
   });
+
+  // Sécurité d'affichage : garantit que la fenêtre s'affiche même si ready-to-show tarde
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  }, 1500);
 
   if (process.platform === 'win32') {
     try {
@@ -1053,9 +1068,14 @@ ipcMain.handle('antigravite:updater-download', async () => {
   return updateService.downloadUpdate();
 });
 
+ipcMain.handle('antigravite:updater-enable-mock', () => {
+  updateService.isMockMode = true;
+  return true;
+});
+
 ipcMain.handle('antigravite:updater-install', async () => {
   isQuitting = true;
-  updateService.quitAndInstall(false, true);
+  updateService.quitAndInstall(true, true);
   return true;
 });
 
@@ -1094,8 +1114,10 @@ app.whenReady().then(async () => {
 
   // Initialisation du service de mise à jour automatique sans blocage réseau au démarrage
   try {
+    const isMockUpdate = process.argv.includes('--mock-update-available');
     updateService.init({
       app,
+      mock: isMockUpdate,
       onBeforeQuitInstall: () => {
         isQuitting = true;
         if (tray && !tray.isDestroyed()) {

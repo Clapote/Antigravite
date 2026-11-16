@@ -10,12 +10,21 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
     checkForUpdates: (force) => ipcRenderer.invoke('antigravite:updater-check', !!force),
     downloadUpdate: () => ipcRenderer.invoke('antigravite:updater-download'),
     installUpdate: () => ipcRenderer.invoke('antigravite:updater-install'),
+    enableMockMode: () => ipcRenderer.invoke('antigravite:updater-enable-mock'),
     onStatusChanged: (callback) => {
       if (typeof callback !== 'function') return () => {};
       const handler = (_event, data) => callback(data);
       ipcRenderer.on('antigravite:updater-status-changed', handler);
       return () => {
         ipcRenderer.removeListener('antigravite:updater-status-changed', handler);
+      };
+    },
+    onTriggerMockUpdate: (callback) => {
+      if (typeof callback !== 'function') return () => {};
+      const handler = () => callback();
+      ipcRenderer.on('antigravite:trigger-mock-update', handler);
+      return () => {
+        ipcRenderer.removeListener('antigravite:trigger-mock-update', handler);
       };
     }
   }),

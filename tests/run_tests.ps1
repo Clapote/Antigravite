@@ -1,4 +1,4 @@
-# Antigravité - Suite de Tests Automatisés
+﻿# Antigravité - Suite de Tests Automatisés
 # Ce script vérifie le respect scrupuleux de l'ensemble des règles et principes impératifs.
 
 $ErrorActionPreference = "Stop"
@@ -8,6 +8,7 @@ Write-Host "==========================================================" -Foregro
 
 $baseDir = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
 $dataDir = Join-Path $baseDir "data"
+$fixturesDir = Join-Path $baseDir "tests\fixtures"
 $backupsDir = Join-Path $baseDir "backups"
 
 $testsPassed = 0
@@ -53,7 +54,7 @@ foreach ($f in $files) {
 # -----------------------------------------------------------------------------
 Write-Host "`n2. Vérification des tâches récursives (profondeur arbitraire)..." -ForegroundColor Yellow
 
-$tasksJson = Get-Content -Path (Join-Path $dataDir "tasks.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$tasksJson = Get-Content -Path (Join-Path $fixturesDir "tasks.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 
 function Get-MaxDepth($taskList, $currentDepth = 1) {
     $max = $currentDepth
@@ -85,7 +86,7 @@ Assert-Test "L'ordre initial défini par l'utilisateur est scrupuleusement conse
 # -----------------------------------------------------------------------------
 Write-Host "`n4. Vérification de la distinction des trois notions temporelles..." -ForegroundColor Yellow
 
-$eventsJson = Get-Content -Path (Join-Path $dataDir "events.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$eventsJson = Get-Content -Path (Join-Path $fixturesDir "events.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 
 $taskWithDates = $tasksJson[0]
 $hasDeadline = -not [string]::IsNullOrEmpty($taskWithDates.deadline)
@@ -146,9 +147,9 @@ $backupData = @{
     version = "1.0"
     exportedAt = (Get-Date).ToString("o")
     tasks = $tasksJson
-    projects = (Get-Content (Join-Path $dataDir "projects.json") -Raw | ConvertFrom-Json)
+    projects = (Get-Content (Join-Path $fixturesDir "projects.json") -Raw | ConvertFrom-Json)
     events = $eventsJson
-    notes = (Get-Content (Join-Path $dataDir "notes.json") -Raw | ConvertFrom-Json)
+    notes = (Get-Content (Join-Path $fixturesDir "notes.json") -Raw | ConvertFrom-Json)
     settings = (Get-Content (Join-Path $dataDir "settings.json") -Raw | ConvertFrom-Json)
 }
 
@@ -415,6 +416,42 @@ if (Test-Path $nodePath) {
     $v113FeaturesPass = ($LASTEXITCODE -eq 0)
 }
 Assert-Test "Fonctionnalités v1.1.3 (Rappels Agenda multi-choix, Fonds d'écran étendus & Accents supplémentaires)" $v113FeaturesPass
+
+# -----------------------------------------------------------------------------
+# TEST 28 : Fonctionnalités v1.2.2 (Bandeau Journée Entière en En-tête Agenda)
+# -----------------------------------------------------------------------------
+Write-Host "`n28. Vérification des fonctionnalités v1.2.2..." -ForegroundColor Yellow
+
+$v122FeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v122_features.js")
+    $v122FeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités v1.2.2 (Bandeau Journée Entière en en-tête d'agenda, style reconnaissable et dégagement de la grille horaire)" $v122FeaturesPass
+
+# -----------------------------------------------------------------------------
+# TEST 29 : Débriefing Positif & Bilan Bienveillant
+# -----------------------------------------------------------------------------
+Write-Host "`n29. Vérification du Débriefing Positif & Bilan Bienveillant..." -ForegroundColor Yellow
+
+$debriefFeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_debrief_features.js")
+    $debriefFeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Débriefing Positif & Bilan Bienveillant (Bilan du jour dès 17h, bilan hebdo, zéro culpabilité, paramètres personnalisés)" $debriefFeaturesPass
+
+# -----------------------------------------------------------------------------
+# TEST 30 : Système de Mise à Jour au Démarrage & Mode Silencieux
+# -----------------------------------------------------------------------------
+Write-Host "`n30. Vérification du Système de Mise à Jour au Démarrage & Mode Silencieux..." -ForegroundColor Yellow
+
+$startupUpdaterPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_startup_updater.js")
+    $startupUpdaterPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Système de Mise à Jour au Démarrage & Installation Silencieuse (Vérification non bloquante, pop-up, téléchargement in-app et silent install)" $startupUpdaterPass
 
 # -----------------------------------------------------------------------------
 # BILAN

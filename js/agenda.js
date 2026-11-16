@@ -16,6 +16,54 @@ const AgendaManager = {
   _lastScrollTop: null,
   _preserveScrollTop: null,
 
+  getSvgIcon(name, size = 14, extraClass = '') {
+    if (typeof App !== 'undefined' && typeof App.getSvgIcon === 'function') {
+      return App.getSvgIcon(name, size, extraClass);
+    }
+    const cls = extraClass ? `app-icon ${extraClass}` : 'app-icon';
+    switch (name) {
+      case 'pin':
+      case '📌':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
+      case 'note':
+      case '📝':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`;
+      case 'calendar':
+      case '📅':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`;
+      case 'sun':
+      case '☀️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
+      case 'repeat':
+      case '🔁':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
+      case 'location':
+      case '📍':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+      case 'check':
+      case '✓':
+      case '✅':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      case 'edit':
+      case '✏️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
+      case 'trash':
+      case '🗑️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
+      case 'plus':
+      case '➕':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+      case 'zap':
+      case '⚡':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+      case 'globe':
+      case '🌐':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+      default:
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+    }
+  },
+
   scrollToNormalHours(smooth = false) {
     const bodyEl = document.getElementById('calendar-body-container') || document.getElementById('calendar-body') || (typeof document !== 'undefined' && document.querySelector ? document.querySelector('.calendar-body') : null);
     if (!bodyEl) return;
@@ -812,12 +860,12 @@ const AgendaManager = {
         const startTimeStr = e.start && e.start.length >= 16 ? e.start.slice(11, 16) : '';
         const titleSafe = this.escapeHtml(e.title || '(Sans titre)');
         pillsHtml += `
-          <div class="month-event-pill ${isTaskCompleted ? 'task-completed-pill' : ''}" 
+          <div class="month-event-pill ${isTaskCompleted ? 'task-completed-pill' : ''} ${e.isAllDay ? 'allday-month-pill' : ''}" 
                style="background: ${eventColor};" 
                data-event-id="${e.id}"
                onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}');"
-               title="${titleSafe} (${e.isAllDay ? 'Journée' : startTimeStr})${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + (isTaskCompleted ? ' (Terminée ✓)' : '') + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
-            ${isTaskCompleted ? '<span style="color:#4ade80; font-weight:bold; margin-right:2px;">✓</span> ' : ''}${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${linkedNote ? '📝 ' : ''}${titleSafe}
+               title="${titleSafe} (${e.isAllDay ? 'Journée entière' : startTimeStr})${linkedTask ? ' [Lié à tâche: ' + this.escapeHtml(linkedTask.task.title) + (isTaskCompleted ? ' (Terminée ✓)' : '') + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
+            ${isTaskCompleted ? '<span style="color:#4ade80; display:inline-flex; align-items:center; margin-right:3px;" title="Tâche terminée">' + this.getSvgIcon('check', 10) + '</span>' : ''}${e.isAllDay ? '<span style="display:inline-flex; align-items:center; margin-right:2px;" title="Journée entière">' + this.getSvgIcon('sun', 10) + '</span>' : ''}${(e.recurrence && e.recurrence !== 'none') ? '<span style="display:inline-flex; align-items:center; margin-right:2px;" title="Événement récurrent">' + this.getSvgIcon('repeat', 10) + '</span>' : ''}${linkedNote ? '<span title="Note liée : ' + this.escapeHtml(linkedNote.title) + '" style="display:inline-flex; align-items:center; margin-right:2px;">' + this.getSvgIcon('note', 10) + '</span>' : ''}${titleSafe}
           </div>
         `;
       });
@@ -973,10 +1021,98 @@ const AgendaManager = {
       return effEnd >= startRangeIso && sDay <= endRangeIso;
     });
 
+    // 4. Bandeau supérieur des événements Journée Entière (All-Day Row au niveau du jour)
+    let alldayEl = document.getElementById('calendar-allday-container');
+    if (!alldayEl && weekdaysEl && weekdaysEl.parentNode) {
+      alldayEl = document.createElement('div');
+      alldayEl.id = 'calendar-allday-container';
+      alldayEl.className = 'calendar-allday-row';
+      alldayEl.style.display = 'none';
+      weekdaysEl.parentNode.insertBefore(alldayEl, bodyEl);
+    }
+
+    const hasAnyAllDay = days.some(d => {
+      const dateStr = this.formatDateIso(d);
+      return rangeEvents.some(e => !!e.isAllDay && this.isEventOnDate(e, dateStr));
+    });
+
+    if (alldayEl) {
+      if (hasAnyAllDay) {
+        if (this.currentView === 'day') {
+          alldayEl.style.gridTemplateColumns = '55px 1fr';
+          alldayEl.style.minWidth = 'auto';
+        } else {
+          alldayEl.style.gridTemplateColumns = '55px repeat(7, 1fr)';
+          alldayEl.style.minWidth = '680px';
+        }
+        alldayEl.style.display = 'grid';
+
+        let alldayHtml = `
+          <div class="calendar-allday-gutter">
+            <span class="calendar-allday-gutter-badge" title="Événements se déroulant sur toute la journée">Journée</span>
+          </div>
+        `;
+
+        days.forEach(d => {
+          const dateStr = this.formatDateIso(d);
+          const dayAllDayEvents = rangeEvents.filter(e => !!e.isAllDay && this.isEventOnDate(e, dateStr));
+          const isToday = (dateStr === todayStr);
+
+          alldayHtml += `<div class="calendar-allday-cell ${isToday ? 'today' : ''}" data-date="${dateStr}" onclick="AgendaManager.openEventModal(null, { start: '${dateStr}T09:00', end: '${dateStr}T10:00', isAllDay: true })" title="Cliquer pour ajouter un événement journée entière le ${dateStr}">`;
+
+          dayAllDayEvents.forEach(e => {
+            const isGoogle = e.source === 'google';
+            const startDay = e.start ? e.start.slice(0, 10) : '';
+            const endDay = e.end ? e.end.slice(0, 10) : startDay;
+            const isMultiDay = startDay && endDay && endDay > startDay;
+
+            const linkedTask = e.taskId ? taskMap.get(e.taskId) : null;
+            const linkedNote = (e.noteId ? noteById.get(e.noteId) : null) || noteByEventId.get(e.id);
+            const isTaskCompleted = !!(linkedTask && linkedTask.task && linkedTask.task.completed);
+
+            let eventColor = e.color;
+            if (linkedTask && linkedTask.task && linkedTask.task.projectId) {
+              const proj = projectMap.get(linkedTask.task.projectId);
+              if (proj && proj.color) eventColor = proj.color;
+            }
+            if (!eventColor) {
+              eventColor = isGoogle ? '#2563eb' : '#7c3aed';
+            }
+
+            alldayHtml += `
+              <div class="allday-event-pill ${isGoogle ? 'google' : 'antigravite'} ${isTaskCompleted ? 'task-completed-pill' : ''}"
+                   data-event-id="${e.id}"
+                   style="background: linear-gradient(135deg, ${eventColor} 0%, ${eventColor}dd 100%) !important; border-left: 4px solid #ffffff !important;"
+                   onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}');"
+                   oncontextmenu="AgendaManager.showEventContextMenu(event.clientX, event.clientY, '${e.id}'); event.preventDefault(); event.stopPropagation();"
+                   title="${this.escapeHtml(e.title || '(Sans titre)')} (Journée entière${isMultiDay ? ' • du ' + startDay + ' au ' + endDay : ''})${linkedTask ? ' [Lié à: ' + this.escapeHtml(linkedTask.task.title) + (isTaskCompleted ? ' (Terminée ✓)' : '') + ']' : ''}${linkedNote ? ' [Note: ' + this.escapeHtml(linkedNote.title) + ']' : ''}">
+                <span class="allday-pill-tag">${this.getSvgIcon('sun', 11)} 24h</span>
+                <span class="allday-pill-title">${(e.recurrence && e.recurrence !== 'none') ? '<span style="display:inline-flex; align-items:center; margin-right:3px;">' + this.getSvgIcon('repeat', 11) + '</span>' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</span>
+                <span class="allday-pill-badges">
+                  ${isTaskCompleted ? '<span style="color:#4ade80; display:inline-flex; align-items:center;" title="Tâche terminée">' + this.getSvgIcon('check', 11) + '</span>' : (linkedTask ? '<span title="Lié à tâche : ' + this.escapeHtml(linkedTask.task.title) + '" style="display:inline-flex; align-items:center;">' + this.getSvgIcon('pin', 11) + '</span>' : '')}
+                  ${linkedNote ? '<span title="Note liée : ' + this.escapeHtml(linkedNote.title) + '" style="display:inline-flex; align-items:center;">' + this.getSvgIcon('note', 11) + '</span>' : ''}
+                  ${isGoogle ? '<span class="event-origin-tag google" style="font-size:0.55rem; padding:0 3px;">G</span>' : ''}
+                </span>
+              </div>
+            `;
+          });
+
+          alldayHtml += `</div>`;
+        });
+
+        alldayEl.innerHTML = alldayHtml;
+      } else {
+        alldayEl.style.display = 'none';
+        alldayEl.innerHTML = '';
+      }
+    }
+
+    // 5. Colonnes de la grille horaire (événements minutés uniquement)
     days.forEach(d => {
       const dateStr = this.formatDateIso(d);
       const dayEvents = rangeEvents.filter(e => this.isEventOnDate(e, dateStr));
-      const layoutEvents = this.computeOverlappingLayout(dayEvents, dateStr);
+      const timedEvents = dayEvents.filter(e => !e.isAllDay);
+      const layoutEvents = this.computeOverlappingLayout(timedEvents, dateStr);
 
       bodyHtml += `<div class="day-column" data-date="${dateStr}" style="height: ${totalGridHeight}px; background-size: 100% ${this.slotHeight}px;">`;
 
@@ -1051,9 +1187,9 @@ const AgendaManager = {
             ${isCompact ? `
               <div class="event-compact-row">
                 ${isGoogle ? '<span class="event-origin-tag google" style="font-size:0.55rem; padding:0 3px;">G</span>' : ''}
-                ${isTaskCompleted ? '<span style="font-size:0.68rem; margin-right:3px; color:#4ade80; font-weight:bold;" title="Tâche liée terminée">✓</span>' : ''}
-                ${linkedNote ? '<span style="font-size:0.65rem; margin-right:2px;" title="Note liée : ' + this.escapeHtml(linkedNote.title) + '">📝</span>' : ''}
-                <span class="event-title compact" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</span>
+                ${isTaskCompleted ? '<span style="color:#4ade80; display:inline-flex; align-items:center; margin-right:3px;" title="Tâche liée terminée">' + this.getSvgIcon('check', 11) + '</span>' : ''}
+                ${linkedNote ? '<span style="display:inline-flex; align-items:center; margin-right:2px;" title="Note liée : ' + this.escapeHtml(linkedNote.title) + '">' + this.getSvgIcon('note', 11) + '</span>' : ''}
+                <span class="event-title compact" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '<span class="event-recurrence-pill" style="display:inline-flex; align-items:center; margin-right:2px;">' + this.getSvgIcon('repeat', 10) + '</span>' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</span>
                 <span class="event-time-compact" style="color: rgba(255,255,255,0.95); margin-left: auto;">${e.isAllDay ? 'Jour' : (isMultiDay && dateStr !== startDay ? (isNightEnd ? '➔ ' + endTimeStr + ' (Nuit)' : '➔ ' + endTimeStr) : startTimeStr)}</span>
               </div>
             ` : `
@@ -1063,12 +1199,12 @@ const AgendaManager = {
                   : '<span class="event-origin-tag google">Google</span>') 
                   : '<span class="event-time-pill" style="margin-left:0;">' + timeDisplay + '</span>'}
                 ${isGoogle ? '<span class="event-time-pill">' + timeDisplay + '</span>' : ''}
-                ${isTaskCompleted ? '<span class="event-done-pill" style="margin-left:auto; font-size:0.65rem; background:rgba(34,197,94,0.35); border:1px solid rgba(74,222,128,0.6); color:#86efac; border-radius:999px; padding:1px 5px; font-weight:600; display:inline-flex; align-items:center; gap:2px;">✓ Fait</span>' : ''}
+                ${isTaskCompleted ? '<span class="event-done-pill" style="margin-left:auto; font-size:0.65rem; background:rgba(34,197,94,0.35); border:1px solid rgba(74,222,128,0.6); color:#86efac; border-radius:999px; padding:1px 5px; font-weight:600; display:inline-flex; align-items:center; gap:3px;">' + this.getSvgIcon('check', 10) + ' Fait</span>' : ''}
               </div>
-              <div class="event-title" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '<span title="Créneau récurrent">🔁</span> ' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</div>
-              ${e.location ? `<div class="event-location" title="${this.escapeHtml(e.location)}">📍 ${this.escapeHtml(e.location)}</div>` : ''}
-              ${linkedTask ? `<div class="event-linked-info" title="Tâche : ${this.escapeHtml(linkedTask.task.title)}${isTaskCompleted ? ' (Terminée)' : ''}">${isTaskCompleted ? '✅' : '📌'} <span style="${isTaskCompleted ? 'text-decoration: line-through; opacity: 0.85;' : ''}">${this.escapeHtml(linkedTask.task.title)}</span></div>` : ''}
-              ${linkedNote ? `<div class="event-linked-info" title="Note : ${this.escapeHtml(linkedNote.title)}">📝 ${this.escapeHtml(linkedNote.title)}</div>` : ''}
+              <div class="event-title" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '<span title="Créneau récurrent" style="display:inline-flex; align-items:center; margin-right:3px;">' + this.getSvgIcon('repeat', 11) + '</span>' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</div>
+              ${e.location ? `<div class="event-location" title="${this.escapeHtml(e.location)}"><span style="display:inline-flex; align-items:center; margin-right:3px;">${this.getSvgIcon('location', 11)}</span>${this.escapeHtml(e.location)}</div>` : ''}
+              ${linkedTask ? `<div class="event-linked-info" title="Tâche : ${this.escapeHtml(linkedTask.task.title)}${isTaskCompleted ? ' (Terminée)' : ''}"><span style="display:inline-flex; align-items:center; margin-right:3px;">${this.getSvgIcon(isTaskCompleted ? 'check' : 'pin', 11)}</span><span style="${isTaskCompleted ? 'text-decoration: line-through; opacity: 0.85;' : ''}">${this.escapeHtml(linkedTask.task.title)}</span></div>` : ''}
+              ${linkedNote ? `<div class="event-linked-info" title="Note : ${this.escapeHtml(linkedNote.title)}"><span style="display:inline-flex; align-items:center; margin-right:3px;">${this.getSvgIcon('note', 11)}</span>${this.escapeHtml(linkedNote.title)}</div>` : ''}
             `}
 
             <div class="event-resize-handle handle-bottom" data-action="resize-bottom" title="Ajuster l'heure de fin"></div>
@@ -1986,9 +2122,9 @@ const AgendaManager = {
       inputDesc.value = '';
 
       if (inputAllDay) {
-        inputAllDay.checked = false;
+        inputAllDay.checked = !!(defaultValues && defaultValues.isAllDay);
         inputAllDay.disabled = false;
-        updateInputTypesForAllDay(false);
+        updateInputTypesForAllDay(inputAllDay.checked);
       }
       
       const now = new Date();
@@ -2194,18 +2330,18 @@ const AgendaManager = {
       <div style="font-weight:700; color:var(--text-main); font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
         ${this.escapeHtml(evt.title || '(Sans titre)')}
       </div>
-      <div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">
-        ${isGoogle ? '🌐 Google Agenda' : '<img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité'}
+      <div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px; display:flex; align-items:center; gap:4px;">
+        ${isGoogle ? '<span style="display:inline-flex; align-items:center;">' + this.getSvgIcon('globe', 12) + '</span> Google Agenda' : '<img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité'}
       </div>
     `;
 
     let html = `
       <div class="context-menu-item" id="cmenu-edit">
-        <span class="item-icon">✏️</span>
+        <span class="item-icon">${this.getSvgIcon('edit', 15)}</span>
         <span>Modifier l'événement</span>
       </div>
       <div class="context-menu-item danger" id="cmenu-delete">
-        <span class="item-icon">🗑️</span>
+        <span class="item-icon">${this.getSvgIcon('trash', 15)}</span>
         <span>Supprimer l'événement</span>
       </div>
     `;
@@ -2214,7 +2350,7 @@ const AgendaManager = {
       html += `
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" id="cmenu-task">
-          <span class="item-icon">📌</span>
+          <span class="item-icon">${this.getSvgIcon('pin', 15)}</span>
           <span>Voir la tâche associée</span>
         </div>
       `;
@@ -2229,7 +2365,7 @@ const AgendaManager = {
       html += `
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" id="cmenu-note">
-          <span class="item-icon">📝</span>
+          <span class="item-icon">${this.getSvgIcon('note', 15)}</span>
           <span>Voir la note associée (${this.escapeHtml(linkedNoteObj.title)})</span>
         </div>
       `;
@@ -2307,8 +2443,9 @@ const AgendaManager = {
     const dateLabel = isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' });
 
     headerEl.innerHTML = `
-      <div style="font-weight:700; color:var(--text-main); font-size:0.82rem; text-transform:capitalize;">
-        📅 ${dateLabel}
+      <div style="font-weight:700; color:var(--text-main); font-size:0.82rem; text-transform:capitalize; display:flex; align-items:center; gap:5px;">
+        <span style="color:var(--accent); display:inline-flex; align-items:center;">${this.getSvgIcon('calendar', 13)}</span>
+        <span>${dateLabel}</span>
       </div>
       <div style="font-size:0.72rem; color:var(--accent); font-weight:600; margin-top:2px;">
         Créneau : ${startTime} - ${endTime}
@@ -2317,11 +2454,11 @@ const AgendaManager = {
 
     itemsEl.innerHTML = `
       <div class="context-menu-item" id="cmenu-add">
-        <span class="item-icon">➕</span>
+        <span class="item-icon">${this.getSvgIcon('plus', 15)}</span>
         <span>Ajouter un événement (${startTime})</span>
       </div>
       <div class="context-menu-item" id="cmenu-quick-add">
-        <span class="item-icon">⚡</span>
+        <span class="item-icon">${this.getSvgIcon('zap', 15)}</span>
         <span>Créneau rapide 1h Antigravité</span>
       </div>
     `;

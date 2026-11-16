@@ -31,6 +31,7 @@ class UpdateService extends EventEmitter {
     this.downloadProgress = null;
     this.lastError = null;
     this.isInitialized = false;
+    this.isMockMode = !!options.mock;
     this.onBeforeQuitInstall = options.onBeforeQuitInstall || null;
   }
 
@@ -67,6 +68,7 @@ class UpdateService extends EventEmitter {
     if (options.app) this.app = options.app;
     if (options.autoUpdater) this.autoUpdater = options.autoUpdater;
     if (options.onBeforeQuitInstall) this.onBeforeQuitInstall = options.onBeforeQuitInstall;
+    if (options.mock !== undefined) this.isMockMode = !!options.mock;
 
     const app = this._resolveApp();
     const isPackaged = options.forcePackaged !== undefined
@@ -162,6 +164,20 @@ class UpdateService extends EventEmitter {
    * sauf si force = true.
    */
   async checkForUpdates(force = false) {
+    if (this.isMockMode) {
+      this._setStatus('checking');
+      await new Promise(r => setTimeout(r, 400));
+      const mockInfo = {
+        version: '1.2.3',
+        releaseDate: new Date().toISOString(),
+        releaseNotes: "Améliorations de la fluidité, téléchargement transparent et installation sans fenêtre d'assistant.",
+        files: [{ url: 'Antigravite.Setup.1.2.3.exe', size: 84500000 }]
+      };
+      this.updateInfo = mockInfo;
+      this._setStatus('available', { updateInfo: mockInfo });
+      return { success: true, updateInfo: mockInfo };
+    }
+
     const app = this._resolveApp();
     const isPackaged = app ? !!app.isPackaged : false;
 
@@ -197,6 +213,23 @@ class UpdateService extends EventEmitter {
    * Déclenche le téléchargement explicite de la mise à jour par l'utilisateur.
    */
   async downloadUpdate() {
+    if (this.isMockMode) {
+      this._setStatus('downloading');
+      for (let p = 15; p <= 100; p += 15) {
+        await new Promise(r => setTimeout(r, 160));
+        const progressObj = {
+          percent: Math.min(100, p),
+          transferred: Math.round(84500000 * (p / 100)),
+          total: 84500000,
+          bytesPerSecond: 18000000
+        };
+        this.downloadProgress = progressObj;
+        this._setStatus('downloading', { progress: progressObj });
+      }
+      this._setStatus('downloaded', { updateInfo: this.updateInfo });
+      return { success: true };
+    }
+
     const updater = this._resolveAutoUpdater();
     if (!updater || typeof updater.downloadUpdate !== 'function') {
       throw new Error("electron-updater n'est pas disponible.");
@@ -222,7 +255,7 @@ class UpdateService extends EventEmitter {
    * Déclenche la notification de fermeture préalable pour que main.js désactive
    * l'interception de l'événement 'close' (isQuitting = true) et détruise le Tray.
    */
-  quitAndInstall(isSilent = false, isForceRunAfter = true) {
+  quitAndInstall(isSilent = true, isForceRunAfter = true) {
     if (this.status !== 'downloaded') {
       throw new Error("Aucune mise à jour téléchargée n'est prête à être installée.");
     }
@@ -232,6 +265,15 @@ class UpdateService extends EventEmitter {
       try {
         this.onBeforeQuitInstall();
       } catch (_) {}
+    }
+
+    if (this.isMockMode) {
+      const app = this._resolveApp();
+      if (app) {
+        if (typeof app.relaunch === 'function') app.relaunch();
+        if (typeof app.quit === 'function') app.quit();
+      }
+      return;
     }
 
     const updater = this._resolveAutoUpdater();

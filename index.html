@@ -100,6 +100,13 @@
           </span>
           <span>Sauvegardes</span>
         </li>
+        <li class="nav-item" data-screen="debrief" id="nav-item-debrief" title="Bilan &amp; Débriefing" style="display: none;">
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/></svg>
+          </span>
+          <span>Bilan</span>
+          <span id="nav-debrief-dot" class="nav-debrief-dot" style="display: none;"></span>
+        </li>
         <li class="nav-item" data-screen="settings" title="Paramètres">
           <span class="icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -366,6 +373,7 @@
         <div class="calendar-container" id="agenda-main-container">
           <div id="calendar-week-view" style="display: flex; flex-direction: column; flex: 1; height: 100%; min-height: 0;">
             <div id="calendar-weekdays-container" class="calendar-weekdays"></div>
+            <div id="calendar-allday-container" class="calendar-allday-row" style="display: none;"></div>
             <div id="calendar-body-container" class="calendar-body"></div>
           </div>
           <div id="calendar-month-view" style="display: none; flex-direction: column; flex: 1; height: 100%; min-height: 0; overflow-y: auto;">
@@ -382,7 +390,7 @@
         <div class="notes-layout">
           <div class="notes-sidebar">
             <div class="notes-search">
-              <input type="text" id="notes-search-input" placeholder="🔍 Rechercher dans les notes...">
+              <input type="text" id="notes-search-input" placeholder="Rechercher dans les notes...">
             </div>
             <!-- Filtres Dossiers & Projets -->
             <div style="padding: 0 10px 8px 10px; display: flex; flex-direction: column; gap: 6px;">
@@ -869,7 +877,7 @@
 
             <!-- Aide dossier pour l'utilisateur -->
             <div class="music-folder-hint">
-              <span>💡 <strong>Astuce :</strong> Déposez vos musiques dans le dossier <code>Antigravité/music/</code> pour qu'elles apparaissent automatiquement ici !</span>
+              <span style="display:inline-flex; align-items:center; gap:5px;"><svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg> <strong>Astuce :</strong> Déposez vos musiques dans le dossier <code>Antigravité/music/</code> pour qu'elles apparaissent automatiquement ici !</span>
             </div>
           </div>
 
@@ -965,6 +973,38 @@
               </thead>
               <tbody id="backups-table-body"></tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÉCRAN DÉBRIEFING POSITIF & BILAN BIENVEILLANT -->
+      <section id="screen-debrief" class="screen-view">
+        <div class="debrief-container">
+          <!-- Carte d'en-tête héro avec salutation chaleureuse -->
+          <div class="debrief-hero-card">
+            <div class="debrief-hero-header">
+              <div class="debrief-hero-badge" id="debrief-period-badge">
+                <svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/></svg>
+                <span id="debrief-period-label">Bilan de fin de journée</span>
+              </div>
+            </div>
+            <h2 id="debrief-hero-title" class="debrief-hero-title">Bonsoir ! Voici ce qui a avancé aujourd'hui.</h2>
+            <p id="debrief-hero-phrase" class="debrief-hero-phrase">Chaque petit pas compte. Bravo pour le chemin parcouru aujourd'hui !</p>
+          </div>
+
+          <!-- Zone de contenu dynamique -->
+          <div id="debrief-content-area" class="debrief-content-area"></div>
+
+          <!-- Barre d'actions zen -->
+          <div class="debrief-footer-actions">
+            <button type="button" id="btn-debrief-dismiss-today" class="btn btn-primary" onclick="if(window.DebriefManager) window.DebriefManager.completeForToday();">
+              <svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span id="btn-debrief-complete-text">Terminer ma journée</span>
+            </button>
+            <button type="button" id="btn-debrief-snooze" class="btn btn-secondary" onclick="if(window.DebriefManager) window.DebriefManager.snooze();" title="Masquer le bilan pour le moment et revenir à l'accueil">
+              <svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Plus tard ce soir</span>
+            </button>
           </div>
         </div>
       </section>
@@ -1366,12 +1406,12 @@
             <div class="preview-box-card">
               <div class="preview-box-header">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                  <span class="task-checkbox checked">✓</span>
+                  <span class="task-checkbox checked"><svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                   <span style="font-weight: 500; font-size: 0.92rem; color: var(--text-main);">Finaliser la présentation du projet</span>
                 </div>
                 <div style="display: flex; gap: 6px;">
-                  <span class="badge badge-priority-urgent">🔥 Urgent</span>
-                  <span class="badge badge-planned">📅 Aujourd'hui</span>
+                  <span class="badge badge-priority-urgent" style="display:inline-flex; align-items:center; gap:4px;"><svg class="app-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Urgent</span>
+                  <span class="badge badge-planned" style="display:inline-flex; align-items:center; gap:4px;"><svg class="app-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> Aujourd'hui</span>
                 </div>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
@@ -1644,8 +1684,9 @@
                 </div>
 
               </div>
-              <div style="margin-top: 10px; font-size: 0.76rem; color: var(--text-dim);">
-                💡 <em>Note : Les onglets <strong>Accueil</strong> et <strong>Paramètres</strong> restent toujours actifs pour vous garantir un accès permanent.</em>
+              <div style="margin-top: 10px; font-size: 0.76rem; color: var(--text-dim); display: flex; align-items: center; gap: 5px;">
+                <svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                <span><em>Note : Les onglets <strong>Accueil</strong> et <strong>Paramètres</strong> restent toujours actifs pour vous garantir un accès permanent.</em></span>
               </div>
             </div>
 
@@ -1685,6 +1726,80 @@
               </div>
             </div>
 
+            <!-- 3. Débriefing et bilan -->
+            <div class="settings-section" id="settings-section-debrief">
+              <h4 class="settings-section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/></svg>
+                <span>Débriefing et bilan</span>
+              </h4>
+              <p class="settings-section-desc">Un récapitulatif chaleureux et sans culpabilité pour clore la journée ou la semaine en savourant vos accomplissements réels.</p>
+
+              <div style="background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
+                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
+                  <div style="padding-right: 14px;">
+                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); display: block;">Activer le débriefing positif</span>
+                    <span style="font-size: 0.78rem; color: var(--text-dim); display: block; margin-top: 2px;">Fait apparaître un bilan bienveillant en fin de journée (en semaine) et le week-end, sans score ni pression.</span>
+                  </div>
+                  <input type="checkbox" id="setting-debrief-enabled" class="form-checkbox" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);">
+                </label>
+
+                <div style="height: 1px; background: var(--border-color);"></div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                  <div>
+                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); display: block;">Heure d'apparition du bilan quotidien (en semaine)</span>
+                    <span style="font-size: 0.78rem; color: var(--text-dim); display: block; margin-top: 2px;">L'onglet du bilan s'allume discrètement dans le volet latéral à partir de cette heure.</span>
+                  </div>
+                  <select id="setting-debrief-hour" class="form-control" style="width: auto; min-width: 120px; height: 32px; font-size: 0.85rem; padding: 2px 8px; cursor: pointer;">
+                    <option value="12:00">12:00 (Midi)</option>
+                    <option value="15:00">15:00</option>
+                    <option value="16:00">16:00</option>
+                    <option value="16:30">16:30</option>
+                    <option value="17:00">17:00 (Défaut)</option>
+                    <option value="17:30">17:30</option>
+                    <option value="18:00">18:00</option>
+                    <option value="18:30">18:30</option>
+                    <option value="19:00">19:00</option>
+                    <option value="19:30">19:30</option>
+                    <option value="20:00">20:00</option>
+                    <option value="21:00">21:00</option>
+                    <option value="22:00">22:00</option>
+                  </select>
+                </div>
+
+                <div style="height: 1px; background: var(--border-color);"></div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                  <div>
+                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); display: block;">Périmètre du bilan hebdomadaire (le week-end)</span>
+                    <span style="font-size: 0.78rem; color: var(--text-dim); display: block; margin-top: 2px;">Choisissez les jours pris en compte dans le grand récapitulatif du samedi et dimanche.</span>
+                  </div>
+                  <select id="setting-debrief-weekend-range" class="form-control" style="width: auto; min-width: 230px; height: 32px; font-size: 0.85rem; padding: 2px 8px; cursor: pointer;">
+                    <option value="mon-fri">Lundi au Vendredi (Semaine ouvrée, par défaut)</option>
+                    <option value="mon-sat">Lundi au Samedi inclus</option>
+                    <option value="mon-sun">Lundi au Dimanche (Semaine complète)</option>
+                  </select>
+                </div>
+
+                <div style="height: 1px; background: var(--border-color);"></div>
+
+                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
+                  <div style="padding-right: 14px;">
+                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); display: block;">Garder l'onglet Bilan visible en permanence</span>
+                    <span style="font-size: 0.78rem; color: var(--text-dim); display: block; margin-top: 2px;">Laisse l'onglet accessible à tout moment dans le volet latéral (sinon, il apparaît uniquement aux heures dédiées).</span>
+                  </div>
+                  <input type="checkbox" id="setting-debrief-always-show" class="form-checkbox" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);">
+                </label>
+
+                <div style="margin-top: 6px; display: flex; justify-content: flex-end;">
+                  <button type="button" id="btn-preview-debrief" class="btn btn-secondary btn-sm" onclick="App.navigate('debrief');">
+                    <svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Aperçu immédiat du Bilan</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div><!-- Fin #settings-pane-display -->
 
           <!-- ==========================================
@@ -1702,7 +1817,7 @@
               <div style="display: flex; gap: 8px; align-items: center;">
                 <span id="google-offline-queue-badge" class="status-chip status-warning" style="display: none; font-size: 0.75rem;"></span>
                 <div id="google-connection-badge" class="status-chip status-disconnected">
-                  <span>⚪</span> <span>Non connecté</span>
+                  <span class="status-dot status-dot-disconnected" style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--text-dim);"></span> <span>Non connecté</span>
                 </div>
               </div>
             </div>
@@ -1784,7 +1899,7 @@
               </div>
               <div id="updater-version-chip" class="status-chip status-disconnected" style="font-size: 0.82rem; font-weight: 600;">
                 <span id="updater-version-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--text-dim);"></span>
-                <span>Version <strong id="updater-current-version-label">1.2.1</strong></span>
+                <span>Version <strong id="updater-current-version-label">1.2.2</strong></span>
               </div>
             </div>
 
@@ -1817,7 +1932,7 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
                     <span>Redémarrer et installer</span>
                   </button>
-                  <button type="button" id="btn-open-changelog-from-updates" class="btn btn-secondary btn-sm" onclick="if(window.App) window.App.openChangelogInSettings();" title="Afficher les notes complètes de la version 1.2.0">
+                  <button type="button" id="btn-open-changelog-from-updates" class="btn btn-secondary btn-sm" onclick="if(window.App) window.App.openChangelogInSettings();" title="Afficher les notes complètes de la version 1.2.2">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     <span>Notes de version</span>
                   </button>
@@ -1847,14 +1962,14 @@
             
             <!-- 1. Guide rapide des raccourcis clavier -->
             <div class="settings-section" id="settings-section-shortcuts">
-              <h4 class="settings-section-title">⌨️ Guide rapide des raccourcis clavier</h4>
+              <h4 class="settings-section-title"><svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M6 12h.001M10 12h.001M14 12h.001M18 12h.001M7 16h10"/></svg>Guide rapide des raccourcis clavier</h4>
               <p class="settings-section-desc">Gagnez du temps au quotidien en utilisant les raccourcis essentiels d'Antigravité.</p>
 
               <div class="shortcuts-grid">
                 <!-- Navigation & Affichage -->
                 <div class="shortcut-group-card">
                   <div class="shortcut-group-header">
-                    <span class="shortcut-group-icon">🔍</span>
+                    <span class="shortcut-group-icon"><svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
                     <h5>Navigation &amp; Fenêtre</h5>
                   </div>
                   <div class="shortcut-item-row">
@@ -1886,7 +2001,7 @@
                 <!-- Édition & Notes -->
                 <div class="shortcut-group-card">
                   <div class="shortcut-group-header">
-                    <span class="shortcut-group-icon">📝</span>
+                    <span class="shortcut-group-icon"><svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
                     <h5>Édition de texte (Notes)</h5>
                   </div>
                   <div class="shortcut-item-row">
@@ -1911,7 +2026,7 @@
 
             <!-- 2. Guide pas-à-pas détaillé : Synchronisation Google Agenda -->
             <div class="settings-section" id="settings-section-google-guide">
-              <h4 class="settings-section-title">🌐 Guide pas-à-pas : Associer votre compte Google Agenda</h4>
+              <h4 class="settings-section-title"><svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Guide pas-à-pas : Associer votre compte Google Agenda</h4>
               <p class="settings-section-desc">Antigravité est une application 100 % locale et privée : vos événements ne transitent par aucun serveur intermédiaire. La synchronisation s'effectue directement entre votre ordinateur et Google via votre propre projet personnel sécurisé.</p>
 
               <div class="google-guide-container">
@@ -1971,7 +2086,7 @@
                     <li>Dans Antigravité, rendez-vous dans l'onglet <strong>Paramètres > Connexion Google &amp; Mises à jour</strong>.</li>
                     <li>Cliquez sur <strong>Configurer Client ID / Secret</strong> pour déplier le formulaire de saisie.</li>
                     <li>Collez votre <em>Client ID</em> et votre <em>Client Secret</em> dans les deux champs, puis cliquez sur <strong>Enregistrer les identifiants</strong>.</li>
-                    <li>Le bouton <strong>🌐 Se connecter avec Google</strong> devient actif : cliquez dessus !</li>
+                    <li>Le bouton <strong style="display:inline-flex; align-items:center; gap:4px;"><svg class="app-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Se connecter avec Google</strong> devient actif : cliquez dessus !</li>
                     <li>Votre navigateur s'ouvre sur la page d'authentification Google. Connectez-vous avec l'adresse Gmail ajoutée à l'étape 2.</li>
                     <li><em>Remarque :</em> Si Google affiche <em>« Google n'a pas validé cette application »</em>, cliquez simplement sur <strong>Paramètres avancés</strong> puis sur <strong>Accéder à Antigravité (non sécurisé)</strong>. C'est le message standard pour une application personnelle non publiée sur le store public.</li>
                     <li>Cochez la case autorisant l'accès à votre Agenda Google et validez. Un message de succès apparaît : la synchronisation est instantanée et bidirectionnelle !</li>
@@ -1980,7 +2095,7 @@
 
                 <!-- Sérénité & Hors-ligne -->
                 <div class="google-guide-callout">
-                  💡 <strong>Garantie de sérénité locale :</strong>
+                  <span style="display:inline-flex; align-items:center; gap:5px;"><svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><strong>Garantie de sérénité locale :</strong></span>
                   <br>• Si vous êtes hors-ligne ou sans connexion Internet, vos créneaux créés ou modifiés sont stockés dans une file d'attente sécurisée et transmis automatiquement dès le retour du réseau.
                   <br>• Supprimer un événement Google dans l'agenda ne supprimera <em>jamais</em> votre tâche locale associée.
                 </div>
@@ -1990,24 +2105,24 @@
 
             <!-- 3. Astuces d'organisation pour l'équilibre -->
             <div class="settings-section" id="settings-section-tips">
-              <h4 class="settings-section-title">🧭 Astuces d'organisation</h4>
+              <h4 class="settings-section-title"><svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Astuces d'organisation</h4>
               <p class="settings-section-desc">Quelques habitudes pour concilier productivité et clarté d'esprit au quotidien.</p>
 
               <div class="tips-grid">
                 <div class="tip-card">
-                  <div class="tip-card-title">🎵 Ambiances sonores</div>
+                  <div class="tip-card-title"><svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; color:var(--accent);"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Ambiances sonores</div>
                   <div class="tip-card-desc">Lancez les pistes Lofi ou importez vos morceaux favoris dans l'onglet Musique pour vous immerger instantanément dans votre travail sans distraction extérieure.</div>
                 </div>
                 <div class="tip-card">
-                  <div class="tip-card-title">📌 Post-it toujours à portée</div>
+                  <div class="tip-card-title"><svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; color:var(--accent);"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>Post-it toujours à portée</div>
                   <div class="tip-card-desc">Activez le mémo rapide dans « Option du volet latéral » pour coucher vos pensées spontanées sans interrompre votre tâche en cours.</div>
                 </div>
                 <div class="tip-card">
-                  <div class="tip-card-title">📂 Vos projets, votre ordre</div>
+                  <div class="tip-card-title"><svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; color:var(--accent);"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>Vos projets, votre ordre</div>
                   <div class="tip-card-desc">Réorganisez librement vos projets et sous-tâches par glisser-déposer : Antigravité respecte scrupuleusement votre hiérarchie sans tri forcé.</div>
                 </div>
                 <div class="tip-card">
-                  <div class="tip-card-title">⚖️ Équilibre et déconnexion</div>
+                  <div class="tip-card-title"><svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px; color:var(--accent);"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Équilibre et déconnexion</div>
                   <div class="tip-card-desc">Délimitez vos créneaux de travail dans l'agenda pour savoir précisément quand votre journée est terminée. Distinguer l'échéance d'une tâche de son moment d'action réel libère votre esprit sans culpabilité.</div>
                 </div>
               </div>
@@ -2016,7 +2131,7 @@
             <!-- 4. Notes de version & Nouveautés (Changelog) -->
             <div class="settings-section" id="settings-section-changelog">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; flex-wrap: wrap;">
-                <h4 class="settings-section-title" style="margin: 0;">🚀 Notes de mise à jour &amp; Nouveautés</h4>
+                <h4 class="settings-section-title" style="margin: 0;"><svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Notes de mise à jour &amp; Nouveautés</h4>
                 <div style="display: flex; align-items: center; gap: 8px;">
                   <button type="button" id="btn-reopen-whats-new" class="btn btn-secondary btn-sm" onclick="if(window.App) window.App.openWhatsNewModal();" title="Afficher la fenêtre d'aperçu des nouveautés 1.2.0">
                     <span>Aperçu des nouveautés</span>
@@ -2027,12 +2142,90 @@
               <p class="settings-section-desc">Historique détaillé des évolutions majeures de la version 1.2.0 pour organiser vos projets, votre temps et vos performances.</p>
 
               <div class="changelog-container">
-                <!-- Version 1.2.1 (Nouveautés & Confort d'usage) -->
+                <!-- Version 1.2.2 (Identité Visuelle SVG, Journée Entière & Optimisations) -->
                 <div class="changelog-release-card" style="border-color: var(--accent);">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                      <span class="changelog-version-tag" style="background: var(--accent); color: #fff;">Version 1.2.1</span>
+                      <span class="changelog-version-tag" style="background: var(--accent); color: #fff;">Version 1.2.2</span>
                       <span class="changelog-badge-current">Actuelle</span>
+                      <span style="font-size: 0.76rem; color: var(--text-dim);">(Identité visuelle vectorielle, Journée entière &amp; Fluidité)</span>
+                    </div>
+                    <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
+                  </div>
+                  <p class="changelog-release-lead">Mise à jour majeure d'ergonomie, de bienveillance et de confort : nouveau système de mise à jour fluide en arrière-plan (détection discrète &amp; installation silencieuse sans assistant lourd), nouveau module « Débriefing et bilan » (fin de journée &amp; week-end sans culpabilité), bandeau dédié aux événements « Journée entière » au sommet de l'agenda, identité 100% vectorielle en SVG, plus de 250 phrases humoristiques, reflets de verre supérieurs et optimisations poussées du moteur de rendu.</p>
+
+                  <div class="changelog-categories">
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Mises à jour fluides &amp; Installation silencieuse</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Détection discrète au démarrage :</strong> Antigravité vérifie automatiquement en arrière-plan la disponibilité d'une nouvelle version dès l'ouverture, sans ralentir ni bloquer le lancement.</li>
+                        <li><strong>Pop-up moderne &amp; non-bloquant :</strong> Une invitation épurée présente les nouveautés avec le choix de mettre à jour immédiatement ou de reporter à plus tard.</li>
+                        <li><strong>Téléchargement intégré :</strong> Progression du téléchargement en temps réel directement dans l'application avec jauge fluide.</li>
+                        <li><strong>Installation silencieuse en un clic :</strong> Fini les fenêtres d'assistant d'installation Windows et les clics répétitifs : l'application s'installe en arrière-plan et redémarre toute seule, prête à l'emploi.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/></svg>Nouveau module : Débriefing et bilan</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Bilan quotidien dès 17h (ou heure personnalisée) :</strong> Récapitulatif bienveillant mettant en lumière ce qui a avancé aujourd'hui (tâches accomplies, sous-tâches, projets actifs, sessions de concentration).</li>
+                        <li><strong>Bilan hebdomadaire le week-end :</strong> Vue synthétique des progrès de la semaine avec plage personnalisable (du lundi au vendredi, samedi ou dimanche inclus).</li>
+                        <li><strong>Philosophie zéro culpabilité :</strong> Zéro score, zéro pourcentage culpabilisant, zéro faux progrès. Si rien n'a été coché, une carte zen apaisante célèbre le repos mérité.</li>
+                        <li><strong>Discrétion absolue &amp; contrôle :</strong> Pastille lumineuse douce dans le volet, boutons de validation ou de report, et panneau complet de personnalisation dans les paramètres.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Humour au premier plan &amp; Variété décuplée</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Plus de 250 phrases aléatoires inédites :</strong> Enrichissement massif de tous les générateurs de texte de l'application avec un humour chaleureux et décalé.</li>
+                        <li><strong>Chargement, accueil, débriefing &amp; notifications :</strong> Des punchlines savoureuses pour dédramatiser la to-do list, célébrer le café et vaincre la gravité dans la bonne humeur.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>Agenda : Bandeau « Journée entière » (All-Day)</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Bandeau supérieur dédié :</strong> En cochant l'option « Journée entière », l'événement n'encombre plus les heures de travail dans la grille mais vient se loger au-dessus du calendrier, aligné sur la colonne de son jour.</li>
+                        <li><strong>Pastilles distinctives &amp; 24h :</strong> Les événements journée entière arborent un style identifiable avec icône soleil vectorielle et badge « 24h ». Un clic ouvre directement la modification du créneau.</li>
+                        <li><strong>Dégagement complet de la grille horaire :</strong> La grille des heures (00h00 - 24h00) reste ainsi totalement libre et aérée pour vos sessions de travail et vos tâches précises.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="10"/><polygon points="12 8 8 12 12 16 12 8"/></svg>Identité Visuelle 100% Vectorielle (SVG)</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Remplacement de tous les émojis système :</strong> Toutes les icônes de l'interface (épingles de priorités, notes, calendrier, répétitions, tags, horloges) ont été remplacées par des graphismes vectoriels SVG harmonisés au pixel près.</li>
+                        <li><strong>Alignement typographique parfait :</strong> Les icônes s'alignent rigoureusement sur la ligne de base du texte (`.app-icon`), sans décalage vertical ni rendu aléatoire selon les versions de Windows.</li>
+                        <li><strong>Résolution automatique :</strong> Le moteur d'icônes `App.getSvgIcon()` convertit dynamiquement les anciens symboles textuels en vecteurs nets et adaptatifs à la couleur du texte (`currentColor`).</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Finitions Esthétiques &amp; Ergonomie Tactile</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Surlignage harmonisé (::selection) :</strong> La sélection du texte sur l'ensemble de l'application s'accorde désormais élégamment à votre couleur d'accent active.</li>
+                        <li><strong>Micro-reflets lumineux supérieurs :</strong> Subtile ligne de lumière sur la bordure haute des cartes, des modales et des panneaux pour un effet vitre dépolie soigné.</li>
+                        <li><strong>Micro-interactions tactiles au clic :</strong> Retours élastiques haptiques au clic (`:active`) sur tous les boutons, filtres et pastilles pour une sensation de réactivité immédiate.</li>
+                        <li><strong>Empty-state poétique des notes :</strong> Lorsqu'aucune note n'est sélectionnée, affichage d'une illustration vectorielle raffinée invitant à l'écriture.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Optimisations &amp; Isolation GPU</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Isolation du rendu (`contain: layout style`) :</strong> Recalculs de géométrie limités strictement aux composants modifiés sans impacter le reste du document.</li>
+                        <li><strong>Respect absolu de la désactivation des animations :</strong> Toutes les nouvelles transitions et micro-interactions se désactivent instantanément lorsque l'option dédiée ou le profil économique est actif.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Version 1.2.1 (Nouveautés & Confort d'usage) -->
+                <div class="changelog-release-card">
+                  <div class="changelog-release-header">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                      <span class="changelog-version-tag">Version 1.2.1</span>
                       <span style="font-size: 0.76rem; color: var(--text-dim);">(Correctifs d'usage, confort &amp; personnalisation)</span>
                     </div>
                     <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
@@ -2041,7 +2234,7 @@
 
                   <div class="changelog-categories">
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">🎨 Personnalisation du volet &amp; Ergonomie de fenêtre</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>Personnalisation du volet &amp; Ergonomie de fenêtre</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Réorganisation des onglets par glisser-déposer :</strong> Dans <em>Paramètres &gt; Options du volet latéral</em>, déplacez librement les cartes des onglets à la souris pour réordonner instantanément les boutons du volet latéral gauche. Un bouton permet de rétablir l'ordre par défaut à tout moment.</li>
                         <li><strong>Défilement horizontal adaptatif :</strong> En réduisant la largeur de la fenêtre, le contenu central défile horizontalement sans décaler ni cacher le volet latéral gauche.</li>
@@ -2050,7 +2243,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">📅 Agenda 24h, Créneaux &amp; Récurrence</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>Agenda 24h, Créneaux &amp; Récurrence</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Amplitude complète 24h (minuit à minuit) :</strong> L'agenda s'étend désormais sur l'intégralité des 24 heures pour planifier vos nuits et vos soirées, tout en positionnant automatiquement le défilement sur les heures actives (07h00 - 23h00) à chaque ouverture ou clic sur <em>Aujourd'hui</em>.</li>
                         <li><strong>Raccourci clavier « T » :</strong> En consultation de l'agenda, pressez la touche <kbd>T</kbd> pour revenir instantanément à aujourd'hui et vous caler à 07h00.</li>
@@ -2061,7 +2254,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">📝 Notes, Dossiers &amp; Confort visuel</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>Notes, Dossiers &amp; Confort visuel</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Dossiers personnalisés pour les notes :</strong> Regroupez et rangez vos notes par dossiers personnalisés dans la barre latérale des notes. Pliage/dépliage mémorisé, déplacement immédiat par glisser-déposer ou via le sélecteur de dossier dans l'en-tête de la note, et préservation absolue des liens (créneaux d'agenda, projets et Wikilinks [[Titre]]).</li>
                         <li><strong>Correction orthographique native &amp; menu contextuel :</strong> Clic droit sur les mots soulignés en rouge dans les notes pour afficher directement les suggestions de correction du dictionnaire français.</li>
@@ -2071,7 +2264,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">⚡ Performance &amp; Ambiance sonore</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Performance &amp; Ambiance sonore</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Fondu sonore doux (Espace Musique) :</strong> L'écoute s'adoucit avec un fade in et fade out progressif lors du démarrage, de la pause, de l'arrêt ou du changement de morceau pour un confort auditif feutré.</li>
                         <li><strong>Pré-chargement instantané des écrans (Zero-Lag) :</strong> Préparation en arrière-plan des vues principales pour une réactivité instantanée et une transition fluide sans saccades.</li>
@@ -2093,7 +2286,7 @@
 
                   <div class="changelog-categories">
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">📁 Projets, Sous-projets &amp; Tâches</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>Projets, Sous-projets &amp; Tâches</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Sous-projets multi-niveaux :</strong> Imbriquez des projets dans d'autres projets sur plusieurs niveaux via la fiche projet ou en glissant-déposant une carte au centre d'une autre. Un sous-projet fonctionne partout à l'identique d'un projet (tâches, notes, agenda, recherche, corbeille), avec zone dédiée pour remonter vers la racine.</li>
                         <li><strong>Affichage Grille (Tuiles) / Liste (Lignes) &amp; Conteneurs de famille :</strong> Basculez entre tuiles et lignes mémorisées. En tuiles, les dossiers ayant des sous-projets affichent leurs enfants dessous reliés par une arborescence colorée, une vue d'ensemble cumulée du dossier et un pliage/dépliage mémorisé.</li>
@@ -2102,7 +2295,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">⚙️ Nouvel onglet « Paramètres sérieux » &amp; Optimisation</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Nouvel onglet « Paramètres sérieux » &amp; Optimisation</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Performances et ressources :</strong> 3 profils adaptés à votre PC (<em>Mode Normal</em>, <em>Mode Économie</em> et <em>Mode PC de merde</em>), consultation et vidage du cache Chromium/mémoire sans perte de données, et diagnostic RAM / CPU / GPU / DOM en direct.</li>
                         <li><strong>Démarrage et fonctionnement :</strong> Option de lancement automatique au démarrage de Windows, choix explicite entre fermeture complète ou maintien discret dans la barre de notification à la fermeture de la fenêtre, et gestion du basculement système (<code>Ctrl</code> + <code>Maj</code> + <code>A</code>).</li>
@@ -2111,7 +2304,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">📅 Agenda, Rappels &amp; Notifications</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>Agenda, Rappels &amp; Notifications</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Navigation &amp; édition directe :</strong> Zoom direct sur une journée au clic en vue Semaine ou Mois, semaine verrouillée du lundi au dimanche, cadrillage heure par heure avec surbrillance au survol, ligne repère « Heure actuelle » en temps réel, allongement par clic droit maintenu et badge de durée affiché en direct au redimensionnement.</li>
                         <li><strong>Liaisons &amp; événements multi-jours :</strong> Coloration des créneaux selon le projet de la tâche liée, tri des tâches dans la fiche créneau groupées par projet avec les tâches terminées tout en bas, et affichage dédié des événements de nuit multi-jours achevés avant 07h00.</li>
@@ -2120,7 +2313,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">📝 Notes enrichies &amp; Recherche universelle</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>Notes enrichies &amp; Recherche universelle</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Éditeur de notes unique (WYSIWYG) :</strong> Saisie directe avec barre d'outils complète (titres H1–H6, gras, italique, souligné, barré, surlignage, listes, liens, code) et raccourcis (<code>Ctrl</code>+<code>B</code>/<code>I</code>/<code>U</code>/<code>K</code>), nettoyage automatique du HTML collé et compatibilité Markdown / Obsidian.</li>
                         <li><strong>Liaison agenda &amp; projets :</strong> Sélecteurs compacts, coloration par projet, création directe d'un créneau d'agenda depuis l'en-tête d'une note, et liste chronologique des événements associés.</li>
@@ -2129,7 +2322,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">🎵 Nouvel Espace Musique &amp; Mode Focus Pomodoro</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Nouvel Espace Musique &amp; Mode Focus Pomodoro</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Bibliothèque musicale &amp; playlists :</strong> Plus de 50 pistes classées par dossiers avec durées affichées, lecture aléatoire / boucle, ajout rapide à plusieurs playlists via <code>+</code>, copie durable de vos fichiers audio personnels (avec modale d'information) et mini-lecteur intégré au volet latéral.</li>
                         <li><strong>Mode Focus (Pomodoro &amp; Deep Work) :</strong> Écran immersif sans défilement vertical avec chronomètre circulaire, deux curseurs réglables (Focus 0–90 min, Pause 0–60 min par pas de 5 min), rotation du vinyle et lecture musicale aléatoire ou d'une playlist choisie.</li>
@@ -2137,7 +2330,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">🗑️ Corbeille, Tableau de bord &amp; Volet latéral</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>Corbeille, Tableau de bord &amp; Volet latéral</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Nouvelle Corbeille (30 jours) :</strong> Suppression directe et fluide des tâches, projets, notes et créneaux sans confirmation bloquante, avec restauration en un clic.</li>
                         <li><strong>Tableau de bord &amp; accueil sur-mesure :</strong> Écran de chargement animé avec icône rythmée, prénom personnalisé et salutations selon le moment de la journée, citations bienveillantes ou pince-sans-rire, cartes statistiques cliquables et écrans vides soignés.</li>
@@ -2146,7 +2339,7 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title">🎨 Apparence, Aide &amp; Confort général</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>Apparence, Aide &amp; Confort général</h5>
                       <ul class="changelog-features-list">
                         <li><strong>Personnalisation étendue :</strong> <strong>10 fonds d'écran</strong> prédéfinis (+ image personnalisée), <strong>9 couleurs d'accentuation</strong>, polices configurables, 3 niveaux de translucidité (<em>Équilibré</em>, <em>Verre Dépoli</em>, <em>Opaque Pur</em>), Glass Glow, et contraste noir profond renforcé en mode Clair.</li>
                         <li><strong>Aide &amp; ergonomie unifiée :</strong> Onglet <em>Aide &amp; Astuces</em> (<code>F1</code>) avec guide complet des raccourcis et tutoriel Google Agenda, modales de confirmation unifiées, barre de décompte sur les notifications toast et retours visuels/tactiles soignés.</li>
@@ -2544,7 +2737,7 @@
             <label for="task-input-planned"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Date &amp; heure prévues</span></label>
             <input type="datetime-local" id="task-input-planned" class="form-control" title="Date et heure prévues pour travailler dessus">
             <input type="hidden" id="task-input-planned-time" value="09:00">
-            <span style="font-size: 0.72rem; color: var(--accent); margin-top: 3px; display: block;">⚡ Ajoute automatiquement un créneau dans votre agenda Antigravité</span>
+            <span style="font-size: 0.72rem; color: var(--accent); margin-top: 3px; display: inline-flex; align-items: center; gap: 4px;"><svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> <span>Ajoute automatiquement un créneau dans votre agenda Antigravité</span></span>
           </div>
           <div class="form-group">
             <label for="task-input-deadline"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg><span>Échéance limite</span></label>
@@ -2775,10 +2968,10 @@
               <label style="font-size: 0.75rem; font-weight: 600; margin: 0; white-space: nowrap;">Fin de la récurrence :</label>
               <div class="recurrence-end-actions" style="display: flex; gap: 8px; align-items: center; flex: 1; justify-content: flex-end;">
                 <button type="button" class="btn-rec-end active" id="btn-rec-end-forever" title="Créneau récurrent sans fin prédéterminée">
-                  <span>♾️ Pour toujours</span>
+                  <span style="display:inline-flex; align-items:center; gap:5px;"><svg class="app-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-2.695 0-4.71-3.613-6.178-5.333C10.533 12.387 8.518 16 5.822 16c-5.096 0-5.096-8 0-8 2.695 0 4.71 3.613 6.178 5.333C13.467 11.613 15.482 8 18.178 8z"/></svg><span>Pour toujours</span></span>
                 </button>
                 <button type="button" class="btn-rec-end" id="btn-rec-end-date" title="Arrêter la récurrence à une date précise">
-                  <span>📅 Jusqu'au...</span>
+                  <span style="display:inline-flex; align-items:center; gap:5px;"><svg class="app-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg><span>Jusqu'au...</span></span>
                 </button>
                 <input type="date" id="event-input-recurrence-end" class="form-control" style="display: none; max-width: 155px; font-size: 0.8rem; height: 30px; padding: 2px 6px;" title="Date de fin d'application de la récurrence">
               </div>
@@ -3179,6 +3372,43 @@
     </div>
   </div>
 
+  <!-- MODALE PROACTIVE DE MISE À JOUR DISPONIBLE (Zéro friction & Installation silencieuse) -->
+  <div id="modal-update-prompt" class="modal-overlay update-prompt-overlay" style="z-index: 1240;" role="dialog" aria-modal="true" aria-labelledby="update-prompt-title">
+    <div class="modal-content update-prompt-content" style="max-width: 480px; padding: 0; overflow: hidden; border-radius: var(--radius-lg); border: 1px solid var(--border-color); background: var(--bg-card); box-shadow: var(--shadow-lg);">
+      <div class="update-prompt-header" style="padding: 24px 26px 18px; border-bottom: 1px solid var(--border-color); background: linear-gradient(180deg, rgba(56, 189, 248, 0.08) 0%, transparent 100%);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--accent-light); border: 1px solid rgba(56, 189, 248, 0.35); font-size: 0.78rem; font-weight: 600; color: var(--accent);">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span id="update-prompt-version-badge">Version 1.2.3 disponible</span>
+          </div>
+          <button type="button" class="btn-icon" id="btn-update-prompt-close-x" title="Fermer (Échap)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <h3 id="update-prompt-title" style="margin: 0 0 6px 0; font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Une nouvelle version d'Antigravité est prête !</h3>
+        <p id="update-prompt-notes" style="margin: 0; font-size: 0.88rem; line-height: 1.5; color: var(--text-dim);">Des optimisations de fluidité et de nouvelles fonctionnalités sont prêtes à être installées en un clin d'œil.</p>
+      </div>
+
+      <!-- Zone de progression du téléchargement (masquée au départ) -->
+      <div id="update-prompt-progress-box" style="display: none; padding: 20px 26px; border-bottom: 1px solid var(--border-color); background: var(--bg-primary);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.82rem;">
+          <span id="update-prompt-progress-label" style="color: var(--text-dim); font-weight: 500;">Téléchargement en cours...</span>
+          <span id="update-prompt-progress-percent" style="color: var(--accent); font-weight: 700;">0 %</span>
+        </div>
+        <div style="width: 100%; height: 8px; background-color: var(--bg-card); border-radius: var(--radius-pill); overflow: hidden; border: 1px solid var(--border-color);">
+          <div id="update-prompt-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: var(--radius-pill); transition: width 0.2s ease;"></div>
+        </div>
+        <p id="update-prompt-progress-sublabel" style="margin: 8px 0 0 0; font-size: 0.76rem; color: var(--text-dim); text-align: center;">Installation silencieuse et redémarrage automatique en quelques secondes.</p>
+      </div>
+
+      <div class="modal-footer" id="update-prompt-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 26px; background: var(--bg-secondary);">
+        <button type="button" id="btn-update-prompt-later" class="btn btn-secondary">Plus tard</button>
+        <button type="button" id="btn-update-prompt-now" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span id="btn-update-prompt-now-text">Mettre à jour</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Conteneur de Toasts -->
   <div id="toast-container"></div>
 
@@ -3197,6 +3427,7 @@
   <script src="./js/focus.js"></script>
   <script src="./js/notifications.js"></script>
   <script src="./js/search.js"></script>
+  <script src="./js/debrief.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>

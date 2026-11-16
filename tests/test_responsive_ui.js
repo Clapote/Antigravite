@@ -166,7 +166,7 @@ const App = require('../js/app.js');
     assert.ok(html.includes('Journée'), "Événement toute la journée formaté");
     assert.ok(html.includes('pill-google'), "Pastille Google présente");
     assert.ok(html.includes('pill-antigravite'), "Pastille Antigravité présente");
-    assert.ok(html.includes('⏱️'), "Icône de créneau horaire intégrée");
+    assert.ok(html.includes('⏱️') || (html.includes('badge-time-icon') && html.includes('<svg')), "Icône de créneau horaire intégrée");
   });
 
   // ---------------------------------------------------------------------------

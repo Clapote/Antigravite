@@ -19,6 +19,62 @@ const NotesManager = {
   _saveTimer: null,
   _pendingNotesToSave: null,
 
+  getSvgIcon(name, size = 14, extraClass = '') {
+    if (typeof App !== 'undefined' && typeof App.getSvgIcon === 'function') {
+      return App.getSvgIcon(name, size, extraClass);
+    }
+    const cls = extraClass ? `app-icon ${extraClass}` : 'app-icon';
+    switch (name) {
+      case 'pin':
+      case '📌':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
+      case 'folder':
+      case '📁':
+      case '📂':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`;
+      case 'calendar':
+      case '📅':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`;
+      case 'edit':
+      case '✏️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
+      case 'trash':
+      case '🗑️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
+      case 'lock':
+      case '🔒':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+      case 'lightbulb':
+      case 'tip':
+      case '💡':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>`;
+      case 'info':
+      case 'ℹ️':
+      case 'ℹ':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+      case 'warning':
+      case 'caution':
+      case '⚠️':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+      case 'alert':
+      case 'danger':
+      case '🚨':
+      case 'error':
+      case '❌':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+      case 'success':
+      case 'check':
+      case '✅':
+      case '✓':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      case 'important':
+      case '❗':
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+      default:
+        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+    }
+  },
+
   init() {
     if (this.initialized) {
       this.render();
@@ -182,8 +238,9 @@ const NotesManager = {
     const notesCount = this.getAll().filter(n => (n.folder || 'Général').trim().toLowerCase() === cleanFolder.toLowerCase()).length;
 
     headerEl.innerHTML = `
-      <div style="font-weight:700; color:var(--text-main); font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-        📁 ${this.escapeHtml(cleanFolder)}
+      <div style="font-weight:700; color:var(--text-main); font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:5px;">
+        <span style="color:var(--accent); display:inline-flex; align-items:center;">${this.getSvgIcon('folder', 14)}</span>
+        <span>${this.escapeHtml(cleanFolder)}</span>
       </div>
       <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">
         ${notesCount} note${notesCount > 1 ? 's' : ''} ${isGeneral ? '• Dossier principal' : ''}
@@ -192,7 +249,7 @@ const NotesManager = {
 
     let html = `
       <div class="context-menu-item" id="cmenu-folder-rename">
-        <span class="item-icon">✏️</span>
+        <span class="item-icon">${this.getSvgIcon('edit', 15)}</span>
         <span>Renommer le dossier</span>
       </div>
     `;
@@ -201,7 +258,7 @@ const NotesManager = {
       html += `
         <div class="context-menu-divider"></div>
         <div class="context-menu-item danger" id="cmenu-folder-delete">
-          <span class="item-icon">🗑️</span>
+          <span class="item-icon">${this.getSvgIcon('trash', 15)}</span>
           <span>Supprimer le dossier</span>
         </div>
       `;
@@ -209,7 +266,7 @@ const NotesManager = {
       html += `
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" style="opacity: 0.55; cursor: default;" title="Le dossier Général est le dossier de repli de l'application et ne peut pas être supprimé.">
-          <span class="item-icon">🔒</span>
+          <span class="item-icon">${this.getSvgIcon('lock', 15)}</span>
           <span style="font-size:0.8rem;">Dossier par défaut non supprimable</span>
         </div>
       `;
@@ -1130,7 +1187,16 @@ const NotesManager = {
     );
 
     if (filtered.length === 0) {
-      listEl.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--text-dim); font-size: 0.82rem;">Aucune note trouvée.</div>`;
+      listEl.innerHTML = `
+        <div class="antigravite-empty-state notes-empty-state" style="margin: 16px 10px; padding: 26px 14px;">
+          <div class="empty-state-illustration" style="margin-bottom: 8px;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+          </div>
+          <div class="empty-state-title" style="font-size: 0.92rem;">${this.searchQuery ? 'Aucun résultat' : 'Page blanche'}</div>
+          <p class="empty-state-text" style="font-size: 0.76rem; margin: 0 0 10px 0;">${this.searchQuery ? 'Aucune note ne correspond à votre recherche.' : 'Capturez une idée, rédigez un mémo ou organisez vos réflexions.'}</p>
+          ${!this.searchQuery ? '<button type="button" class="btn btn-primary btn-sm" onclick="NotesManager.createNote()" style="font-size: 0.74rem; padding: 4px 10px;"><svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span>Nouvelle note</span></button>' : ''}
+        </div>
+      `;
       return;
     }
 
@@ -1182,7 +1248,7 @@ const NotesManager = {
         if (note.id === this.currentNoteId) {
           item.style.backgroundColor = `${projColor}16`;
         }
-        projectBadge = `<span class="badge badge-project" style="background:${projColor}20; color:${projColor}; border:1px solid ${projColor}60; font-size:0.72rem; padding:1px 7px; border-radius:4px; font-weight:600;" title="Projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${projColor}; margin-right:4px; vertical-align:middle;"></span>📁 ${this.escapeHtml(proj.title)}</span>`;
+        projectBadge = `<span class="badge badge-project" style="background:${projColor}20; color:${projColor}; border:1px solid ${projColor}60; font-size:0.72rem; padding:1px 7px; border-radius:4px; font-weight:600; display:inline-flex; align-items:center;" title="Projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${projColor}; margin-right:4px;"></span>${this.getSvgIcon('folder', 11)}<span style="margin-left:3px;">${this.escapeHtml(proj.title)}</span></span>`;
       }
 
       const rawDate = note.updatedAt || note.createdAt;
@@ -1194,13 +1260,13 @@ const NotesManager = {
       let eventBadge = '';
       if (linkedEvt) {
         const timeStr = linkedEvt.start ? linkedEvt.start.slice(5, 10).replace('-', '/') : '';
-        eventBadge = `<span class="badge" style="background:rgba(56,189,248,0.15); color:var(--accent); font-size:0.7rem; padding:1px 6px; border-radius:4px;" title="Lié à : ${this.escapeHtml(linkedEvt.title)}">📅 ${timeStr || 'Agenda'}</span>`;
+        eventBadge = `<span class="badge" style="background:rgba(56,189,248,0.15); color:var(--accent); font-size:0.7rem; padding:1px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px;" title="Lié à : ${this.escapeHtml(linkedEvt.title)}">${this.getSvgIcon('calendar', 11)} <span>${timeStr || 'Agenda'}</span></span>`;
       }
 
       item.innerHTML = `
         <div class="note-item-title">${this.escapeHtml(note.title)}</div>
         <div class="note-item-meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-          <span>📁 ${this.escapeHtml(note.folder || 'Général')}</span>
+          <span style="display:inline-flex; align-items:center; gap:3px;">${this.getSvgIcon('folder', 12)} ${this.escapeHtml(note.folder || 'Général')}</span>
           <span>• ${updatedDate}</span>
           ${projectBadge}
           ${eventBadge}
@@ -1256,7 +1322,7 @@ const NotesManager = {
 
         headerEl.innerHTML = `
           <span class="note-folder-chevron">${isCollapsed ? '▸' : '▾'}</span>
-          <span class="note-folder-title">📁 ${this.escapeHtml(folderName)}</span>
+          <span class="note-folder-title">${this.getSvgIcon('folder', 14)} ${this.escapeHtml(folderName)}</span>
           <span class="note-folder-count">${folderNotes.length}</span>
           <button type="button" class="note-folder-actions-btn" title="Options du dossier (Renommer / Supprimer)">⋯</button>
         `;
@@ -2078,20 +2144,9 @@ const NotesManager = {
     const flushBlockquote = () => {
       if (!inBlockquote) return;
       if (calloutType) {
-        const iconMap = {
-          note: '📌',
-          info: 'ℹ️',
-          tip: '💡',
-          warning: '⚠️',
-          caution: '⚠️',
-          danger: '🚨',
-          error: '❌',
-          success: '✅',
-          important: '❗'
-        };
-        const icon = iconMap[calloutType] || '📌';
+        const iconSvg = this.getSvgIcon(calloutType, 16);
         const bodyHtml = blockquoteLines.join('<br>');
-        processedLines.push(`<div class="obsidian-callout obsidian-callout-${calloutType}"><div class="obsidian-callout-title"><span class="callout-icon">${icon}</span> ${calloutTitle}</div><div class="obsidian-callout-body">${bodyHtml}</div></div>`);
+        processedLines.push(`<div class="obsidian-callout obsidian-callout-${calloutType}"><div class="obsidian-callout-title"><span class="callout-icon obsidian-callout-icon">${iconSvg}</span> ${calloutTitle}</div><div class="obsidian-callout-body">${bodyHtml}</div></div>`);
       } else {
         processedLines.push(`<blockquote>${blockquoteLines.join('<br>')}</blockquote>`);
       }

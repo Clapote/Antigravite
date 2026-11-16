@@ -63,62 +63,16 @@ const StorageManager = {
 
   seedFallbackData() {
     if (!this.getProjects().length) {
-      this.saveProjects([
-        { id: "proj-1", title: "Développement Antigravité", description: "Prototype local de l'application", color: "#3b82f6", status: "in_progress", createdAt: new Date().toISOString() },
-        { id: "proj-2", title: "Organisation Personnelle", description: "Gestion du temps et révisions", color: "#10b981", status: "in_progress", createdAt: new Date().toISOString() }
-      ]);
+      this.saveProjects([]);
     }
     if (!this.getTasks().length) {
-      this.saveTasks([
-        {
-          id: "task-1",
-          title: "Découvrir l'application Antigravité",
-          description: "Créer une première sous-tâche et vérifier le calendrier hebdomadaire.",
-          projectId: "proj-1",
-          priority: "high",
-          completed: false,
-          deadline: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 16),
-          plannedDate: new Date().toISOString().slice(0, 10),
-          order: 1,
-          createdAt: new Date().toISOString(),
-          subtasks: [
-            {
-              id: "task-1-1",
-              title: "Sous-tâche de niveau 1 : Observer l'arborescence",
-              description: "Les sous-tâches peuvent avoir leurs propres sous-tâches sans limite de profondeur.",
-              projectId: "proj-1",
-              priority: "medium",
-              completed: false,
-              deadline: null,
-              plannedDate: new Date().toISOString().slice(0, 10),
-              order: 1,
-              createdAt: new Date().toISOString(),
-              subtasks: [
-                {
-                  id: "task-1-1-1",
-                  title: "Sous-sous-tâche de niveau 2 : Vérifier la persistance",
-                  description: "Toutes les modifications sont enregistrées immédiatement.",
-                  projectId: "proj-1",
-                  priority: "low",
-                  completed: true,
-                  deadline: null,
-                  plannedDate: null,
-                  order: 1,
-                  createdAt: new Date().toISOString(),
-                  subtasks: []
-                }
-              ]
-            }
-          ]
-        }
-      ]);
+      this.saveTasks([]);
     }
     if (!this.getEvents().length) {
-      const today = new Date().toISOString().slice(0, 10);
-      this.saveEvents([
-        { id: "evt-1", title: "Prise en main d'Antigravité", start: `${today}T14:00`, end: `${today}T15:30`, color: "#3b82f6", taskId: "task-1", source: "local" },
-        { id: "evt-2", title: "Événement chevauchant (Test de non-blocage)", start: `${today}T14:45`, end: `${today}T16:15`, color: "#8b5cf6", taskId: null, source: "local" }
-      ]);
+      this.saveEvents([]);
+    }
+    if (!this.getNotes().length) {
+      this.saveNotes([]);
     }
   },
 
@@ -319,6 +273,11 @@ const StorageManager = {
     userName: '',            // Prénom ou nom d'usage de la personne
     greetingMood: 'mixed',   // 'mixed' | 'warm' | 'witty' | 'custom'
     customGreetingPhrase: '', // Phrase personnalisée sur-mesure (si mode custom)
+    // Débriefing et bilan
+    debriefEnabled: true,             // Activer le débriefing du jour et de la semaine
+    debriefHour: '17:00',             // Heure d'apparition du bilan en semaine (défaut 17:00)
+    debriefWeekendRange: 'mon-fri',   // Périmètre hebdo le week-end : 'mon-fri' | 'mon-sat' | 'mon-sun'
+    debriefAlwaysShowTab: false,      // Garder l'onglet visible en permanence ou uniquement aux heures dédiées
     // Paramètres sérieux (réglages d'usine = comportement normal d'Antigravité)
     performanceMode: 'normal',        // 'normal' | 'economy' | 'potato'
     launchOnStartup: false,           // Lancement automatique au démarrage Windows

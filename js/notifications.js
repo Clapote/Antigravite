@@ -11,7 +11,7 @@ const AgendaNotificationManager = {
   sentHistory: {},
   checkIntervalId: null,
 
-  // Pools de messages agréables, chaleureux et variés
+  // Pools de messages agréables, chaleureux et variés, avec une forte dose d'humour bienveillant
   MESSAGES: {
     '60m': [
       "⏳ Dans 1 heure : « {title} ». Vous avez encore un bon moment pour vous préparer sereinement.",
@@ -21,11 +21,23 @@ const AgendaNotificationManager = {
       "🎯 Horizon 1 heure : « {title} ». Gardez le cap, tout est sous contrôle !",
       "🌤️ Dans 60 minutes, place à : « {title} ». Respirez, tout va bien se passer.",
       "📖 Plus qu'une heure avant « {title} ». Un petit sas pour rassembler vos idées et vos notes.",
-      "! Coup d'œil bienveillant : « {title} » est dans 1h. Prenez votre temps pour boucler vos tâches.",
+      "👀 Coup d'œil bienveillant : « {title} » est dans 1h. Prenez votre temps pour boucler vos tâches.",
       "🚀 Dans 1 heure pile : « {title} ». Une belle opportunité pour avancer sur vos priorités !",
       "🧘‍♂️ Anticipation sereine : « {title} » débute dans 60 minutes. Vous êtes fin prêt.",
       "🌱 Dans 1h : « {title} ». Accordez-vous un instant de calme avant cette prochaine étape.",
-      "☀️ Rappel amical : « {title} » est prévu dans une heure. Belle suite de journée à vous !"
+      "☀️ Rappel amical : « {title} » est prévu dans une heure. Belle suite de journée à vous !",
+      "🕵️‍♂️ Alerte discrète : « {title} » commence dans 60 minutes. Vous avez le temps de ranger les 47 onglets ouverts sur votre navigateur.",
+      "☕ Dans 1 heure : « {title} ». C'est le moment officiel pour répéter votre discours sous la douche ou faire couler un café.",
+      "🥐 Dans 60 minutes : « {title} ». Selon la science, un croissant dégusté maintenant augmente l'efficacité de 200 %.",
+      "🛋️ H-1 avant « {title} » : commencez la négociation diplomatique pour vous extraire délicatement de votre fauteuil.",
+      "🎩 Dans 1 heure : « {title} ». Entraînez votre regard le plus professionnel devant le miroir.",
+      "⚡ Dans 60 minutes : « {title} ». Les experts recommandent 5 minutes de préparation et 55 minutes de contemplation zen.",
+      "🎪 Dans 1 heure : « {title} ». C'est l'heure de passer du mode pyjama mental au mode conquête du monde.",
+      "🧭 Dans 60 minutes : « {title} ». Vous avez encore 59 minutes de déni avant d'être formidablement productif.",
+      "🧠 Alerte neurones : « {title} » dans 1 heure. Vos idées ont 60 minutes pour se mettre en rang par deux.",
+      "🔋 Jauge d'énergie : « {title} » arrive dans une heure. Remplissez la tasse, affûtez le sourire et en avant !",
+      "🦄 Dans 60 minutes : « {title} ». Même les créatures magiques n'ont jamais eu un timing aussi impeccable que le vôtre.",
+      "🛡️ Bouclier anti-imprévu activé : « {title} » dans 1h. Tout se déroulera comme sur des roulettes !"
     ],
     '30m': [
       "⏰ Dans 30 minutes : « {title} ». Le moment parfait pour rassembler vos documents ou vérifier vos liens.",
@@ -37,14 +49,25 @@ const AgendaNotificationManager = {
       "🎯 Plus que 30 minutes : « {title} ». Faites le vide pour aborder ce créneau dans les meilleures conditions.",
       "💪 Dans une demi-heure : « {title} ». Une belle séance productive s'annonce !",
       "🛋️ Dernière ligne droite : « {title} » commence dans 30 minutes. Prenez deux minutes pour vous recentrer.",
-      "! Dans 30 min : « {title} ». Belle énergie pour cette rencontre ou ce temps de travail !",
+      "✨ Dans 30 min : « {title} ». Belle énergie pour cette rencontre ou ce temps de travail !",
       "🚀 C'est pour très bientôt : « {title} » dans une demi-heure. Tout se déroulera à merveille.",
-      "🌈 Dans 30 minutes : « {title} ». Gardez le sourire, vous êtes prêt !"
+      "🌈 Dans 30 minutes : « {title} ». Gardez le sourire, vous êtes prêt !",
+      "📱 Dans 30 minutes : « {title} ». C'est l'heure officielle d'arrêter de scroller sur votre téléphone. Oui, maintenant !",
+      "🍵 Plus que 30 minutes avant « {title} ». Finissez votre boisson avant qu'elle ne prenne la température de la pièce.",
+      "🕶️ Dans une demi-heure : « {title} ». Mettez vos lunettes de pro et affichez l'air de quelqu'un qui maîtrise la situation.",
+      "🌪️ Tic-tac : « {title} » dans 30 minutes. C'est le moment de feindre la surprise et de lancer les préparatifs !",
+      "🤹‍♂️ H-30 minutes avant « {title} ». Fermez discrètement les vidéos de petits chats et rassemblez vos dossiers.",
+      "🎭 Dans 30 min : « {title} ». Répétez avec moi : 'Excellente remarque, je vérifie immédiatement'.",
+      "🚀 Plus que 30 minutes avant « {title} ». Même Thomas Pesquet était moins préparé avant un décollage.",
+      "🔋 Dans une demi-heure : « {title} ». Branchez votre motivation sur le secteur, ça va swinguer !",
+      "🏃‍♂️ Dans 30 minutes : « {title} ». Pas de panique : une demi-heure, c'est largement assez pour sauver l'univers.",
+      "☕ Compte à rebours : « {title} » dans 30 min. Dernière chance pour une gorgée de café chaude !",
+      "✨ H-30 min pour « {title} ». Affichez votre plus beau sourire de stratège émérite."
     ],
     'now': [
       "🔔 C'est l'heure : « {title} » commence maintenant ! Donnez le meilleur de vous-même.",
       "🚀 Top départ pour « {title} » ! Belle séance et plein de réussite.",
-      "! C'est le moment : « {title} » débute à l'instant. Concentration, calme et énergie !",
+      "⚡ C'est le moment : « {title} » débute à l'instant. Concentration, calme et énergie !",
       "🎯 Place à : « {title} ». Vous avez toutes les clés en main, bonne session !",
       "🌟 L'heure a sonné pour « {title} ». Respirez un grand coup et lancez-vous avec confiance !",
       "☀️ C'est parti pour « {title} » ! Profitez pleinement de ce temps de concentration.",
@@ -53,7 +76,18 @@ const AgendaNotificationManager = {
       "🌿 C'est à vous : « {title} » débute. Restez serein et gardez un esprit clair.",
       "🎉 C'est parti ! « {title} » commence. Donnez le ton et passez un excellent moment.",
       "💫 Rendez-vous ouvert : « {title} ». Tout est en place, en avant !",
-      "🍀 C'est le moment d'y être : « {title} ». Une très bonne session à vous !"
+      "🍀 C'est le moment d'y être : « {title} ». Une très bonne session à vous !",
+      "🔔 C'est l'heure : « {title} » commence pile maintenant ! Souriez, respirez et faites semblant de tout maîtriser.",
+      "☕ Alerte immédiate : « {title} » démarre à la seconde ! La sieste est officiellement reportée à plus tard.",
+      "⚡ C'est parti pour « {title} » ! Montrez-leur qui est le patron (même si le patron, c'est juste vous et votre écran).",
+      "🎩 C'est le moment magique : « {title} » débute ! Place à l'action, l'improvisation géniale et le panache.",
+      "🎉 Rideau levé pour « {title} » ! Entrez sur scène avec la démarche assurée d'un héros de film d'action.",
+      "🎯 C'est maintenant : « {title} ». Même James Bond n'a jamais été aussi ponctuel que vous.",
+      "💥 C'est l'instant T : « {title} » ! Enfilez votre armure de concentration suprême.",
+      "🌟 C'est parti pour « {title} » ! C'est le moment de briller avec une modestie tout à fait exemplaire.",
+      "🦾 « {title} » démarre à l'instant. Adieu les excuses, bonjour les victoires éclatantes !",
+      "🍿 Lumière tamisée, projecteurs allumés : place à « {title} ». Bon spectacle et belle session !",
+      "🏆 C'est maintenant : « {title} ». Si la productivité était une discipline olympique, vous auriez déjà l'or !"
     ]
   },
 
