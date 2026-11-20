@@ -1,11 +1,11 @@
 # Antigravité - Application Personnelle de Gestion Locale (Windows)
 
-[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.2.5-blue.svg)](package.json)
 [![Plateforme](https://img.shields.io/badge/plateforme-Windows%2010%20%2F%2011-0078d7.svg)](#)
-[![Licence](https://img.shields.io/badge/licence-Privée-green.svg)](#)
-[![Tests](https://img.shields.io/badge/tests-32%20passés%20(100%25)-success.svg)](tests/)
+[![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-39%20suites%20(100%25)-success.svg)](tests/)
 
-Bienvenue dans le projet **Antigravité**, une application de bureau personnelle moderne, sobre et respectueuse de votre autonomie, conçue spécifiquement pour fonctionner en local sur votre PC Windows.
+Bienvenue dans le projet **Antigravité**, une application de bureau open source moderne, sobre et respectueuse de votre autonomie, conçue spécifiquement pour fonctionner 100 % en local sur Windows (gestion des tâches récursives, projets, agenda, notes, focus, ambiances sonores et bilan quotidien bienveillant).
 
 ---
 
@@ -74,7 +74,7 @@ Vous pouvez lancer immédiatement l'application de bureau :
 
 ## 🧪 Tests Automatisés
 
-Le projet intègre une suite complète de **32 suites de tests unitaires et d'intégration** (100% de réussite) validant l'intégrité des données, la persistance, la récursivité, les vues d'agenda, l'interface utilisateur et les mécanismes de synchronisation.
+Le projet intègre une suite complète de **39 suites de tests unitaires et d'intégration** (100% de réussite) validant l'intégrité des données, la persistance, la récursivité, les vues d'agenda, l'interface utilisateur, le débriefing et les mécanismes de synchronisation et de mise à jour.
 
 Pour exécuter la suite de tests :
 ```powershell
@@ -132,5 +132,21 @@ Antigravité/
 │   ├── google-calendar-service.js # API Google Calendar & File hors-ligne
 │   └── update-service.js          # Service de mises à jour GitHub Releases
 ├── data/                     # Schémas et jeux de données initiaux JSON
-└── tests/                    # 32 suites de tests unitaires et d'intégration
+└── tests/                    # 39 suites de tests unitaires et d'intégration
 ```
+
+---
+
+## 🔐 Signature de Code & Confidentialité (Code Signing Policy)
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- **Binaires signés :** Les versions Windows officielles (`Antigravite.exe` et `Antigravite.Setup.<version>.exe`) sont compilées de manière transparente via GitHub Actions (`.github/workflows/release.yml`) et signées par SignPath Foundation.
+- **Politique détaillée & Confidentialité :** Consultez [CODE_SIGNING.md](CODE_SIGNING.md). Antigravité est une application **100 % locale** sans télémétrie ni collecte de données personnelles.
+
+---
+
+## 📄 Licence
+
+Ce projet est distribué sous licence **MIT**. Consultez le fichier [LICENSE](LICENSE) pour plus de détails.
+

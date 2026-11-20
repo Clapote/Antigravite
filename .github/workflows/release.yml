@@ -1,0 +1,223 @@
+name: Build, Sign & Release (SignPath Foundation)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publier la release sur GitHub après compilation (true/false)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Windows NSIS Build & SignPath Code Signing
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full unit test suite (39 suites)
+        run: npm test
+
+      - name: Read app metadata & check SignPath configuration
+        id: meta
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          $pkg = Get-Content -Raw -Path package.json | ConvertFrom-Json
+          $version = $pkg.version
+          $installerName = "Antigravite.Setup.$version.exe"
+          $signpathReady = if ($env:SIGNPATH_API_TOKEN -and $env:SIGNPATH_ORGANIZATION_ID) { "true" } else { "false" }
+          $releasesRepoReady = if ($env:RELEASES_REPO_TOKEN) { "true" } else { "false" }
+
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "tag=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "installer_name=$installerName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "signpath_ready=$signpathReady" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "releases_repo_ready=$releasesRepoReady" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          Write-Host "Version détectée : $version"
+          Write-Host "Installateur     : $installerName"
+          Write-Host "SignPath configuré : $signpathReady"
+          Write-Host "Publication Clapote/Antigravite-releases configurée : $releasesRepoReady"
+
+      # =======================================================================
+      # ÉTAPE 1 : Compilation de l'application décompressée (win-unpacked)
+      # =======================================================================
+      - name: Build unpacked Windows application
+        run: npx electron-builder --win --dir --publish never
+
+      # =======================================================================
+      # ÉTAPE 2 : Signature de l'exécutable principal Antigravite.exe
+      # =======================================================================
+      - name: Upload unsigned Antigravite.exe for SignPath
+        id: upload-app-exe
+        if: steps.meta.outputs.signpath_ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-app-exe
+          path: dist/win-unpacked/Antigravite.exe
+          retention-days: 1
+
+      - name: Sign Antigravite.exe via SignPath Foundation
+        if: steps.meta.outputs.signpath_ready == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'antigravite' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.upload-app-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed-app
+
+      - name: Replace Antigravite.exe with signed binary
+        if: steps.meta.outputs.signpath_ready == 'true'
+        shell: pwsh
+        run: |
+          $signedExe = Get-ChildItem -Path "dist/signed-app" -Recurse -Filter "Antigravite.exe" | Select-Object -First 1
+          if (-not $signedExe) {
+            $zip = Get-ChildItem -Path "dist/signed-app" -Filter "*.zip" | Select-Object -First 1
+            if ($zip) {
+              Expand-Archive -Path $zip.FullName -DestinationPath "dist/signed-app-extracted" -Force
+              $signedExe = Get-ChildItem -Path "dist/signed-app-extracted" -Recurse -Filter "Antigravite.exe" | Select-Object -First 1
+            }
+          }
+          if (-not $signedExe) {
+            throw "Exécutable signé Antigravite.exe introuvable dans dist/signed-app !"
+          }
+          Copy-Item -Path $signedExe.FullName -Destination "dist/win-unpacked/Antigravite.exe" -Force
+          $sig = Get-AuthenticodeSignature "dist/win-unpacked/Antigravite.exe"
+          Write-Host "Signature Antigravite.exe : $($sig.Status) — $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') {
+            throw "La signature d'Antigravite.exe n'est pas valide : $($sig.Status)"
+          }
+
+      # =======================================================================
+      # ÉTAPE 3 : Empaquetage de l'installateur NSIS avec le binaire signé
+      # =======================================================================
+      - name: Build NSIS installer from prepackaged directory
+        run: npx electron-builder --win nsis --prepackaged dist/win-unpacked --publish never
+
+      # =======================================================================
+      # ÉTAPE 4 : Signature de l'installateur final Antigravite.Setup.<ver>.exe
+      # =======================================================================
+      - name: Upload unsigned NSIS installer for SignPath
+        id: upload-nsis-installer
+        if: steps.meta.outputs.signpath_ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-nsis-installer
+          path: dist/${{ steps.meta.outputs.installer_name }}
+          retention-days: 1
+
+      - name: Sign NSIS installer via SignPath Foundation
+        if: steps.meta.outputs.signpath_ready == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'antigravite' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.upload-nsis-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed-installer
+
+      - name: Replace NSIS installer with signed binary & verify signature
+        if: steps.meta.outputs.signpath_ready == 'true'
+        shell: pwsh
+        run: |
+          $installerName = "${{ steps.meta.outputs.installer_name }}"
+          $signedInstaller = Get-ChildItem -Path "dist/signed-installer" -Recurse -Filter "*.exe" | Select-Object -First 1
+          if (-not $signedInstaller) {
+            $zip = Get-ChildItem -Path "dist/signed-installer" -Filter "*.zip" | Select-Object -First 1
+            if ($zip) {
+              Expand-Archive -Path $zip.FullName -DestinationPath "dist/signed-installer-extracted" -Force
+              $signedInstaller = Get-ChildItem -Path "dist/signed-installer-extracted" -Recurse -Filter "*.exe" | Select-Object -First 1
+            }
+          }
+          if (-not $signedInstaller) {
+            throw "Installateur signé introuvable dans dist/signed-installer !"
+          }
+          Copy-Item -Path $signedInstaller.FullName -Destination "dist/$installerName" -Force
+          $sig = Get-AuthenticodeSignature "dist/$installerName"
+          Write-Host "Signature $installerName : $($sig.Status) — $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') {
+            throw "La signature de l'installateur n'est pas valide : $($sig.Status)"
+          }
+
+      # =======================================================================
+      # ÉTAPE 5 : Régénération exacte de .blockmap et latest.yml (SHA-512 signé)
+      # =======================================================================
+      - name: Regenerate blockmap and latest.yml for final installer
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: node scripts/update-release-metadata.js
+
+      # =======================================================================
+      # ÉTAPE 6 : Sauvegarde des artefacts de release dans le workflow
+      # =======================================================================
+      - name: Upload final release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: antigravite-release-v${{ steps.meta.outputs.version }}
+          path: |
+            dist/${{ steps.meta.outputs.installer_name }}
+            dist/${{ steps.meta.outputs.installer_name }}.blockmap
+            dist/latest.yml
+          retention-days: 14
+
+      # =======================================================================
+      # ÉTAPE 7 : Publication sur GitHub Releases (dépôt principal + releases)
+      # =======================================================================
+      - name: Publish Release to Clapote/Antigravite
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Antigravité ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          draft: false
+          files: |
+            dist/${{ steps.meta.outputs.installer_name }}
+            dist/${{ steps.meta.outputs.installer_name }}.blockmap
+            dist/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror Release to Clapote/Antigravite-releases (Auto-Updater feed)
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true) && steps.meta.outputs.releases_repo_ready == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: Clapote/Antigravite-releases
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Antigravité ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          make_latest: true
+          draft: false
+          files: |
+            dist/${{ steps.meta.outputs.installer_name }}
+            dist/${{ steps.meta.outputs.installer_name }}.blockmap
+            dist/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}

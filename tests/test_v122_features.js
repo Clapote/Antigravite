@@ -291,18 +291,18 @@ async function it(name, fn) {
   // ---------------------------------------------------------------------------
   // 7. Version 1.2.2, Changelog & Suppression du Pop-up au Démarrage
   // ---------------------------------------------------------------------------
-  await it("7.1 Version 1.2.2 / 1.2.3 synchronisée (package.json, index.html, app.js, settings.js)", () => {
+  await it("7.1 Version 1.2.2 ou supérieure synchronisée (package.json, index.html, app.js, settings.js)", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-    assert.ok(pkg.version === '1.2.2' || pkg.version === '1.2.3', "package.json doit être en version 1.2.2 ou 1.2.3");
+    assert.ok(pkg.version >= '1.2.2', "package.json doit être en version 1.2.2 ou supérieure");
 
     const htmlContent = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-    assert.ok(htmlContent.includes('id="updater-current-version-label">1.2.2</strong>') || htmlContent.includes('id="updater-current-version-label">1.2.3</strong>'), "index.html affiche la version");
+    assert.ok(htmlContent.includes(`id="updater-current-version-label">${pkg.version}</strong>`), "index.html affiche la version courante");
 
     const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
-    assert.ok(appCode.includes("APP_VERSION: '1.2.2'") || appCode.includes("APP_VERSION: '1.2.3'"), "app.js est configuré sur la version");
+    assert.ok(appCode.includes(`APP_VERSION: '${pkg.version}'`), "app.js est configuré sur la version courante");
 
     const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
-    assert.ok(settingsCode.includes("currentVersion: '1.2.2'") || settingsCode.includes("currentVersion: '1.2.3'"), "settings.js est initialisé avec la version");
+    assert.ok(settingsCode.includes(`currentVersion: '${pkg.version}'`), "settings.js est initialisé avec la version courante");
   });
 
   await it("7.2 Changelog officiel de la Version 1.2.2 présent dans les paramètres", () => {

@@ -181,6 +181,7 @@ function createMockDOM() {
     const dom = createMockDOM();
     global.document = dom;
 
+    UpdateManager.currentVersion = '1.0.0';
     UpdateManager.status = 'available';
     UpdateManager.updateInfo = { version: '1.1.0' };
     UpdateManager.render();
@@ -290,6 +291,9 @@ function createMockDOM() {
       }
     };
 
+    UpdateManager.currentVersion = '1.0.0';
+    UpdateManager.updateInfo = { version: '1.1.0' };
+    UpdateManager.status = 'available';
     UpdateManager.isBusy = false;
     UpdateManager.bindEvents();
     dom.elements['btn-download-update'].click();

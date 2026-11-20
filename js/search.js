@@ -414,13 +414,23 @@ const SearchManager = {
 
       case 'project':
         navigateApp('projects');
+        if (item.id && typeof ProjectsManager !== 'undefined' && typeof ProjectsManager.openProjectDetailModal === 'function') {
+          setTimeout(() => {
+            ProjectsManager.openProjectDetailModal(item.id);
+          }, 100);
+        }
         break;
 
       case 'event':
         navigateApp('agenda');
-        if (item.data && item.data.date && typeof AgendaManager !== 'undefined' && typeof AgendaManager.zoomToDay === 'function') {
+        if (typeof AgendaManager !== 'undefined') {
           setTimeout(() => {
-            AgendaManager.zoomToDay(item.data.date);
+            if (item.data && item.data.date && typeof AgendaManager.zoomToDay === 'function') {
+              AgendaManager.zoomToDay(item.data.date);
+            }
+            if (item.id && typeof AgendaManager.openEventModal === 'function') {
+              AgendaManager.openEventModal(item.id);
+            }
           }, 100);
         }
         break;

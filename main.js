@@ -18,6 +18,7 @@ if (process.platform === 'win32') {
 // Optimisations matérielles GPU & moteur de rendu Chromium
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('lang', 'fr-FR');
 
 // Mode isolé pour les tests de développement sans conflit avec l'application installée
 if (process.argv.includes('--isolated') || process.env.ANTIGRAVITE_ISOLATED) {
@@ -272,6 +273,14 @@ function createWindow() {
     }
   });
 
+  try {
+    if (mainWindow.webContents && mainWindow.webContents.session && typeof mainWindow.webContents.session.setSpellCheckerLanguages === 'function') {
+      mainWindow.webContents.session.setSpellCheckerLanguages(['fr-FR', 'fr']);
+    }
+  } catch (e) {
+    console.warn('[Spellcheck] Erreur configuration langue window session:', e.message);
+  }
+
   mainWindow.once('ready-to-show', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
@@ -287,7 +296,12 @@ function createWindow() {
 
   if (process.platform === 'win32') {
     try {
-      mainWindow.setIcon(appIconPath);
+      const iconImg = nativeImage.createFromPath(appIconPath);
+      if (iconImg && !iconImg.isEmpty()) {
+        mainWindow.setIcon(iconImg);
+      } else {
+        mainWindow.setIcon(appIconPath);
+      }
     } catch (e) {
       console.warn('[Window] setIcon fallback:', e.message);
     }
@@ -1097,10 +1111,10 @@ app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return;
   loadDesktopPrefsSync();
 
-  // Configuration du correcteur orthographique pour les saisies (Français et Anglais)
+  // Configuration du correcteur orthographique pour les saisies (Français uniquement)
   try {
     if (session && session.defaultSession && typeof session.defaultSession.setSpellCheckerLanguages === 'function') {
-      session.defaultSession.setSpellCheckerLanguages(['fr', 'en-US']);
+      session.defaultSession.setSpellCheckerLanguages(['fr-FR', 'fr']);
     }
   } catch (err) {
     console.warn('[Spellcheck] Erreur de configuration de la langue orthographique:', err.message);

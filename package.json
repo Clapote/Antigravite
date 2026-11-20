@@ -1,8 +1,14 @@
 {
   "name": "antigravite",
-  "version": "1.2.3",
-  "description": "Application personnelle de gestion des tâches",
-  "private": true,
+  "version": "1.2.5",
+  "description": "Application personnelle open source de gestion locale des tâches, projets, agenda et notes pour Windows",
+  "author": "Lucas Peutot",
+  "license": "MIT",
+  "homepage": "https://github.com/Clapote/Antigravite#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Clapote/Antigravite.git"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -53,7 +59,7 @@
     },
     "nsis": {
       "oneClick": false,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "allowToChangeInstallationDirectory": true,
       "artifactName": "${productName}.Setup.${version}.${ext}"

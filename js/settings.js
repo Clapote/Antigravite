@@ -1645,13 +1645,28 @@ const SettingsManager = {
 const UpdateManager = {
   initialized: false,
   isBusy: false,
-  currentVersion: '1.2.3',
+  currentVersion: '1.2.5',
   isPackaged: false,
   status: 'idle',
   updateInfo: null,
   downloadProgress: null,
   lastError: null,
   _unsubscribe: null,
+
+  isNewerVersion(remoteVer, currentVer) {
+    if (!remoteVer || !currentVer) return false;
+    const clean = (v) => String(v).trim().replace(/^v/i, '');
+    const rParts = clean(remoteVer).split('.').map(n => parseInt(n, 10) || 0);
+    const cParts = clean(currentVer).split('.').map(n => parseInt(n, 10) || 0);
+    const len = Math.max(rParts.length, cParts.length);
+    for (let i = 0; i < len; i++) {
+      const r = rParts[i] || 0;
+      const c = cParts[i] || 0;
+      if (r > c) return true;
+      if (r < c) return false;
+    }
+    return false;
+  },
 
   async init() {
     this.bindEvents();
@@ -1701,8 +1716,27 @@ const UpdateManager = {
       this._unsubscribe = updaterApi.onStatusChanged((data) => {
         if (!data) return;
         const prevStatus = this.status;
-        this.status = data.status || this.status;
-        if (data.updateInfo) this.updateInfo = data.updateInfo;
+        let newStatus = data.status || this.status;
+        let newInfo = data.updateInfo !== undefined ? data.updateInfo : this.updateInfo;
+
+        if (newStatus === 'available') {
+          const availVer = newInfo?.version;
+          if (!availVer || !this.isNewerVersion(availVer, this.currentVersion)) {
+            newStatus = 'not-available';
+            newInfo = null;
+            if (typeof App !== 'undefined' && typeof App.removePendingUpdateIndicator === 'function') {
+              App.removePendingUpdateIndicator();
+            }
+          }
+        } else if (newStatus === 'not-available') {
+          newInfo = null;
+          if (typeof App !== 'undefined' && typeof App.removePendingUpdateIndicator === 'function') {
+            App.removePendingUpdateIndicator();
+          }
+        }
+
+        this.status = newStatus;
+        this.updateInfo = newInfo;
         if (data.progress) this.downloadProgress = data.progress;
         if (data.error) this.lastError = data.error;
         this.render();
@@ -1724,7 +1758,7 @@ const UpdateManager = {
   async refreshStatus() {
     const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
     if (!updaterApi) {
-      this.currentVersion = '1.2.3';
+      this.currentVersion = '1.2.5';
       this.isPackaged = false;
       this.render();
       return;
@@ -1751,6 +1785,18 @@ const UpdateManager = {
       console.warn("[UpdateManager] Erreur récupération statut:", err);
     }
 
+    // Protection stricte : si le statut retourné est 'available' mais sans version plus récente
+    if (this.status === 'available') {
+      const availVer = this.updateInfo?.version;
+      if (!availVer || !this.isNewerVersion(availVer, this.currentVersion)) {
+        this.status = 'not-available';
+        this.updateInfo = null;
+        if (typeof App !== 'undefined' && typeof App.removePendingUpdateIndicator === 'function') {
+          App.removePendingUpdateIndicator();
+        }
+      }
+    }
+
     this.render();
   },
 
@@ -1773,6 +1819,12 @@ const UpdateManager = {
       const res = await updaterApi.checkForUpdates(false);
       if (res && res.reason === 'dev-mode') {
         this.status = 'dev-mode';
+      } else if (res && (!res.isUpdateAvailable || !res.updateInfo || !this.isNewerVersion(res.updateInfo.version, this.currentVersion))) {
+        this.status = 'not-available';
+        this.updateInfo = null;
+        if (typeof App !== 'undefined' && typeof App.removePendingUpdateIndicator === 'function') {
+          App.removePendingUpdateIndicator();
+        }
       }
     } catch (err) {
       this.status = 'error';
@@ -1785,6 +1837,16 @@ const UpdateManager = {
 
   async downloadUpdate() {
     if (this.isBusy) return;
+    if (!this.updateInfo?.version || !this.isNewerVersion(this.updateInfo.version, this.currentVersion)) {
+      this.status = 'not-available';
+      this.updateInfo = null;
+      if (typeof App !== 'undefined' && typeof App.removePendingUpdateIndicator === 'function') {
+        App.removePendingUpdateIndicator();
+      }
+      this.render();
+      return;
+    }
+
     this.isBusy = true;
     this.lastError = null;
     this.status = 'downloading';
@@ -1936,6 +1998,20 @@ const UpdateManager = {
         break;
 
       case 'available':
+        if (!availableVersion || !this.isNewerVersion(availableVersion, this.currentVersion)) {
+          if (icon) icon.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>';
+          title.textContent = 'Aucune mise à jour disponible';
+          desc.textContent = `Votre application est à jour (la version ${this.currentVersion} est la plus récente).`;
+          if (chip) chip.classList.add('status-connected');
+          if (dot) dot.style.backgroundColor = '#10b981';
+
+          btnCheck.disabled = false;
+          btnCheck.style.display = 'inline-flex';
+          if (btnCheckText) btnCheckText.textContent = 'Rechercher une mise à jour';
+          if (btnCheckIcon) btnCheckIcon.innerHTML = refreshSvg;
+          break;
+        }
+
         if (icon) icon.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
         title.textContent = availableVersion
           ? `Nouvelle version disponible : v${availableVersion}`

@@ -110,6 +110,9 @@ const TrashManager = {
     }
 
     this.render();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
+      window.App.updateDashboard();
+    }
 
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
       const label = item.type === 'task' ? 'Tâche' : item.type === 'note' ? 'Note' : 'Projet';

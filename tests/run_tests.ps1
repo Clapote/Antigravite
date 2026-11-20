@@ -466,6 +466,30 @@ if (Test-Path $nodePath) {
 Assert-Test "Fonctionnalités v1.2.3 (Boutons débriefing réparés, Temps dédié à la créativité avec créneaux honorés, Notes du jour et bat 1.2.3)" $v123FeaturesPass
 
 # -----------------------------------------------------------------------------
+# TEST 32 : Nouveautés v1.2.4 (Tri & Regroupement Tâches, Priorisation Agenda 1h)
+# -----------------------------------------------------------------------------
+Write-Host "`n32. Vérification des fonctionnalités v1.2.4..." -ForegroundColor Yellow
+
+$v124FeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v124_features.js")
+    $v124FeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités v1.2.4 (Onglets de tri des tâches, regroupement par projet, confort visuel et priorisation titre agenda 1h)" $v124FeaturesPass
+
+# -----------------------------------------------------------------------------
+# TEST 33 : Nouveautés v1.2.5 (Dossiers Notes, Note Agenda, Horloge 1s & Icônes)
+# -----------------------------------------------------------------------------
+Write-Host "`n33. Vérification des fonctionnalités v1.2.5..." -ForegroundColor Yellow
+
+$v125FeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v125_features.js")
+    $v125FeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités v1.2.5 (Visibilité dossiers notes, note attachée agenda, cadence horloge 1s et pérennité icône)" $v125FeaturesPass
+
+# -----------------------------------------------------------------------------
 # BILAN
 # -----------------------------------------------------------------------------
 Write-Host "`n==========================================================" -ForegroundColor Cyan

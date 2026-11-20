@@ -19,6 +19,8 @@ class UpdateService extends EventEmitter {
     super();
     this.app = options.app || null;
     this.autoUpdater = options.autoUpdater || null;
+    this.currentVersionOverride = options.currentVersion || null;
+    this.mockVersion = options.mockVersion || '1.2.3';
     this.feedConfig = Object.assign({
       provider: 'github',
       owner: 'Clapote',
@@ -33,6 +35,39 @@ class UpdateService extends EventEmitter {
     this.isInitialized = false;
     this.isMockMode = !!options.mock;
     this.onBeforeQuitInstall = options.onBeforeQuitInstall || null;
+  }
+
+  /**
+   * Compare deux versions semver (ex: '1.2.3' vs '1.2.2').
+   * Retourne true UNIQUEMENT si remoteVer est strictement supérieure à currentVer.
+   */
+  isNewerVersion(remoteVer, currentVer) {
+    if (!remoteVer || !currentVer) return false;
+    const clean = (v) => String(v).trim().replace(/^v/i, '');
+    const rParts = clean(remoteVer).split('.').map(n => parseInt(n, 10) || 0);
+    const cParts = clean(currentVer).split('.').map(n => parseInt(n, 10) || 0);
+    const len = Math.max(rParts.length, cParts.length);
+    for (let i = 0; i < len; i++) {
+      const r = rParts[i] || 0;
+      const c = cParts[i] || 0;
+      if (r > c) return true;
+      if (r < c) return false;
+    }
+    return false;
+  }
+
+  _getCurrentVersion() {
+    if (this.currentVersionOverride) {
+      return String(this.currentVersionOverride).trim();
+    }
+    const app = this._resolveApp();
+    if (app && typeof app.getVersion === 'function') {
+      try {
+        const v = app.getVersion();
+        if (v) return String(v).trim();
+      } catch (_) {}
+    }
+    return '1.0.0';
   }
 
   _resolveApp() {
@@ -102,14 +137,23 @@ class UpdateService extends EventEmitter {
       });
 
       updater.on('update-available', (info) => {
+        const currentVersion = this._getCurrentVersion();
+        const isActuallyNewer = info && info.version && this.isNewerVersion(info.version, currentVersion);
+        if (!isActuallyNewer) {
+          // Version identique ou inférieure : ne JAMAIS notifier comme mise à jour disponible
+          this.updateInfo = info;
+          this._setStatus('not-available', { updateInfo: info, isUpdateAvailable: false });
+          this.emit('update-not-available', info);
+          return;
+        }
         this.updateInfo = info;
-        this._setStatus('available', { updateInfo: info });
+        this._setStatus('available', { updateInfo: info, isUpdateAvailable: true });
         this.emit('update-available', info);
       });
 
       updater.on('update-not-available', (info) => {
         this.updateInfo = info;
-        this._setStatus('not-available', { updateInfo: info });
+        this._setStatus('not-available', { updateInfo: info, isUpdateAvailable: false });
         this.emit('update-not-available', info);
       });
 
@@ -167,15 +211,22 @@ class UpdateService extends EventEmitter {
     if (this.isMockMode) {
       this._setStatus('checking');
       await new Promise(r => setTimeout(r, 400));
+      const currentVer = this._getCurrentVersion();
       const mockInfo = {
-        version: '1.2.3',
+        version: this.mockVersion || '1.2.4',
         releaseDate: new Date().toISOString(),
         releaseNotes: "Améliorations de la fluidité, téléchargement transparent et installation sans fenêtre d'assistant.",
-        files: [{ url: 'Antigravite.Setup.1.2.3.exe', size: 84500000 }]
+        files: [{ url: `Antigravite.Setup.${this.mockVersion || '1.2.4'}.exe`, size: 84500000 }]
       };
+      const isNewer = this.isNewerVersion(mockInfo.version, currentVer);
+      if (!isNewer) {
+        this.updateInfo = mockInfo;
+        this._setStatus('not-available', { updateInfo: mockInfo, isUpdateAvailable: false });
+        return { success: true, updateInfo: null, isUpdateAvailable: false };
+      }
       this.updateInfo = mockInfo;
-      this._setStatus('available', { updateInfo: mockInfo });
-      return { success: true, updateInfo: mockInfo };
+      this._setStatus('available', { updateInfo: mockInfo, isUpdateAvailable: true });
+      return { success: true, updateInfo: mockInfo, isUpdateAvailable: true };
     }
 
     const app = this._resolveApp();
@@ -198,9 +249,26 @@ class UpdateService extends EventEmitter {
     this._setStatus('checking');
     try {
       const result = await updater.checkForUpdates();
+      const rawInfo = result ? result.updateInfo : null;
+      const currentVersion = this._getCurrentVersion();
+      const isAvailable = !!(rawInfo && rawInfo.version && this.isNewerVersion(rawInfo.version, currentVersion));
+
+      if (!isAvailable) {
+        this.updateInfo = rawInfo;
+        this._setStatus('not-available', { updateInfo: rawInfo, isUpdateAvailable: false });
+        return {
+          success: true,
+          updateInfo: null,
+          isUpdateAvailable: false
+        };
+      }
+
+      this.updateInfo = rawInfo;
+      this._setStatus('available', { updateInfo: rawInfo, isUpdateAvailable: true });
       return {
         success: true,
-        updateInfo: result ? result.updateInfo : null
+        updateInfo: rawInfo,
+        isUpdateAvailable: true
       };
     } catch (err) {
       this.lastError = err;
@@ -213,6 +281,11 @@ class UpdateService extends EventEmitter {
    * Déclenche le téléchargement explicite de la mise à jour par l'utilisateur.
    */
   async downloadUpdate() {
+    const currentVersion = this._getCurrentVersion();
+    if (this.status === 'not-available' || (this.updateInfo && this.updateInfo.version && !this.isNewerVersion(this.updateInfo.version, currentVersion))) {
+      throw new Error(`Aucune mise à jour plus récente disponible (version actuelle : ${currentVersion}).`);
+    }
+
     if (this.isMockMode) {
       this._setStatus('downloading');
       for (let p = 15; p <= 100; p += 15) {
@@ -286,21 +359,31 @@ class UpdateService extends EventEmitter {
    * Retourne l'état courant complet du service de mise à jour.
    */
   getStatus() {
+    const currentVersion = this._getCurrentVersion();
     const app = this._resolveApp();
-    const currentVersion = app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0';
     const isPackaged = app ? !!app.isPackaged : false;
+
+    // Protection stricte : si le statut enregistré est 'available' mais que la version n'est pas strictement plus récente
+    let effectiveStatus = this.status;
+    let effectiveUpdateInfo = this.updateInfo;
+    if (effectiveStatus === 'available') {
+      if (!this.updateInfo || !this.updateInfo.version || !this.isNewerVersion(this.updateInfo.version, currentVersion)) {
+        effectiveStatus = 'not-available';
+        effectiveUpdateInfo = null;
+      }
+    }
 
     return {
       currentVersion,
       isPackaged,
-      status: this.status,
+      status: effectiveStatus,
       feed: {
         provider: this.feedConfig.provider,
         owner: this.feedConfig.owner,
         repo: this.feedConfig.repo,
         private: this.feedConfig.private
       },
-      updateInfo: this.updateInfo,
+      updateInfo: effectiveUpdateInfo,
       downloadProgress: this.downloadProgress,
       lastError: this.lastError ? this.lastError.message : null
     };

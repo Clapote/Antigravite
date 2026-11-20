@@ -1614,7 +1614,7 @@ async function runTests() {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 
     // 32.1 Version 1.2.0 / 1.2.1 / 1.2.2
-    assert.ok(pkg.version === "1.2.0" || pkg.version === "1.2.1" || pkg.version === "1.2.2" || pkg.version === "1.2.3", "package.json est bien mis à jour en version 1.2.0 ou supérieure");
+    assert.ok(pkg.version >= "1.2.0", "package.json est bien mis à jour en version 1.2.0 ou supérieure");
 
     // 32.2 Éléments UI de la recherche universelle
     assert(html.includes('id="search-modal"'), "Modale #search-modal présente dans index.html");
@@ -2509,6 +2509,7 @@ async function runTests() {
   await it("42.4 Vue tuiles en conteneurs de famille : regroupement, arborescence, pliage & glisser-déposer", () => {
     localStorage.clear();
     StorageManager.clearCache();
+    StorageManager.saveProjects([]);
     ProjectsManager.collapsedFamilies = null;
 
     const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');

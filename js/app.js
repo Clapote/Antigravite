@@ -4,7 +4,8 @@
 
 const App = {
   currentScreen: 'home',
-  APP_VERSION: '1.2.3',
+  APP_VERSION: '1.2.5',
+  dashboardAgendaView: 'grid',
   WHATS_NEW_STORAGE_KEY: 'antigravite_last_seen_version',
   _activeWhatsNewVersion: null,
   // Versions majeures justifiant l'affichage automatique de la modale "Quoi de neuf" au premier démarrage
@@ -70,6 +71,7 @@ const App = {
 
   async init() {
     this._bootStartTs = Date.now();
+    this.removePendingUpdateIndicator();
     // 0. Configurer le message d'accueil dynamique sur l'écran de chargement
     this.initSplashScreen();
     this.checkForStartupUpdate();
@@ -102,6 +104,7 @@ const App = {
       this.initSidebarState();
       this.initSidebarRailTooltips();
       this.initSidebarStickyNote();
+      this.dashboardAgendaView = (typeof localStorage !== 'undefined' && localStorage.getItem('antigravite_dashboard_agenda_view')) || 'grid';
       this.initDashboardClock();
       this.updateDashboard();
       this._initDurationMs = Date.now() - (this._bootStartTs || Date.now());
@@ -330,17 +333,40 @@ const App = {
   // GESTION PROACTIVE DES MISES À JOUR (Vérification au démarrage & Modale fluide)
   // =========================================================================
 
+  isNewerVersion(remoteVer, currentVer) {
+    if (!remoteVer || !currentVer) return false;
+    const clean = (v) => String(v).trim().replace(/^v/i, '');
+    const rParts = clean(remoteVer).split('.').map(n => parseInt(n, 10) || 0);
+    const cParts = clean(currentVer).split('.').map(n => parseInt(n, 10) || 0);
+    const len = Math.max(rParts.length, cParts.length);
+    for (let i = 0; i < len; i++) {
+      const r = rParts[i] || 0;
+      const c = cParts[i] || 0;
+      if (r > c) return true;
+      if (r < c) return false;
+    }
+    return false;
+  },
+
   async checkForStartupUpdate() {
     if (typeof window === 'undefined' || !window.AntigraviteAPI || !window.AntigraviteAPI.updater) return;
 
     try {
+      const runningVer = await this.resolveAppVersion();
+      if (runningVer) {
+        this.APP_VERSION = runningVer;
+      }
+
       if (typeof window.AntigraviteAPI.updater.onTriggerMockUpdate === 'function') {
         window.AntigraviteAPI.updater.onTriggerMockUpdate(async () => {
           const res = await window.AntigraviteAPI.updater.checkForUpdates(true);
-          if (res && res.updateInfo) {
+          if (res && res.updateInfo && this.isNewerVersion(res.updateInfo.version, this.APP_VERSION)) {
             this._availableUpdate = res.updateInfo;
             this._updatePostponed = false;
             this.openUpdatePromptModal(res.updateInfo);
+          } else {
+            this._availableUpdate = null;
+            this.removePendingUpdateIndicator();
           }
         });
       }
@@ -349,12 +375,20 @@ const App = {
         window.AntigraviteAPI.updater.onStatusChanged((data) => {
           if (!data) return;
           if (data.status === 'available' && data.updateInfo) {
-            this._availableUpdate = data.updateInfo;
-            if (this._splashHidden && !this._updatePostponed) {
-              setTimeout(() => {
-                this.openUpdatePromptModal(data.updateInfo);
-              }, 250);
+            if (this.isNewerVersion(data.updateInfo.version, this.APP_VERSION)) {
+              this._availableUpdate = data.updateInfo;
+              if (this._splashHidden && !this._updatePostponed) {
+                setTimeout(() => {
+                  this.openUpdatePromptModal(data.updateInfo);
+                }, 250);
+              }
+            } else {
+              this._availableUpdate = null;
+              this.removePendingUpdateIndicator();
             }
+          } else if (data.status === 'not-available') {
+            this._availableUpdate = null;
+            this.removePendingUpdateIndicator();
           }
           if (data.status === 'downloading' && data.progress) {
             this.updatePromptDownloadProgress(data.progress);
@@ -369,8 +403,11 @@ const App = {
       const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2500));
       const checkPromise = window.AntigraviteAPI.updater.checkForUpdates();
       const res = await Promise.race([checkPromise, timeoutPromise]);
-      if (res && res.updateInfo) {
+      if (res && res.updateInfo && this.isNewerVersion(res.updateInfo.version, this.APP_VERSION)) {
         this._availableUpdate = res.updateInfo;
+      } else {
+        this._availableUpdate = null;
+        this.removePendingUpdateIndicator();
       }
     } catch (_err) {
       // Ignorer silencieusement pour ne jamais bloquer le chargement
@@ -379,6 +416,10 @@ const App = {
 
   openUpdatePromptModal(updateInfo) {
     if (typeof document === 'undefined') return;
+    if (!updateInfo || !updateInfo.version || !this.isNewerVersion(updateInfo.version, this.APP_VERSION)) {
+      this.removePendingUpdateIndicator();
+      return;
+    }
     const modal = document.getElementById('modal-update-prompt');
     if (!modal) return;
 
@@ -469,6 +510,10 @@ const App = {
 
   showPendingUpdateIndicator() {
     if (typeof document === 'undefined') return;
+    if (!this._availableUpdate || !this.isNewerVersion(this._availableUpdate.version, this.APP_VERSION)) {
+      this.removePendingUpdateIndicator();
+      return;
+    }
     const navSettings = document.querySelector('.nav-item[data-screen="settings"]');
     if (navSettings && !document.getElementById('nav-update-dot')) {
       const dot = document.createElement('span');
@@ -478,6 +523,14 @@ const App = {
       dot.style.boxShadow = '0 0 8px var(--accent)';
       dot.title = 'Mise à jour disponible';
       navSettings.appendChild(dot);
+    }
+  },
+
+  removePendingUpdateIndicator() {
+    if (typeof document === 'undefined') return;
+    const dot = document.getElementById('nav-update-dot');
+    if (dot && dot.parentNode) {
+      dot.parentNode.removeChild(dot);
     }
   },
 
@@ -781,9 +834,15 @@ const App = {
     if (screenId === 'tasks') TasksManager.render();
     if (screenId === 'projects') ProjectsManager.render();
     if (screenId === 'agenda') {
-      AgendaManager.render();
-      if (typeof AgendaManager.scrollToNormalHours === 'function' && (AgendaManager._lastScrollTop === null || AgendaManager._lastScrollTop === undefined)) {
-        AgendaManager.scrollToNormalHours(false);
+      if (typeof AgendaManager !== 'undefined') {
+        if (typeof AgendaManager.resetToCurrentWeek === 'function') {
+          AgendaManager.resetToCurrentWeek();
+        } else {
+          AgendaManager.render();
+          if (typeof AgendaManager.scrollToNormalHours === 'function' && (AgendaManager._lastScrollTop === null || AgendaManager._lastScrollTop === undefined)) {
+            AgendaManager.scrollToNormalHours(false);
+          }
+        }
       }
       if (typeof GoogleSyncManager !== 'undefined') {
         GoogleSyncManager.refreshStatus();
@@ -1583,17 +1642,33 @@ const App = {
         }
       }
 
-      // 4. Validation formulaire modale par Entrée
-      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        const activeModal = document.querySelector('.modal-overlay.active');
+      // 4. Validation formulaire modale par Entrée ou Ctrl+Entrée (Agenda, Tâches, Projets, etc.)
+      const isEnter = (e.key === 'Enter' || e.code === 'Enter');
+      if (isEnter) {
+        const activeModal = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
+          ? document.querySelector('.modal-overlay.active')
+          : null;
+
         if (activeModal) {
           const tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toUpperCase() : '';
-          // Ne soumettre que depuis un champ INPUT (laissant libre saisie aux TEXTAREA multilignes)
-          if (tag === 'INPUT' && activeModal.contains(document.activeElement)) {
-            const primaryBtn = activeModal.querySelector('.modal-footer .btn-primary:not(:disabled)');
+
+          // 4a. Ctrl+Entrée (ou Cmd+Entrée) : validation et fermeture universelle depuis n'importe où dans la modale (y compris textarea)
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            const primaryBtn = activeModal.querySelector('#event-modal-save:not(:disabled), #task-modal-save:not(:disabled), #project-modal-save:not(:disabled), #dialog-btn-confirm:not(:disabled), #btn-save-picker-modal:not(:disabled), #btn-done-playlist-select-modal:not(:disabled), .modal-footer .btn-primary:not(:disabled), .modal-actions .btn-primary:not(:disabled), button.btn-primary:not(:disabled)');
             if (primaryBtn) {
-              e.preventDefault();
               primaryBtn.click();
+            }
+          }
+          // 4b. Entrée simple (sans shift ni ctrl/meta) : validation depuis un champ INPUT standard
+          else if (!e.shiftKey) {
+            if (tag === 'INPUT' && activeModal.contains(document.activeElement)) {
+              const primaryBtn = activeModal.querySelector('.modal-footer .btn-primary:not(:disabled), .modal-actions .btn-primary:not(:disabled), button.btn-primary:not(:disabled)');
+              if (primaryBtn) {
+                e.preventDefault();
+                primaryBtn.click();
+              }
             }
           }
         }
@@ -2048,14 +2123,12 @@ const App = {
       const now = new Date();
       const perfMode = getPerfMode();
 
-      if (perfMode !== 'potato') {
-        const seconds = String(now.getSeconds()).padStart(2, '0');
-        const secText = `:${seconds}`;
-        elSec = resolveEl(elSec, 'dashboard-clock-seconds');
-        if (elSec && (force || secText !== lastSecondStr)) {
-          lastSecondStr = secText;
-          elSec.textContent = secText;
-        }
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const secText = `:${seconds}`;
+      elSec = resolveEl(elSec, 'dashboard-clock-seconds');
+      if (elSec && (force || secText !== lastSecondStr)) {
+        lastSecondStr = secText;
+        elSec.textContent = secText;
       }
 
       const hNum = now.getHours();
@@ -2107,7 +2180,8 @@ const App = {
   },
 
   applyPerformanceTimers(perfMode = 'normal') {
-    const clockMs = perfMode === 'potato' ? 15000 : (perfMode === 'economy' ? 5000 : 1000);
+    // Horloge accueil : toujours 1000ms pour que les secondes s'actualisent précisément à chaque seconde
+    const clockMs = 1000;
     const dayMs = perfMode === 'potato' ? 120000 : (perfMode === 'economy' ? 60000 : 30000);
 
     if (this._updateClockFn && (!this._clockTimer || this._clockIntervalMs !== clockMs)) {
@@ -2368,6 +2442,310 @@ const App = {
     }
   },
 
+  setDashboardAgendaView(view) {
+    this.dashboardAgendaView = view === 'list' ? 'list' : 'grid';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('antigravite_dashboard_agenda_view', this.dashboardAgendaView);
+      }
+    } catch (err) {
+      console.warn('[App] Erreur stockage dashboardAgendaView:', err);
+    }
+    const btnGrid = document.getElementById('btn-dashboard-agenda-grid');
+    const btnList = document.getElementById('btn-dashboard-agenda-list');
+    if (btnGrid && btnList) {
+      btnGrid.classList.toggle('active', this.dashboardAgendaView === 'grid');
+      btnList.classList.toggle('active', this.dashboardAgendaView === 'list');
+    }
+    this.updateDashboard();
+  },
+
+  renderDashboardMiniAgenda(containerOrEvents, todayEventsArg, todayStrArg, tasksArg, projectsArg) {
+    let container = null;
+    let todayEvents = [];
+    let todayStr = '';
+    let tasks = [];
+    let projects = [];
+
+    if (containerOrEvents && ((typeof HTMLElement !== 'undefined' && containerOrEvents instanceof HTMLElement) || typeof containerOrEvents.innerHTML === 'string' || typeof containerOrEvents === 'string')) {
+      container = typeof containerOrEvents === 'string' ? document.getElementById(containerOrEvents) : containerOrEvents;
+      todayEvents = Array.isArray(todayEventsArg) ? todayEventsArg : [];
+      todayStr = todayStrArg || new Date().toISOString().slice(0, 10);
+      tasks = tasksArg || (typeof StorageManager !== 'undefined' ? StorageManager.getTasks() : []);
+      projects = projectsArg || (typeof StorageManager !== 'undefined' ? StorageManager.getProjects() : []);
+    } else {
+      container = document.getElementById('dashboard-today-events');
+      todayEvents = Array.isArray(containerOrEvents) ? containerOrEvents : [];
+      todayStr = todayEventsArg || new Date().toISOString().slice(0, 10);
+      tasks = tasksArg || (typeof StorageManager !== 'undefined' ? StorageManager.getTasks() : []);
+      projects = projectsArg || (typeof StorageManager !== 'undefined' ? StorageManager.getProjects() : []);
+    }
+
+    if (!container) return;
+
+    const alldayEvents = todayEvents.filter(e => e.isAllDay);
+    const timedEvents = todayEvents.filter(e => !e.isAllDay);
+
+    // 1. Bandeau supérieur pour les événements journée entière
+    let alldayBarHtml = '';
+    if (alldayEvents.length > 0) {
+      const pills = alldayEvents.map(e => {
+        let pillColor = '#6366f1';
+        let linkedProj = null;
+        if (e.color) {
+          pillColor = e.color;
+        } else if (e.projectId && projects) {
+          linkedProj = projects.find(p => p.id === e.projectId);
+          if (linkedProj && linkedProj.color) pillColor = linkedProj.color;
+        } else if (e.source === 'google') {
+          pillColor = '#2563eb';
+        }
+
+        return `
+          <div class="mini-agenda-allday-pill" onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}')" title="${this.escapeHtml(e.title)}" style="background: linear-gradient(135deg, ${pillColor}ee, ${pillColor}cc); border-left: 3px solid ${pillColor};">
+            ${e.completed ? '<span class="mini-event-done-pill" title="Honoré">✓</span>' : ''}
+            <span class="mini-allday-title mini-agenda-allday-pill-title">${this.escapeHtml(e.title)}</span>
+          </div>
+        `;
+      }).join('');
+
+      alldayBarHtml = `
+        <div class="mini-agenda-allday-bar">
+          <span class="mini-agenda-allday-tag">Toute la journée</span>
+          <div class="mini-agenda-allday-pills">
+            ${pills}
+          </div>
+        </div>
+      `;
+    }
+
+    // 2. Calcul dynamique des bornes horaires de la journée (optimisé pour voir la journée d'un coup d'œil)
+    const now = new Date();
+    const isToday = now.toISOString().slice(0, 10) === todayStr;
+    const currentHour = now.getHours();
+
+    let earliestEventH = 24;
+    let latestEventH = 0;
+
+    timedEvents.forEach(e => {
+      if (e.start && e.start.length >= 16) {
+        const h = parseInt(e.start.slice(11, 13), 10);
+        if (!isNaN(h) && h < earliestEventH) earliestEventH = h;
+      }
+      if (e.end && e.end.length >= 16) {
+        const h = parseInt(e.end.slice(11, 13), 10);
+        const m = parseInt(e.end.slice(14, 16), 10);
+        const ceilH = m > 0 ? h + 1 : h;
+        if (!isNaN(ceilH) && ceilH > latestEventH) latestEventH = ceilH;
+      }
+    });
+
+    let startHour = 8;
+    let endHour = 19;
+
+    if (timedEvents.length > 0) {
+      startHour = Math.min(8, earliestEventH);
+      endHour = Math.max(18, latestEventH);
+      if (isToday) {
+        startHour = Math.min(startHour, currentHour);
+        endHour = Math.max(endHour, currentHour + 1);
+      }
+    } else if (isToday) {
+      startHour = Math.min(8, Math.max(7, currentHour - 1));
+      endHour = Math.max(18, Math.min(22, currentHour + 4));
+    }
+
+    startHour = Math.max(0, startHour);
+    endHour = Math.min(24, Math.max(startHour + 8, endHour));
+
+    // Hauteur en pixels par heure confortable (28px) pour une excellente lisibilité des créneaux
+    const hourHeight = 28;
+    const totalHours = Math.max(1, endHour - startHour);
+    const totalGridHeight = totalHours * hourHeight;
+
+    // 3. Colonne des heures et lignes repères
+    let timeColHtml = '';
+    let gridLinesHtml = '';
+    for (let h = startHour; h < endHour; h++) {
+      timeColHtml += `<div class="mini-agenda-hour-cell" style="height: ${hourHeight}px;">${String(h).padStart(2, '0')}:00</div>`;
+    }
+    for (let i = 0; i <= totalHours; i++) {
+      gridLinesHtml += `<div class="mini-agenda-grid-line" style="top: ${i * hourHeight}px;"></div>`;
+    }
+
+    // 4. Ligne temps réel "En ce moment"
+    let nowLineHtml = '';
+    let nowTopPx = -1;
+
+    if (isToday) {
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+      const currentTotalMin = currentHour * 60 + currentMin;
+      const startTotalMin = startHour * 60;
+      const endTotalMin = endHour * 60;
+
+      if (currentTotalMin >= startTotalMin && currentTotalMin <= endTotalMin) {
+        nowTopPx = ((currentTotalMin - startTotalMin) / 60) * hourHeight;
+        const nowTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')}`;
+        nowLineHtml = `
+          <div class="mini-agenda-now-line" style="top: ${nowTopPx}px;" title="Heure actuelle : ${nowTimeStr}">
+            <div class="mini-agenda-now-dot"></div>
+            <div class="mini-agenda-now-time">${nowTimeStr}</div>
+          </div>
+        `;
+      }
+    }
+
+    // 5. Calcul de l'agencement des créneaux (gestion des chevauchements)
+    let layoutEvents = [];
+    if (window.AgendaManager && typeof window.AgendaManager.computeOverlappingLayout === 'function') {
+      layoutEvents = window.AgendaManager.computeOverlappingLayout(timedEvents, todayStr);
+    } else {
+      layoutEvents = timedEvents.map(evt => {
+        let sMin = 8 * 60;
+        let eMin = 9 * 60;
+        if (evt.start && evt.start.length >= 16) {
+          sMin = parseInt(evt.start.slice(11, 13), 10) * 60 + parseInt(evt.start.slice(14, 16), 10);
+        }
+        if (evt.end && evt.end.length >= 16) {
+          eMin = parseInt(evt.end.slice(11, 13), 10) * 60 + parseInt(evt.end.slice(14, 16), 10);
+        }
+        return { event: evt, startMin: sMin, endMin: Math.max(sMin + 20, eMin), colIndex: 0, totalCols: 1 };
+      });
+    }
+
+    let firstEventTopPx = -1;
+    const taskById = new Map();
+    if (Array.isArray(tasks)) {
+      const mapTasks = (list) => {
+        list.forEach(t => {
+          taskById.set(t.id, t);
+          if (t.subtasks && t.subtasks.length > 0) mapTasks(t.subtasks);
+        });
+      };
+      mapTasks(tasks);
+    }
+
+    const projectById = new Map();
+    if (Array.isArray(projects)) {
+      projects.forEach(p => projectById.set(p.id, p));
+    }
+
+    let eventsBlocksHtml = '';
+
+    layoutEvents.forEach(item => {
+      const e = item.event;
+      const startMin = item.startMin;
+      const endMin = item.endMin;
+
+      const topMin = Math.max(0, startMin - (startHour * 60));
+      const topPx = (topMin / 60) * hourHeight;
+      if (firstEventTopPx === -1 || topPx < firstEventTopPx) {
+        firstEventTopPx = topPx;
+      }
+
+      const durationMin = Math.max(15, endMin - startMin);
+      const rawHeightPx = (durationMin / 60) * hourHeight;
+      const heightPx = Math.max(16, rawHeightPx - 1);
+
+      const totalCols = Math.max(1, item.totalCols || 1);
+      const colIndex = item.colIndex || 0;
+      const colWidthPct = 100 / totalCols;
+      const leftPct = (colIndex * colWidthPct) + 0.3;
+      const widthPct = totalCols > 1 ? colWidthPct - 1.2 : 98.8;
+
+      const isGoogle = e.source === 'google';
+      const linkedTask = e.taskId ? taskById.get(e.taskId) : null;
+      const projId = e.projectId || (linkedTask && linkedTask.projectId);
+      const linkedProject = projId ? projectById.get(projId) : null;
+
+      let eventColor = '#6366f1';
+      if (e.color) {
+        eventColor = e.color;
+      } else if (linkedProject && linkedProject.color) {
+        eventColor = linkedProject.color;
+      } else if (isGoogle) {
+        eventColor = '#2563eb';
+      }
+
+      const startTime = e.start && e.start.length >= 16 ? e.start.slice(11, 16) : '';
+      const endTime = e.end && e.end.length >= 16 ? e.end.slice(11, 16) : '';
+      const timeStr = (startTime && endTime) ? `${startTime} - ${endTime}` : (startTime || 'Créneau');
+
+      const isCompact = heightPx < 26;
+      const tooltip = `${this.escapeHtml(e.title)} (${timeStr})${linkedTask ? ' - Tâche : ' + this.escapeHtml(linkedTask.title) : ''}`;
+
+      let innerContent = '';
+      if (isCompact) {
+        innerContent = `
+          <div class="mini-event-row compact">
+            ${e.completed ? '<span class="mini-event-done-pill" title="Honoré">✓</span>' : ''}
+            <span class="mini-event-time-pill">${startTime}</span>
+            <span class="mini-event-title compact">${this.escapeHtml(e.title)}</span>
+          </div>
+        `;
+      } else {
+        innerContent = `
+          <div class="mini-event-row standard">
+            <div class="mini-event-header">
+              <span class="mini-event-time-pill">${timeStr}</span>
+              ${e.completed ? '<span class="mini-event-done-pill" title="Créneau honoré">✓</span>' : ''}
+            </div>
+            <div class="mini-event-title standard">${this.escapeHtml(e.title)}</div>
+          </div>
+        `;
+      }
+
+      eventsBlocksHtml += `
+        <div class="mini-agenda-event-block"
+             data-event-id="${e.id}"
+             onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}');"
+             title="${tooltip}"
+             style="top: ${topPx}px; height: ${heightPx}px; left: ${leftPct}%; width: ${widthPct}%; background: linear-gradient(135deg, ${eventColor}ee, ${eventColor}cc); border-left-color: ${eventColor};">
+          ${innerContent}
+        </div>
+      `;
+    });
+
+    // 6. Injection dans le conteneur
+    container.innerHTML = `
+      <div class="dashboard-mini-agenda">
+        ${alldayBarHtml}
+        <div class="dashboard-mini-agenda-scroll">
+          <div class="mini-agenda-grid-wrapper" style="height: ${totalGridHeight}px;">
+            <div class="mini-agenda-time-col">
+              ${timeColHtml}
+            </div>
+            <div class="mini-agenda-events-col" style="height: ${totalGridHeight}px;">
+              ${gridLinesHtml}
+              ${nowLineHtml}
+              ${eventsBlocksHtml}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 7. Auto-défilement vers l'heure courante ou le premier créneau si défilement nécessaire
+    const scrollElem = (container && typeof container.querySelector === 'function') ? container.querySelector('.dashboard-mini-agenda-scroll') : null;
+    if (scrollElem) {
+      let targetScroll = 0;
+      if (nowTopPx >= 0) {
+        targetScroll = Math.max(0, nowTopPx - 40);
+      } else if (firstEventTopPx >= 0) {
+        targetScroll = Math.max(0, firstEventTopPx - 20);
+      } else {
+        targetScroll = 0;
+      }
+      scrollElem.scrollTop = targetScroll;
+      if (typeof setTimeout === 'function') {
+        setTimeout(() => {
+          if (scrollElem) scrollElem.scrollTop = targetScroll;
+        }, 20);
+      }
+    }
+  },
+
   // Tableau de bord Accueil
   updateDashboard(force = false) {
     this.updateDashboardQuote();
@@ -2380,6 +2758,18 @@ const App = {
     }
     this._dashboardDirty = false;
 
+    if (!force && typeof requestAnimationFrame === 'function') {
+      if (this._dashboardRaf) cancelAnimationFrame(this._dashboardRaf);
+      this._dashboardRaf = requestAnimationFrame(() => {
+        this._dashboardRaf = null;
+        this._executeDashboardRender();
+      });
+      return;
+    }
+    this._executeDashboardRender();
+  },
+
+  _executeDashboardRender() {
     const tasks = StorageManager.getTasks();
     const projects = StorageManager.getProjects();
     const events = StorageManager.getEvents();
@@ -2452,7 +2842,7 @@ const App = {
         panelPlanned.innerHTML = plannedTodayList.slice(0, 5).map(t => {
           const proj = t.projectId ? projectById.get(t.projectId) : null;
           const projectBorder = proj && proj.color ? `border-left: 3.5px solid ${proj.color};` : '';
-          const projectBadge = proj && proj.color ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${proj.color}60; color:${proj.color}; background-color:${proj.color}1c; font-weight:600;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${proj.color}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
+          const projectBadge = proj && proj.color ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${proj.color}60; color:${proj.color}; background-color:${proj.color}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${proj.id}');" title="Ouvrir le projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${proj.color}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
           return `
             <div class="dashboard-item dashboard-task-item" style="${projectBorder}">
               <div class="dashboard-item-main">
@@ -2469,6 +2859,19 @@ const App = {
       }
     }
 
+    // 4.5 Mettre à jour le badge de comptage et l'état des boutons de vue
+    const badgeEventsCount = document.getElementById('dashboard-events-count-badge');
+    if (badgeEventsCount) {
+      badgeEventsCount.textContent = todayEvents.length;
+      badgeEventsCount.style.display = todayEvents.length > 0 ? 'inline-flex' : 'none';
+    }
+    const btnGrid = document.getElementById('btn-dashboard-agenda-grid');
+    const btnList = document.getElementById('btn-dashboard-agenda-list');
+    if (btnGrid && btnList) {
+      btnGrid.classList.toggle('active', this.dashboardAgendaView === 'grid');
+      btnList.classList.toggle('active', this.dashboardAgendaView === 'list');
+    }
+
     // 5. Remplir le panneau "Créneaux du jour (Agenda)"
     const panelEvents = document.getElementById('dashboard-today-events');
     if (panelEvents) {
@@ -2480,8 +2883,14 @@ const App = {
             </div>
             <div class="dashboard-empty-title">Temps libre</div>
             <div class="dashboard-empty-text">Aucun créneau réservé pour aujourd'hui. Votre journée respire.</div>
+            <button class="btn btn-secondary btn-sm" style="margin-top: 8px; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;" onclick="AgendaManager.openEventModal()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Planifier un créneau
+            </button>
           </div>
         `;
+      } else if (this.dashboardAgendaView === 'grid') {
+        this.renderDashboardMiniAgenda(panelEvents, todayEvents, todayStr, tasks, projects);
       } else {
         panelEvents.innerHTML = todayEvents.map(e => {
           const isGoogle = e.source === 'google';
@@ -2557,7 +2966,7 @@ const App = {
 
           const proj = (n.projectId || n.linkedProjectId) ? projectById.get(n.projectId || n.linkedProjectId) : null;
           const projectBorder = proj && proj.color ? `border-left: 3.5px solid ${proj.color};` : '';
-          const projectBadge = proj && proj.color ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${proj.color}60; color:${proj.color}; background-color:${proj.color}1c; font-weight:600;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${proj.color}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
+          const projectBadge = proj && proj.color ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${proj.color}60; color:${proj.color}; background-color:${proj.color}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${proj.id}');" title="Ouvrir le projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${proj.color}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
 
           return `
             <div class="dashboard-item dashboard-note-item" style="${projectBorder}">
@@ -2567,7 +2976,7 @@ const App = {
                   <span class="dashboard-item-title" onclick="App.openNoteFromDashboard('${n.id}')" title="${this.escapeHtml(n.title || 'Note sans titre')}">
                     ${this.escapeHtml(n.title || 'Note sans titre')}
                   </span>
-                  ${n.linkedEventId ? '<span title="Liée à un créneau d\'agenda" style="color:var(--accent); display:inline-flex; align-items:center; flex-shrink:0;">' + this.getSvgIcon('calendar', 12) + '</span>' : ''}
+                  ${n.linkedEventId ? '<span title="Liée à un créneau d\'agenda (cliquer pour voir)" style="color:var(--accent); display:inline-flex; align-items:center; flex-shrink:0; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate(\'agenda\'); if (window.AgendaManager && typeof window.AgendaManager.openEventModal === \'function\') window.AgendaManager.openEventModal(\'' + n.linkedEventId + '\');">' + this.getSvgIcon('calendar', 12) + '</span>' : ''}
                 </div>
                 ${preview ? `<div class="dashboard-note-preview" style="font-size:0.76rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${this.escapeHtml(preview)}</div>` : ''}
               </div>

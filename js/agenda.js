@@ -158,6 +158,26 @@ const AgendaManager = {
     }
   },
 
+  resetToCurrentWeek() {
+    this.activeDateStr = null;
+    const now = new Date();
+    this.currentView = 'week';
+    this.currentWeekStart = this.getMonday(now);
+    if (typeof document !== 'undefined') {
+      const viewButtons = document.querySelectorAll('.btn-agenda-view');
+      viewButtons.forEach(b => {
+        b.classList.toggle('active', b.dataset.view === 'week');
+      });
+    }
+    this.render();
+    if (typeof this.scrollToNormalHours === 'function') {
+      this.scrollToNormalHours(false);
+    }
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+      window.App.updateSidebarDayProgress();
+    }
+  },
+
   setView(view) {
     if (!['day', 'week', 'month'].includes(view)) view = 'week';
     this.currentView = view;
@@ -620,6 +640,33 @@ const AgendaManager = {
     const filtered = events.filter(e => e.id !== id);
     this.saveAll(filtered);
 
+    // Détacher la note liée sans la modifier par ailleurs
+    if (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function') {
+      try {
+        const notes = StorageManager.getNotes();
+        let notesChanged = false;
+        notes.forEach(n => {
+          if (n.linkedEventId === id) {
+            n.linkedEventId = null;
+            n.updatedAt = new Date().toISOString();
+            notesChanged = true;
+          }
+        });
+        if (notesChanged) {
+          StorageManager.saveNotes(notes);
+          if (typeof window !== 'undefined' && window.NotesManager) {
+            if (typeof window.NotesManager.renderNotesList === 'function') window.NotesManager.renderNotesList();
+            if (typeof window.NotesManager.renderEventSelector === 'function' && window.NotesManager.currentNoteId) {
+              const current = notes.find(n => n.id === window.NotesManager.currentNoteId);
+              if (current) window.NotesManager.renderEventSelector(current);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[AgendaManager] Erreur lors du nettoyage de la liaison note:", e);
+      }
+    }
+
     // Notification claire rassurant l'utilisateur
     if (hadTask) {
       if (window.App) window.App.showToast("Créneau supprimé. La tâche associée reste intacte.", "info");
@@ -977,9 +1024,9 @@ const AgendaManager = {
       const lastDayStr = days[6].toLocaleDateString('fr-FR', { ...options, year: 'numeric' });
       if (labelEl) labelEl.textContent = `${firstDayStr} - ${lastDayStr}`;
 
-      weekdaysEl.style.gridTemplateColumns = '55px repeat(7, 1fr)';
+      weekdaysEl.style.gridTemplateColumns = '55px repeat(7, minmax(0, 1fr))';
       weekdaysEl.style.minWidth = '680px';
-      bodyEl.style.gridTemplateColumns = '55px repeat(7, 1fr)';
+      bodyEl.style.gridTemplateColumns = '55px repeat(7, minmax(0, 1fr))';
       bodyEl.style.minWidth = '680px';
     }
 
@@ -1042,7 +1089,7 @@ const AgendaManager = {
           alldayEl.style.gridTemplateColumns = '55px 1fr';
           alldayEl.style.minWidth = 'auto';
         } else {
-          alldayEl.style.gridTemplateColumns = '55px repeat(7, 1fr)';
+          alldayEl.style.gridTemplateColumns = '55px repeat(7, minmax(0, 1fr))';
           alldayEl.style.minWidth = '680px';
         }
         alldayEl.style.display = 'grid';
@@ -1160,6 +1207,7 @@ const AgendaManager = {
         const linkedTask = e.taskId ? taskMap.get(e.taskId) : null;
         const linkedNote = (e.noteId ? noteById.get(e.noteId) : null) || noteByEventId.get(e.id);
         const isCompact = height < 44;
+        const isOneHour = !isCompact && height <= 58;
         const isTaskCompleted = !!(linkedTask && linkedTask.task && linkedTask.task.completed);
 
         // Code couleur : hérité de la tâche liée et de son projet si disponible
@@ -1175,7 +1223,7 @@ const AgendaManager = {
         }
 
         bodyHtml += `
-          <div class="calendar-event ${isGoogle ? 'google-event' : 'antigravite-event'} ${isCompact ? 'compact' : ''} ${isNightEnd ? 'night-spillover-event' : ''} ${isTaskCompleted ? 'task-completed-event' : ''}" 
+          <div class="calendar-event ${isGoogle ? 'google-event' : 'antigravite-event'} ${isCompact ? 'compact' : ''} ${isOneHour ? 'slot-1h' : ''} ${isNightEnd ? 'night-spillover-event' : ''} ${isTaskCompleted ? 'task-completed-event' : ''}" 
                data-event-id="${e.id}"
                style="top: ${top}px; height: ${height}px; left: ${leftPct}%; width: ${widthPct}%; background: linear-gradient(135deg, ${eventColor} 0%, ${eventColor}ee 100%) !important; border: 1px solid rgba(255, 255, 255, 0.25) !important; border-left: 4px ${isNightEnd ? 'dashed' : 'solid'} rgba(255, 255, 255, 0.9) !important; color: #ffffff !important; box-shadow: 0 2px 6px rgba(0,0,0,0.35);"
                onmousedown="AgendaManager.onEventMouseDown(event, '${e.id}')"
@@ -1192,6 +1240,29 @@ const AgendaManager = {
                 <span class="event-title compact" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">${(e.recurrence && e.recurrence !== 'none') ? '<span class="event-recurrence-pill" style="display:inline-flex; align-items:center; margin-right:2px;">' + this.getSvgIcon('repeat', 10) + '</span>' : ''}${this.escapeHtml(e.title || '(Sans titre)')}</span>
                 <span class="event-time-compact" style="color: rgba(255,255,255,0.95); margin-left: auto;">${e.isAllDay ? 'Jour' : (isMultiDay && dateStr !== startDay ? (isNightEnd ? '➔ ' + endTimeStr + ' (Nuit)' : '➔ ' + endTimeStr) : startTimeStr)}</span>
               </div>
+            ` : isOneHour ? `
+              ${(isGoogle || isTaskCompleted || (e.syncStatus && e.syncStatus.startsWith('pending'))) ? `
+                <div class="event-header-row slot-1h-header">
+                  ${isGoogle ? (e.syncStatus && e.syncStatus.startsWith('pending')
+                    ? '<span class="event-origin-tag slot-1h-tag" style="background:rgba(245,158,11,0.35); color:#fbbf24;">⏳ Sync</span>'
+                    : '<span class="event-origin-tag google slot-1h-tag">G</span>') : ''}
+                  ${isTaskCompleted ? '<span class="event-done-pill slot-1h-done" style="font-size:0.6rem; background:rgba(34,197,94,0.35); border:1px solid rgba(74,222,128,0.6); color:#86efac; border-radius:999px; padding:1px 5px; font-weight:600; display:inline-flex; align-items:center; gap:2px;">' + this.getSvgIcon('check', 9) + ' Fait</span>' : ''}
+                </div>
+              ` : ''}
+              <div class="event-title slot-1h-title" style="color:#ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.85);" title="${this.escapeHtml(e.title || '')}">
+                ${(e.recurrence && e.recurrence !== 'none') ? '<span title="Créneau récurrent" style="display:inline-flex; align-items:center; margin-right:3px;">' + this.getSvgIcon('repeat', 10) + '</span>' : ''}${this.escapeHtml(e.title || '(Sans titre)')}
+              </div>
+              ${linkedTask ? `
+                <div class="event-linked-info slot-1h-linked" title="Tâche : ${this.escapeHtml(linkedTask.task.title)}${isTaskCompleted ? ' (Terminée)' : ''}">
+                  <span style="display:inline-flex; align-items:center; flex-shrink:0;">${this.getSvgIcon(isTaskCompleted ? 'check' : 'pin', 10)}</span>
+                  <span class="slot-1h-linked-text" style="${isTaskCompleted ? 'text-decoration: line-through; opacity: 0.85;' : ''}">${this.escapeHtml(linkedTask.task.title)}</span>
+                </div>
+              ` : (linkedNote ? `
+                <div class="event-linked-info slot-1h-linked" title="Note : ${this.escapeHtml(linkedNote.title)}">
+                  <span style="display:inline-flex; align-items:center; flex-shrink:0;">${this.getSvgIcon('note', 10)}</span>
+                  <span class="slot-1h-linked-text">${this.escapeHtml(linkedNote.title)}</span>
+                </div>
+              ` : (!isGoogle && !isTaskCompleted ? `<div class="event-time-hint-1h">${timeDisplay}</div>` : ''))}
             ` : `
               <div class="event-header-row">
                 ${isGoogle ? (e.syncStatus && e.syncStatus.startsWith('pending')
@@ -1432,6 +1503,7 @@ const AgendaManager = {
     const inputColor = document.getElementById('event-input-color');
     const inputTask = document.getElementById('event-input-task');
     const inputNote = document.getElementById('event-input-note');
+    const btnCreateNote = document.getElementById('btn-event-create-note');
     const btnOpenNote = document.getElementById('btn-event-open-note');
     const btnSave = document.getElementById('event-modal-save');
     const btnDelete = document.getElementById('event-modal-delete');
@@ -1658,7 +1730,7 @@ const AgendaManager = {
     // Remplir les notes pour la liaison facultative (regroupées par projet)
     const allNotes = StorageManager.getNotes();
     if (inputNote) {
-      inputNote.innerHTML = '<option value="">(Aucune note associée)</option>';
+      inputNote.innerHTML = '<option value="">(Aucune note associée)</option><option value="__new__">➕ Créer une nouvelle note associée...</option>';
       const personalNotes = allNotes.filter(n => !n.projectId || !projectMap.has(n.projectId));
       const notesByProj = new Map();
       allNotes.forEach(n => {
@@ -1697,7 +1769,7 @@ const AgendaManager = {
 
     const updateNoteButtonVisibility = (noteId) => {
       if (btnOpenNote) {
-        btnOpenNote.style.display = noteId ? 'inline-flex' : 'none';
+        btnOpenNote.style.display = (noteId && noteId !== '__new__') ? 'inline-flex' : 'none';
         btnOpenNote.onclick = (e) => {
           e.preventDefault();
           this.closeEventModal();
@@ -1711,8 +1783,82 @@ const AgendaManager = {
       }
     };
 
+    const handleCreateAttachedNote = async () => {
+      const currentEvtTitle = (inputTitle && inputTitle.value && inputTitle.value.trim())
+        ? inputTitle.value.trim()
+        : 'Note de créneau';
+      let title = currentEvtTitle;
+      if (window.App && typeof window.App.prompt === 'function') {
+        const res = await window.App.prompt({
+          title: 'Nouvelle note associée',
+          message: 'Titre de la note à créer pour ce créneau :',
+          defaultValue: currentEvtTitle,
+          confirmText: 'Créer la note',
+          cancelText: 'Annuler'
+        });
+        if (!res || !res.trim()) return null;
+        title = res.trim();
+      }
+
+      const activeProjId = (inputTask && inputTask.value && taskMap.has(inputTask.value))
+        ? (taskMap.get(inputTask.value).task.projectId || null)
+        : null;
+
+      const newNote = {
+        id: 'note-' + Date.now(),
+        title: title,
+        folder: 'Général',
+        tags: [],
+        projectId: activeProjId,
+        linkedEventId: eventId || null,
+        content: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const nList = StorageManager.getNotes();
+      nList.unshift(newNote);
+      StorageManager.saveNotes(nList);
+
+      if (inputNote) {
+        let opt = inputNote.querySelector(`option[value="${newNote.id}"]`);
+        if (!opt) {
+          opt = document.createElement('option');
+          opt.value = newNote.id;
+          opt.textContent = `📝 ${newNote.title}`;
+          inputNote.appendChild(opt);
+        }
+        inputNote.value = newNote.id;
+        syncSelectTitles();
+        updateNoteButtonVisibility(newNote.id);
+      }
+
+      if (window.NotesManager && typeof window.NotesManager.renderNotesList === 'function') {
+        window.NotesManager.renderNotesList();
+      }
+
+      if (window.App && typeof window.App.showToast === 'function') {
+        window.App.showToast(`Note « ${title} » créée et associée`, 'success');
+      }
+
+      return newNote;
+    };
+
+    if (btnCreateNote) {
+      btnCreateNote.onclick = (e) => {
+        e.preventDefault();
+        handleCreateAttachedNote();
+      };
+    }
+
     if (inputNote) {
-      inputNote.onchange = () => {
+      inputNote.onchange = async () => {
+        if (inputNote.value === '__new__') {
+          const created = await handleCreateAttachedNote();
+          if (!created) {
+            inputNote.value = '';
+          }
+        }
         syncSelectTitles();
         updateNoteButtonVisibility(inputNote.value);
       };
@@ -2369,6 +2515,14 @@ const AgendaManager = {
           <span>Voir la note associée (${this.escapeHtml(linkedNoteObj.title)})</span>
         </div>
       `;
+    } else {
+      html += `
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" id="cmenu-create-attached-note">
+          <span class="item-icon">${this.getSvgIcon('note', 15)}</span>
+          <span>＋ Rédiger une note pour ce créneau</span>
+        </div>
+      `;
     }
 
     itemsEl.innerHTML = html;
@@ -2426,6 +2580,54 @@ const AgendaManager = {
         }
         if (window.NotesManager && typeof window.NotesManager.selectNote === 'function') {
           window.NotesManager.selectNote(linkedNoteObj.id);
+        }
+      };
+    }
+
+    const btnCreateAttachedNote = document.getElementById('cmenu-create-attached-note');
+    if (btnCreateAttachedNote) {
+      btnCreateAttachedNote.onclick = async () => {
+        this.hideContextMenu();
+        const defTitle = (evt.title && evt.title.trim()) ? evt.title.trim() : 'Note de créneau';
+        let title = defTitle;
+        if (window.App && typeof window.App.prompt === 'function') {
+          const res = await window.App.prompt({
+            title: 'Nouvelle note associée',
+            message: 'Titre de la note à créer pour ce créneau :',
+            defaultValue: defTitle,
+            confirmText: 'Créer et rédiger',
+            cancelText: 'Annuler'
+          });
+          if (!res || !res.trim()) return;
+          title = res.trim();
+        }
+
+        const newNote = {
+          id: 'note-' + Date.now(),
+          title: title,
+          folder: 'Général',
+          tags: [],
+          projectId: evt.projectId || null,
+          linkedEventId: eventId,
+          content: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        const notes = StorageManager.getNotes();
+        notes.unshift(newNote);
+        StorageManager.saveNotes(notes);
+
+        this.syncNoteEventLink(eventId, newNote.id);
+
+        if (window.App && typeof window.App.navigate === 'function') {
+          window.App.navigate('notes');
+        }
+        if (window.NotesManager && typeof window.NotesManager.selectNote === 'function') {
+          window.NotesManager.selectNote(newNote.id);
+        }
+        if (window.App && typeof window.App.showToast === 'function') {
+          window.App.showToast(`Note « ${title} » créée et associée`, 'success');
         }
       };
     }

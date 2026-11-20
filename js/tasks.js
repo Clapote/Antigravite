@@ -13,6 +13,7 @@
 const TasksManager = {
   currentFilter: 'active',
   currentProjectFilter: 'all',
+  currentSortMode: 'manual',
   collapsedTasks: new Set(),
   draggedTaskId: null,
 
@@ -23,6 +24,14 @@ const TasksManager = {
     }
     this.initialized = true;
     this.currentFilter = 'active';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const savedSort = localStorage.getItem('antigravite_task_sort_mode');
+        if (savedSort && ['manual', 'created', 'priority', 'project'].includes(savedSort)) {
+          this.currentSortMode = savedSort;
+        }
+      }
+    } catch (_) {}
     this.render();
     this.bindEvents();
   },
@@ -37,7 +46,74 @@ const TasksManager = {
     this.render();
   },
 
+  setSortMode(mode) {
+    if (!['manual', 'created', 'priority', 'project'].includes(mode)) mode = 'manual';
+    this.currentSortMode = mode;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('antigravite_task_sort_mode', mode);
+      }
+    } catch (_) {}
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.tasks-sort-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.sort === this.currentSortMode);
+      });
+    }
+    this.render();
+  },
+
+  getSortModeLabel() {
+    switch (this.currentSortMode) {
+      case 'created': return '« Date de création »';
+      case 'priority': return '« Priorité »';
+      case 'project': return '« Par projet »';
+      default: return '« Mon ordre »';
+    }
+  },
+
+  _sortTasksByCreated(list) {
+    if (!Array.isArray(list)) return [];
+    const clone = list.map(t => ({
+      ...t,
+      subtasks: t.subtasks && t.subtasks.length > 0 ? this._sortTasksByCreated(t.subtasks) : []
+    }));
+    clone.sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime();
+      const tB = new Date(b.createdAt || 0).getTime();
+      return tB - tA;
+    });
+    return clone;
+  },
+
+  _sortTasksByPriority(list) {
+    if (!Array.isArray(list)) return [];
+    const weights = { urgent: 4, high: 3, medium: 2, low: 1 };
+    const clone = list.map(t => ({
+      ...t,
+      subtasks: t.subtasks && t.subtasks.length > 0 ? this._sortTasksByPriority(t.subtasks) : []
+    }));
+    clone.sort((a, b) => {
+      const pA = weights[a.priority] || 2;
+      const pB = weights[b.priority] || 2;
+      if (pB !== pA) return pB - pA;
+      const tA = new Date(a.createdAt || 0).getTime();
+      const tB = new Date(b.createdAt || 0).getTime();
+      return tB - tA;
+    });
+    return clone;
+  },
+
   bindEvents() {
+    // Onglets de tri / regroupement
+    document.querySelectorAll('.tasks-sort-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const sortMode = e.currentTarget.dataset.sort;
+        if (sortMode) {
+          this.setSortMode(sortMode);
+        }
+      });
+    });
+
     // Bouton nouvelle tâche principale
     const btnNew = document.getElementById('btn-new-task');
     if (btnNew) {
@@ -661,6 +737,11 @@ const TasksManager = {
     const container = document.getElementById('tasks-tree-container');
     if (!container) return;
 
+    // Synchroniser l'état visuel de l'onglet de tri actif
+    document.querySelectorAll('.tasks-sort-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.sort === this.currentSortMode);
+    });
+
     const tasks = this.getAll();
     const projects = StorageManager.getProjects();
     const projectsMap = new Map(projects.map(p => [p.id, p]));
@@ -690,6 +771,7 @@ const TasksManager = {
     const rootTarget = useFrag ? _frag : container;
     if (!useFrag) container.innerHTML = '';
     const nowTime = Date.now();
+    const isManualSort = this.currentSortMode === 'manual';
     
     // Rendu récursif sous forme d'arborescence structurée
     const renderTaskList = (list, parentEl, level = 0) => {
@@ -716,7 +798,7 @@ const TasksManager = {
 
         const item = document.createElement('div');
         item.className = `task-item draggable-item ${task.completed ? 'completed' : ''}`;
-        item.draggable = true;
+        item.draggable = isManualSort;
         item.dataset.taskId = task.id;
         item.dataset.level = level;
 
@@ -729,8 +811,12 @@ const TasksManager = {
           }
         }
 
-        // Événements Glisser-Déposer (Drag and Drop)
+        // Événements Glisser-Déposer (Drag and Drop - actif uniquement en ordre manuel)
         item.addEventListener('dragstart', (e) => {
+          if (!isManualSort) {
+            e.preventDefault();
+            return;
+          }
           if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, .task-toggle, .task-checkbox, .task-actions, input, select')) {
             e.preventDefault();
             return;
@@ -770,7 +856,7 @@ const TasksManager = {
         });
 
         item.addEventListener('dragover', (e) => {
-          if (!this.draggedTaskId || (this._draggedForbiddenIds && this._draggedForbiddenIds.has(task.id))) return;
+          if (!isManualSort || !this.draggedTaskId || (this._draggedForbiddenIds && this._draggedForbiddenIds.has(task.id))) return;
 
           e.preventDefault();
           e.stopPropagation();
@@ -831,7 +917,7 @@ const TasksManager = {
 
         item.innerHTML = `
           <div class="task-row">
-            <div class="task-drag-handle" title="Glisser pour réorganiser, imbriquer en sous-tâche ou monter de niveau">⠿</div>
+            <div class="task-drag-handle" ${!isManualSort ? 'style="opacity:0.25; cursor:not-allowed;"' : ''} title="${isManualSort ? 'Glisser pour réorganiser, imbriquer en sous-tâche ou monter de niveau' : 'Le tri actif est ' + this.getSortModeLabel() + '. Activez « Mon ordre » pour réorganiser manuellement.'}">⠿</div>
 
             ${hasSubtasks ? `
               <button type="button" class="task-toggle ${isCollapsed ? 'collapsed' : ''}" draggable="false" onmousedown="event.stopPropagation();" onclick="event.preventDefault(); event.stopPropagation(); TasksManager.toggleCollapse('${task.id}');" title="${isCollapsed ? 'Déplier les sous-tâches' : 'Réduire les sous-tâches'}" aria-label="Déplier / replier">
@@ -848,15 +934,20 @@ const TasksManager = {
             </div>
 
             <div class="task-badges">
-              ${project ? `<span class="badge badge-project" style="border:1px solid ${project.color}70; color:${project.color}; background-color:${project.color}1c; font-weight:600;"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${project.color};"></span><span>${this.escapeHtml(project.title)}</span></span>` : ''}
+              ${project ? `<span class="badge badge-project badge-clickable" style="border:1px solid ${project.color}70; color:${project.color}; background-color:${project.color}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${project.id}');" title="Ouvrir le projet : ${this.escapeHtml(project.title)}"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${project.color};"></span><span>${this.escapeHtml(project.title)}</span></span>` : ''}
               ${this.getPriorityBadge(task.priority)}
-              ${task.plannedDate ? `<span class="badge badge-planned" title="Date prévue de réalisation"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Prévu : ${task.plannedDate}</span></span>` : ''}
+              ${task.plannedDate ? `<span class="badge badge-planned badge-clickable" style="cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('agenda'); if (window.AgendaManager) { const d = new Date('${task.plannedDate.slice(0, 10)}'); if (!isNaN(d.getTime())) { AgendaManager.zoomToDay('${task.plannedDate.slice(0, 10)}'); } }" title="Consulter dans l'agenda (${task.plannedDate})"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Prévu : ${task.plannedDate}</span></span>` : ''}
               ${task.deadline ? `<span class="badge badge-deadline ${isOverdue ? 'overdue' : ''}" title="Échéance limite">${isOverdue ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>'}<span>Échéance : ${task.deadline.replace('T', ' ')}</span></span>` : ''}
               ${subtasksBadge}
             </div>
 
             <div class="task-actions">
-              <div class="task-action-group order-group" title="Déplacer dans l'arborescence">
+              <div class="task-action-group order-group" style="${!isManualSort ? 'display:none;' : ''}" title="Déplacer dans l'arborescence">
+                <button class="btn-icon" title="Monter d'un niveau (outdent)" onclick="TasksManager.outdentTask('${task.id}')" ${level === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+                <button class="btn-icon" title="Mettre en sous-tâche de la précédente (indent)" onclick="TasksManager.indentTask('${task.id}')" ${index === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+                <button class="btn-icon" title="Monter" onclick="TasksManager.moveUp('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>
+                <button class="btn-icon" title="Descendre" onclick="TasksManager.moveDown('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+              </div>
                 <button class="btn-icon" title="Monter d'un niveau (outdent)" onclick="TasksManager.outdentTask('${task.id}')" ${level === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
                 <button class="btn-icon" title="Mettre en sous-tâche de la précédente (indent)" onclick="TasksManager.indentTask('${task.id}')" ${index === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
                 <button class="btn-icon" title="Monter" onclick="TasksManager.moveUp('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>
@@ -889,7 +980,103 @@ const TasksManager = {
     };
 
     container.innerHTML = '';
-    renderTaskList(tasks, rootTarget, 0);
+
+    if (this.currentSortMode === 'project') {
+      // Regroupement par projet
+      const projectsToRender = this.currentProjectFilter === 'all'
+        ? projects
+        : projects.filter(p => p.id === this.currentProjectFilter);
+
+      let renderedGroupsCount = 0;
+
+      for (const proj of projectsToRender) {
+        const projTasks = tasks.filter(t => t.projectId === proj.id);
+        if (projTasks.length === 0) continue;
+
+        const hasVisibleTasks = projTasks.some(t => {
+          if (this.currentFilter === 'all') return true;
+          if (this.currentFilter === 'active') return !t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
+          if (this.currentFilter === 'completed') return t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
+          return true;
+        });
+
+        if (!hasVisibleTasks && this.currentFilter !== 'all') continue;
+
+        renderedGroupsCount++;
+        const groupEl = document.createElement('div');
+        groupEl.className = 'tasks-project-group';
+        groupEl.dataset.projectId = proj.id;
+
+        const headerEl = document.createElement('div');
+        headerEl.className = 'tasks-project-group-header';
+        headerEl.innerHTML = `
+          <span class="tasks-project-group-indicator" style="background-color: ${proj.color || '#6366f1'}; color: ${proj.color || '#6366f1'};"></span>
+          <span class="tasks-project-group-title">${this.escapeHtml(proj.title)}</span>
+          <span class="tasks-project-group-count">${projTasks.length} tâche${projTasks.length > 1 ? 's' : ''}</span>
+        `;
+        groupEl.appendChild(headerEl);
+
+        const bodyEl = document.createElement('div');
+        bodyEl.className = 'tasks-project-group-body';
+        renderTaskList(projTasks, bodyEl, 0);
+        groupEl.appendChild(bodyEl);
+
+        rootTarget.appendChild(groupEl);
+      }
+
+      if (this.currentProjectFilter === 'all') {
+        const unassignedTasks = tasks.filter(t => !t.projectId || !projectsMap.has(t.projectId));
+        if (unassignedTasks.length > 0) {
+          const hasVisibleUnassigned = unassignedTasks.some(t => {
+            if (this.currentFilter === 'all') return true;
+            if (this.currentFilter === 'active') return !t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
+            if (this.currentFilter === 'completed') return t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
+            return true;
+          });
+
+          if (hasVisibleUnassigned || this.currentFilter === 'all') {
+            renderedGroupsCount++;
+            const unassignedGroupEl = document.createElement('div');
+            unassignedGroupEl.className = 'tasks-project-group';
+            unassignedGroupEl.dataset.projectId = 'unassigned';
+
+            const unassignedHeader = document.createElement('div');
+            unassignedHeader.className = 'tasks-project-group-header';
+            unassignedHeader.innerHTML = `
+              <span class="tasks-project-group-indicator" style="background-color: var(--text-muted); color: var(--text-muted);"></span>
+              <span class="tasks-project-group-title">Sans projet</span>
+              <span class="tasks-project-group-count">${unassignedTasks.length} tâche${unassignedTasks.length > 1 ? 's' : ''}</span>
+            `;
+            unassignedGroupEl.appendChild(unassignedHeader);
+
+            const unassignedBody = document.createElement('div');
+            unassignedBody.className = 'tasks-project-group-body';
+            renderTaskList(unassignedTasks, unassignedBody, 0);
+            unassignedGroupEl.appendChild(unassignedBody);
+
+            rootTarget.appendChild(unassignedGroupEl);
+          }
+        }
+      }
+
+      if (renderedGroupsCount === 0) {
+        const emptyNotice = document.createElement('div');
+        emptyNotice.className = 'antigravite-empty-state tasks-empty-state';
+        emptyNotice.style.padding = '32px 20px';
+        emptyNotice.innerHTML = `
+          <p class="empty-state-text">Aucune tâche ne correspond aux critères de filtre sélectionnés.</p>
+        `;
+        rootTarget.appendChild(emptyNotice);
+      }
+    } else {
+      let tasksToRender = tasks;
+      if (this.currentSortMode === 'created') {
+        tasksToRender = this._sortTasksByCreated(tasks);
+      } else if (this.currentSortMode === 'priority') {
+        tasksToRender = this._sortTasksByPriority(tasks);
+      }
+      renderTaskList(tasksToRender, rootTarget, 0);
+    }
 
     // Bouton "+" d'ajout rapide au pied de l'arborescence
     const bottomAddBtn = document.createElement('div');
@@ -903,30 +1090,32 @@ const TasksManager = {
     bottomAddBtn.onclick = () => this.openTaskModal();
     rootTarget.appendChild(bottomAddBtn);
 
-    // Zone de dépôt au bas de la liste pour monter une tâche au niveau principal (racine)
-    const rootDropZone = document.createElement('div');
-    rootDropZone.id = 'tasks-root-dropzone';
-    rootDropZone.className = 'tasks-root-dropzone';
-    rootDropZone.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Glisser ici pour placer au niveau principal (racine)</span>`;
+    // Zone de dépôt au bas de la liste pour monter une tâche au niveau principal (active uniquement en ordre manuel)
+    if (isManualSort) {
+      const rootDropZone = document.createElement('div');
+      rootDropZone.id = 'tasks-root-dropzone';
+      rootDropZone.className = 'tasks-root-dropzone';
+      rootDropZone.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Glisser ici pour placer au niveau principal (racine)</span>`;
 
-    rootDropZone.addEventListener('dragover', (e) => {
-      if (!this.draggedTaskId) return;
-      e.preventDefault();
-      rootDropZone.classList.add('drag-over');
-    });
+      rootDropZone.addEventListener('dragover', (e) => {
+        if (!this.draggedTaskId) return;
+        e.preventDefault();
+        rootDropZone.classList.add('drag-over');
+      });
 
-    rootDropZone.addEventListener('dragleave', () => {
-      rootDropZone.classList.remove('drag-over');
-    });
+      rootDropZone.addEventListener('dragleave', () => {
+        rootDropZone.classList.remove('drag-over');
+      });
 
-    rootDropZone.addEventListener('drop', (e) => {
-      if (!this.draggedTaskId) return;
-      e.preventDefault();
-      rootDropZone.classList.remove('drag-over');
-      this.moveTask(this.draggedTaskId, null, 'root-bottom');
-    });
+      rootDropZone.addEventListener('drop', (e) => {
+        if (!this.draggedTaskId) return;
+        e.preventDefault();
+        rootDropZone.classList.remove('drag-over');
+        this.moveTask(this.draggedTaskId, null, 'root-bottom');
+      });
 
-    rootTarget.appendChild(rootDropZone);
+      rootTarget.appendChild(rootDropZone);
+    }
     if (useFrag) {
       container.innerHTML = '';
       container.appendChild(rootTarget);

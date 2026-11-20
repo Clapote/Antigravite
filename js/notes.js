@@ -15,6 +15,8 @@ const NotesManager = {
   currentProjectFilter: 'all',
   currentFolderFilter: 'all',
   currentViewMode: 'edit', // Conservé pour rétro-compatibilité
+  layoutMode: (typeof localStorage !== 'undefined' && localStorage.getItem('antigravite_notes_layout_mode')) || 'editor',
+  overviewSearchQuery: '',
   _collapsedFolders: new Set(),
   _saveTimer: null,
   _pendingNotesToSave: null,
@@ -78,12 +80,18 @@ const NotesManager = {
   init() {
     if (this.initialized) {
       this.render();
+      if (this.layoutMode === 'folders') {
+        this.setLayoutMode('folders');
+      }
       return;
     }
     this.initialized = true;
 
     this.render();
     this.bindEvents();
+    if (this.layoutMode === 'folders') {
+      this.setLayoutMode('folders');
+    }
   },
 
   getFolders() {
@@ -117,6 +125,9 @@ const NotesManager = {
     if (this.currentNoteId) {
       const note = this.getCurrentNote();
       if (note) this.renderFolderSelector(note);
+    }
+    if (this.layoutMode === 'folders') {
+      this.renderFoldersOverview();
     }
     return cleanName;
   },
@@ -154,6 +165,9 @@ const NotesManager = {
       const note = this.getCurrentNote();
       if (note) this.renderFolderSelector(note);
     }
+    if (this.layoutMode === 'folders') {
+      this.renderFoldersOverview();
+    }
     return true;
   },
 
@@ -187,6 +201,9 @@ const NotesManager = {
       const note = this.getCurrentNote();
       if (note) this.renderFolderSelector(note);
     }
+    if (this.layoutMode === 'folders') {
+      this.renderFoldersOverview();
+    }
     return true;
   },
 
@@ -213,7 +230,7 @@ const NotesManager = {
     if (!name || !name.trim()) return null;
     const created = this.createFolder(name.trim());
     if (created) {
-      this.currentFolderFilter = created;
+      if (this._collapsedFolders) this._collapsedFolders.delete(created);
       this.renderFolderFilter();
       this.renderNotesList();
       if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
@@ -395,6 +412,9 @@ const NotesManager = {
       this.renderFolderSelector(note);
     }
     this.renderNotesList();
+    if (this.layoutMode === 'folders') {
+      this.renderFoldersOverview();
+    }
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
       window.App.showToast(`Note déplacée vers « ${targetFolder} »`, 'info');
     }
@@ -418,6 +438,240 @@ const NotesManager = {
         panes.classList.add('mode-' + this.currentViewMode);
       }
     }
+  },
+
+  setLayoutMode(mode) {
+    this.flushPendingSave();
+    this.layoutMode = mode === 'folders' ? 'folders' : 'editor';
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('antigravite_notes_layout_mode', this.layoutMode);
+      } catch (e) {}
+    }
+    if (typeof document !== 'undefined') {
+      const standardLayout = document.getElementById('notes-standard-layout');
+      const overview = document.getElementById('notes-folders-overview');
+      const btnToggle = document.getElementById('btn-toggle-notes-view');
+      const btnSidebarToggle = document.getElementById('btn-sidebar-toggle-folders');
+
+      if (this.layoutMode === 'folders') {
+        if (standardLayout) standardLayout.style.display = 'none';
+        if (overview) overview.style.display = 'flex';
+        if (btnToggle) btnToggle.classList.add('active');
+        if (btnSidebarToggle) btnSidebarToggle.classList.add('active');
+        this.renderFoldersOverview();
+      } else {
+        if (standardLayout) standardLayout.style.display = 'grid';
+        if (overview) overview.style.display = 'none';
+        if (btnToggle) btnToggle.classList.remove('active');
+        if (btnSidebarToggle) btnSidebarToggle.classList.remove('active');
+        this.render();
+      }
+    }
+  },
+
+  filterOverviewNotes(query) {
+    this.overviewSearchQuery = (query || '').toLowerCase().trim();
+    this.renderFoldersOverview();
+  },
+
+  formatDate(isoStr) {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '';
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      if (isToday) {
+        const h = String(d.getHours()).padStart(2, '0');
+        const m = String(d.getMinutes()).padStart(2, '0');
+        return `Aujourd'hui ${h}:${m}`;
+      }
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = d.toLocaleDateString('fr-FR', { month: 'short' });
+      return `${day} ${month}`;
+    } catch (e) {
+      return '';
+    }
+  },
+
+  renderFoldersOverview() {
+    if (typeof document === 'undefined') return;
+    const grid = document.getElementById('notes-folders-grid');
+    if (!grid) return;
+
+    const folders = this.getFolders();
+    const notes = this.getAll();
+    const allProjects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
+      ? StorageManager.getProjects()
+      : [];
+    const allEvents = (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function')
+      ? StorageManager.getEvents()
+      : [];
+
+    const projectMap = new Map();
+    allProjects.forEach(p => { if (p && p.id) projectMap.set(p.id, p); });
+    const eventMap = new Map();
+    allEvents.forEach(e => { if (e && e.id) eventMap.set(e.id, e); });
+
+    let html = '';
+
+    folders.forEach(folder => {
+      // Filtrer les notes du dossier
+      let folderNotes = notes.filter(n => (n.folder || 'Général').trim().toLowerCase() === folder.toLowerCase());
+
+      // Filtrer par recherche rapide si active
+      if (this.overviewSearchQuery) {
+        folderNotes = folderNotes.filter(n => {
+          const title = (n.title || '').toLowerCase();
+          const content = (n.content || '').toLowerCase();
+          return title.includes(this.overviewSearchQuery) || content.includes(this.overviewSearchQuery);
+        });
+      }
+
+      // Trier les notes : épinglées en premier, puis date décroissante
+      folderNotes.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+      });
+
+      const count = folderNotes.length;
+      const countLabel = count === 1 ? '1 note' : `${count} notes`;
+
+      html += `
+        <div class="notes-folder-card" data-folder="${this.escapeHtml(folder)}">
+          <div class="notes-folder-color-bar"></div>
+          <div class="notes-folder-card-header">
+            <div class="notes-folder-title-area" title="Dossier : ${this.escapeHtml(folder)}">
+              <span class="notes-folder-icon">${this.getSvgIcon('folder', 16)}</span>
+              <span class="notes-folder-name">${this.escapeHtml(folder)}</span>
+              <span class="notes-folder-count-badge">${countLabel}</span>
+            </div>
+            <div class="notes-folder-card-actions">
+              <button type="button" class="btn btn-secondary btn-sm notes-folder-add-btn" title="Créer une nouvelle note dans ce dossier" onclick="event.stopPropagation(); NotesManager.createNoteInFolder('${this.escapeHtml(folder)}'); NotesManager.setLayoutMode('editor');">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Note</span>
+              </button>
+              <button type="button" class="btn-icon notes-folder-menu-btn" title="Options du dossier" onclick="event.stopPropagation(); NotesManager.showFolderMenu(event, '${this.escapeHtml(folder)}');">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="notes-folder-card-body">
+      `;
+
+      if (folderNotes.length === 0) {
+        html += `
+          <div class="notes-folder-empty-state" onclick="NotesManager.createNoteInFolder('${this.escapeHtml(folder)}'); NotesManager.setLayoutMode('editor');">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.4; margin-bottom:6px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <div style="font-weight: 600; font-size: 0.82rem; margin-bottom: 2px;">Dossier vide</div>
+            <div style="font-size: 0.74rem; opacity: 0.7;">Glissez une note ici ou cliquez pour en créer une.</div>
+          </div>
+        `;
+      } else {
+        folderNotes.forEach(note => {
+          const title = note.title ? this.escapeHtml(note.title) : '<em>Note sans titre</em>';
+          const dateStr = note.updatedAt ? this.formatDate(note.updatedAt) : '';
+          const project = note.projectId ? projectMap.get(note.projectId) : null;
+          const linkedEvent = note.linkedEventId ? eventMap.get(note.linkedEventId) : null;
+          const isPinned = Boolean(note.pinned);
+
+          let badgesHtml = '';
+          if (isPinned) {
+            badgesHtml += `<span class="note-overview-badge badge-pinned" title="Note épinglée">${this.getSvgIcon('pin', 10)}</span>`;
+          }
+          if (project) {
+            const pColor = project.color || 'var(--accent)';
+            badgesHtml += `<span class="note-overview-badge badge-project badge-clickable" style="border-left: 2px solid ${pColor}; cursor: pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${project.id}');" title="Ouvrir le projet : ${this.escapeHtml(project.title)}">${this.escapeHtml(project.title)}</span>`;
+          }
+          if (linkedEvent) {
+            badgesHtml += `<span class="note-overview-badge badge-event badge-clickable" style="cursor: pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('agenda'); if (window.AgendaManager) AgendaManager.openEventModal('${linkedEvent.id}');" title="Ouvrir le créneau lié : ${this.escapeHtml(linkedEvent.title)}">${this.getSvgIcon('calendar', 10)} ${this.escapeHtml(linkedEvent.title)}</span>`;
+          }
+
+          html += `
+            <div class="notes-folder-note-item" draggable="true" data-note-id="${note.id}" onclick="NotesManager.selectNote('${note.id}'); NotesManager.setLayoutMode('editor');" title="Ouvrir cette note dans l'éditeur">
+              <div class="notes-folder-note-header">
+                <span class="notes-folder-note-title">${title}</span>
+                <span class="notes-folder-note-date">${dateStr}</span>
+              </div>
+              ${badgesHtml ? `<div class="notes-folder-note-badges">${badgesHtml}</div>` : ''}
+            </div>
+          `;
+        });
+      }
+
+      html += `
+          </div>
+        </div>
+      `;
+    });
+
+    // Carte "+" pour ajouter un nouveau dossier (style project-card-add)
+    html += `
+      <div class="notes-folder-card notes-folder-card-add" onclick="NotesManager.promptNewFolder();" title="Créer un nouveau dossier de notes">
+        <div class="notes-folder-add-content">
+          <div class="notes-folder-add-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          </div>
+          <div style="font-weight: 600; font-size: 0.95rem; margin-top: 6px;">Nouveau dossier</div>
+          <div style="font-size: 0.78rem; color: var(--text-dim);">Créer un espace pour vos notes</div>
+        </div>
+      </div>
+    `;
+
+    grid.innerHTML = html;
+
+    // Activer les écouteurs de Drag & Drop sur les cartes de dossier et notes
+    this._bindFoldersOverviewDragAndDrop(grid);
+  },
+
+  _bindFoldersOverviewDragAndDrop(grid) {
+    if (!grid) return;
+    const noteItems = grid.querySelectorAll('.notes-folder-note-item');
+    noteItems.forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        const noteId = item.dataset.noteId;
+        if (!noteId) return;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData('text/plain', noteId);
+          e.dataTransfer.effectAllowed = 'move';
+        }
+        item.classList.add('dragging');
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+      });
+    });
+
+    const folderCards = grid.querySelectorAll('.notes-folder-card:not(.notes-folder-card-add)');
+    folderCards.forEach(card => {
+      const folder = card.dataset.folder;
+      if (!folder) return;
+
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        card.classList.add('drag-over');
+      });
+
+      card.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        card.classList.remove('drag-over');
+      });
+
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.remove('drag-over');
+        const noteId = e.dataTransfer ? e.dataTransfer.getData('text/plain') : null;
+        if (noteId) {
+          NotesManager.moveNoteToFolder(noteId, folder);
+          NotesManager.renderFoldersOverview();
+        }
+      });
+    });
   },
 
   flushPendingSave() {
@@ -479,6 +733,7 @@ const NotesManager = {
     if (inputFolderSelect) {
       inputFolderSelect.addEventListener('change', async (e) => {
         if (!this.currentNoteId) return;
+        const targetNoteId = this.currentNoteId;
         let val = e.target.value;
         if (val === '__new__') {
           const created = await this.promptNewFolder();
@@ -489,6 +744,7 @@ const NotesManager = {
             val = cur ? (cur.folder || 'Général') : 'Général';
           }
         }
+        if (targetNoteId) this.currentNoteId = targetNoteId;
         this.updateCurrentNoteFolder(val);
       });
     }
@@ -507,6 +763,9 @@ const NotesManager = {
       editor.addEventListener('input', () => {
         if (!this.currentNoteId) return;
         const isRich = editor.isContentEditable || (typeof editor.getAttribute === 'function' && editor.getAttribute('contenteditable') === 'true');
+        if (isRich) {
+          this.syncOrderedListsNumbering(editor);
+        }
         const content = isRich
           ? editor.innerHTML
           : (editor.value !== undefined ? editor.value : editor.innerHTML);
@@ -668,14 +927,19 @@ const NotesManager = {
   saveAll(notes) {
     StorageManager.saveNotes(notes);
     this.renderNotesList();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
+      window.App.updateDashboard();
+    }
   },
 
-  createNote() {
+  createNote(folderOverride = null) {
     this.flushPendingSave();
     const notes = this.getAll();
-    const activeFolder = (this.currentFolderFilter && this.currentFolderFilter !== 'all')
-      ? this.currentFolderFilter
-      : 'Général';
+    const activeFolder = (folderOverride && typeof folderOverride === 'string')
+      ? folderOverride.trim()
+      : ((this.currentFolderFilter && this.currentFolderFilter !== 'all')
+        ? this.currentFolderFilter
+        : 'Général');
     const newNote = {
       id: 'note-' + Date.now(),
       title: 'Nouvelle note',
@@ -692,9 +956,13 @@ const NotesManager = {
     this.renderFolderFilter();
     this.selectNote(newNote.id);
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
-      window.App.showToast("Note créée", "success");
+      window.App.showToast(folderOverride ? `Note créée dans « ${activeFolder} »` : "Note créée", "success");
     }
     return newNote;
+  },
+
+  createNoteInFolder(folderName) {
+    return this.createNote(folderName);
   },
 
   // Alias pour rétro-compatibilité
@@ -702,8 +970,11 @@ const NotesManager = {
     return this.createNote();
   },
 
-  selectNote(id) {
+  selectNote(id, forceEditor = true) {
     this.flushPendingSave();
+    if (forceEditor && this.layoutMode === 'folders') {
+      this.setLayoutMode('editor');
+    }
     this.currentNoteId = id;
     const notes = this.getAll();
     const note = notes.find(n => n.id === id);
@@ -726,7 +997,7 @@ const NotesManager = {
       const blockSelect = document.getElementById('notes-format-block-select');
       if (blockSelect) blockSelect.value = 'p';
 
-      this.updatePreview(note.content);
+      this.updatePreview(note.content, true);
       this.renderFolderSelector(note);
       this.renderProjectSelector(note);
       this.renderEventSelector(note);
@@ -1085,6 +1356,9 @@ const NotesManager = {
       this._saveTimer = null;
       this._pendingNotesToSave = null;
       StorageManager.saveNotes(notes);
+      if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
+        window.App.updateDashboard();
+      }
     }, 300);
   },
 
@@ -1124,6 +1398,29 @@ const NotesManager = {
     const noteToDelete = notes.find(n => n.id === this.currentNoteId);
     if (noteToDelete && typeof TrashManager !== 'undefined' && typeof TrashManager.moveToTrash === 'function') {
       TrashManager.moveToTrash('note', noteToDelete);
+    }
+
+    // Détacher la note des événements d'agenda liés
+    if (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function') {
+      try {
+        const events = StorageManager.getEvents();
+        let eventsChanged = false;
+        events.forEach(e => {
+          if (e.noteId === this.currentNoteId) {
+            e.noteId = null;
+            e.updatedAt = new Date().toISOString();
+            eventsChanged = true;
+          }
+        });
+        if (eventsChanged) {
+          StorageManager.saveEvents(events);
+          if (typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.render === 'function') {
+            window.AgendaManager.render();
+          }
+        }
+      } catch (err) {
+        console.warn("[NotesManager] Erreur lors du nettoyage des liaisons d'agenda :", err);
+      }
     }
 
     notes = notes.filter(n => n.id !== this.currentNoteId);
@@ -1186,15 +1483,17 @@ const NotesManager = {
       n.content.toLowerCase().includes(this.searchQuery)
     );
 
-    if (filtered.length === 0) {
+    const isSpecificFolder = (this.currentFolderFilter && this.currentFolderFilter !== 'all');
+    if (filtered.length === 0 && (this.searchQuery || isSpecificFolder)) {
+      const targetFolder = isSpecificFolder ? this.currentFolderFilter : 'Général';
       listEl.innerHTML = `
         <div class="antigravite-empty-state notes-empty-state" style="margin: 16px 10px; padding: 26px 14px;">
           <div class="empty-state-illustration" style="margin-bottom: 8px;">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           </div>
-          <div class="empty-state-title" style="font-size: 0.92rem;">${this.searchQuery ? 'Aucun résultat' : 'Page blanche'}</div>
-          <p class="empty-state-text" style="font-size: 0.76rem; margin: 0 0 10px 0;">${this.searchQuery ? 'Aucune note ne correspond à votre recherche.' : 'Capturez une idée, rédigez un mémo ou organisez vos réflexions.'}</p>
-          ${!this.searchQuery ? '<button type="button" class="btn btn-primary btn-sm" onclick="NotesManager.createNote()" style="font-size: 0.74rem; padding: 4px 10px;"><svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span>Nouvelle note</span></button>' : ''}
+          <div class="empty-state-title" style="font-size: 0.92rem;">${this.searchQuery ? 'Aucun résultat' : 'Dossier « ' + this.escapeHtml(targetFolder) + ' » vide'}</div>
+          <p class="empty-state-text" style="font-size: 0.76rem; margin: 0 0 10px 0;">${this.searchQuery ? 'Aucune note ne correspond à votre recherche.' : 'Ce dossier ne contient encore aucune note. Créez-en une en un clic :'}</p>
+          ${!this.searchQuery ? `<button type="button" class="btn btn-primary btn-sm" onclick="NotesManager.createNoteInFolder('${this.escapeHtml(targetFolder).replace(/'/g, "\\'")}')" style="font-size: 0.74rem; padding: 4px 10px;"><svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span>Nouvelle note dans ce dossier</span></button>` : ''}
         </div>
       `;
       return;
@@ -1248,7 +1547,7 @@ const NotesManager = {
         if (note.id === this.currentNoteId) {
           item.style.backgroundColor = `${projColor}16`;
         }
-        projectBadge = `<span class="badge badge-project" style="background:${projColor}20; color:${projColor}; border:1px solid ${projColor}60; font-size:0.72rem; padding:1px 7px; border-radius:4px; font-weight:600; display:inline-flex; align-items:center;" title="Projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${projColor}; margin-right:4px;"></span>${this.getSvgIcon('folder', 11)}<span style="margin-left:3px;">${this.escapeHtml(proj.title)}</span></span>`;
+        projectBadge = `<span class="badge badge-project badge-clickable" style="background:${projColor}20; color:${projColor}; border:1px solid ${projColor}60; font-size:0.72rem; padding:1px 7px; border-radius:4px; font-weight:600; display:inline-flex; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${proj.id}');" title="Ouvrir le projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${projColor}; margin-right:4px;"></span>${this.getSvgIcon('folder', 11)}<span style="margin-left:3px;">${this.escapeHtml(proj.title)}</span></span>`;
       }
 
       const rawDate = note.updatedAt || note.createdAt;
@@ -1260,7 +1559,7 @@ const NotesManager = {
       let eventBadge = '';
       if (linkedEvt) {
         const timeStr = linkedEvt.start ? linkedEvt.start.slice(5, 10).replace('-', '/') : '';
-        eventBadge = `<span class="badge" style="background:rgba(56,189,248,0.15); color:var(--accent); font-size:0.7rem; padding:1px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px;" title="Lié à : ${this.escapeHtml(linkedEvt.title)}">${this.getSvgIcon('calendar', 11)} <span>${timeStr || 'Agenda'}</span></span>`;
+        eventBadge = `<span class="badge badge-clickable" style="background:rgba(56,189,248,0.15); color:var(--accent); font-size:0.7rem; padding:1px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px; cursor:pointer;" onclick="event.stopPropagation(); NotesManager.selectNote('${note.id}'); NotesManager.viewLinkedEventInAgenda();" title="Créneau lié : ${this.escapeHtml(linkedEvt.title)} (cliquer pour voir dans l'agenda)">${this.getSvgIcon('calendar', 11)} <span>${timeStr || 'Agenda'}</span></span>`;
       }
 
       item.innerHTML = `
@@ -1288,7 +1587,6 @@ const NotesManager = {
       });
 
       notesByFolder.forEach((folderNotes, folderName) => {
-        if (folderNotes.length === 0) return; // Ne pas encombrer avec des dossiers vides sans note
         const isCollapsed = this._collapsedFolders && this._collapsedFolders.has(folderName);
         const groupEl = document.createElement('div');
         groupEl.className = 'note-folder-group';
@@ -1343,9 +1641,24 @@ const NotesManager = {
         if (!isCollapsed) {
           const itemsContainer = document.createElement('div');
           itemsContainer.className = 'note-folder-items';
-          folderNotes.forEach(note => {
-            itemsContainer.appendChild(buildNoteItem(note));
-          });
+          if (folderNotes.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'note-folder-empty-placeholder';
+            emptyEl.title = `Créer une première note dans « ${folderName} » ou glissez-y une note existante`;
+            emptyEl.innerHTML = `<span style="font-weight:600; opacity:0.8;">＋</span> <span>Nouvelle note dans ce dossier</span>`;
+            emptyEl.onclick = (e) => {
+              if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+              this.createNoteInFolder(folderName);
+            };
+            emptyEl.ondragover = headerEl.ondragover;
+            emptyEl.ondragleave = headerEl.ondragleave;
+            emptyEl.ondrop = headerEl.ondrop;
+            itemsContainer.appendChild(emptyEl);
+          } else {
+            folderNotes.forEach(note => {
+              itemsContainer.appendChild(buildNoteItem(note));
+            });
+          }
           groupEl.appendChild(itemsContainer);
         }
 
@@ -1364,11 +1677,26 @@ const NotesManager = {
     }
   },
 
-  updatePreview(markdown) {
+  updatePreview(markdown, immediate = false) {
     if (typeof document === 'undefined') return;
     const previewEl = document.getElementById('notes-preview-container');
     if (!previewEl) return;
-    previewEl.innerHTML = this.simpleMarkdownToHtml(markdown);
+    if (previewEl.style && previewEl.style.display === 'none') return;
+
+    if (immediate) {
+      if (this._previewDebounceTimer) {
+        clearTimeout(this._previewDebounceTimer);
+        this._previewDebounceTimer = null;
+      }
+      previewEl.innerHTML = this.simpleMarkdownToHtml(markdown);
+      return;
+    }
+
+    if (this._previewDebounceTimer) clearTimeout(this._previewDebounceTimer);
+    this._previewDebounceTimer = setTimeout(() => {
+      this._previewDebounceTimer = null;
+      previewEl.innerHTML = this.simpleMarkdownToHtml(markdown);
+    }, 40);
   },
 
   // Gestionnaire sécurisé de navigation pour les liens cliqués dans l'aperçu
@@ -1702,9 +2030,14 @@ const NotesManager = {
         case 'bullet':
           document.execCommand('insertUnorderedList', false, null);
           break;
-        case 'number':
+        case 'number': {
           document.execCommand('insertOrderedList', false, null);
+          const editor = document.getElementById('note-body-editor');
+          if (editor) {
+            this._handleOrderedListCreation(editor);
+          }
           break;
+        }
         case 'task': {
           const taskHtml = '<div class="note-task-item"><input type="checkbox"> <span class="task-text">&nbsp;</span></div>';
           document.execCommand('insertHTML', false, taskHtml);
@@ -1974,6 +2307,55 @@ const NotesManager = {
     return { value: newText, selectionStart: newStart, selectionEnd: newEnd };
   },
 
+  _handleOrderedListCreation(editor) {
+    if (!editor) return;
+    const sel = (typeof window !== 'undefined' && window.getSelection) ? window.getSelection() : null;
+    let currentOl = null;
+    if (sel && sel.anchorNode) {
+      let node = sel.anchorNode;
+      if (node.nodeType === 3) node = node.parentNode;
+      currentOl = (node && typeof node.closest === 'function') ? node.closest('ol') : null;
+    }
+    if (!currentOl && typeof editor.querySelectorAll === 'function') {
+      const allOls = Array.from(editor.querySelectorAll('ol'));
+      if (allOls.length > 0) {
+        currentOl = allOls[allOls.length - 1];
+      }
+    }
+    if (!currentOl) return;
+
+    // Déterminer s'il y a un <ol> précédent dans le document
+    const allOls = Array.from(editor.querySelectorAll('ol'));
+    const currentIndex = allOls.indexOf(currentOl);
+    if (currentIndex > 0) {
+      const prevOl = allOls[currentIndex - 1];
+      const prevStart = parseInt(prevOl.getAttribute('start') || '1', 10);
+      const prevLiCount = Array.from(prevOl.children).filter(el => el.tagName === 'LI').length;
+      const nextStart = prevStart + Math.max(1, prevLiCount);
+      currentOl.setAttribute('start', nextStart);
+      currentOl.setAttribute('data-auto-start', 'true');
+    }
+  },
+
+  syncOrderedListsNumbering(editor) {
+    if (!editor || typeof editor.querySelectorAll !== 'function') return;
+    const allOls = Array.from(editor.querySelectorAll('ol'));
+    if (allOls.length <= 1) return;
+
+    for (let i = 1; i < allOls.length; i++) {
+      const currentOl = allOls[i];
+      const prevOl = allOls[i - 1];
+      if (currentOl.getAttribute('data-auto-start') === 'true' || currentOl.hasAttribute('start')) {
+        const prevStart = parseInt(prevOl.getAttribute('start') || '1', 10);
+        const prevLiCount = Array.from(prevOl.children).filter(el => el.tagName === 'LI').length;
+        const expectedStart = prevStart + Math.max(1, prevLiCount);
+        if (parseInt(currentOl.getAttribute('start'), 10) !== expectedStart) {
+          currentOl.setAttribute('start', expectedStart);
+        }
+      }
+    }
+  },
+
   handleKeyDown(e) {
     const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     const modKey = isMac ? e.metaKey : e.ctrlKey;
@@ -1981,6 +2363,47 @@ const NotesManager = {
     if (e.key === 'Tab') {
       this.handleTab(e);
       return;
+    }
+
+    // Raccourcis Markdown au clavier : transformation automatique de "1. " ou "2. " ou "- "
+    if (e.key === ' ' && typeof window !== 'undefined' && window.getSelection) {
+      const sel = window.getSelection();
+      if (sel && sel.isCollapsed && sel.anchorNode) {
+        const node = sel.anchorNode;
+        if (node.nodeType === 3) {
+          const textBefore = node.textContent.substring(0, sel.anchorOffset);
+          const matchOl = textBefore.match(/^(\d+)\.$/);
+          if (matchOl) {
+            e.preventDefault();
+            const startNum = parseInt(matchOl[1], 10);
+            node.textContent = node.textContent.substring(sel.anchorOffset).trimStart();
+            document.execCommand('insertOrderedList', false, null);
+            const parentOl = node.parentNode ? (node.parentNode.closest ? node.parentNode.closest('ol') : null) : null;
+            if (parentOl) {
+              parentOl.setAttribute('start', startNum);
+              if (startNum > 1) {
+                parentOl.setAttribute('data-auto-start', 'true');
+              }
+            }
+            return;
+          }
+          const matchUl = textBefore.match(/^[-*]$/);
+          if (matchUl) {
+            e.preventDefault();
+            node.textContent = node.textContent.substring(sel.anchorOffset).trimStart();
+            document.execCommand('insertUnorderedList', false, null);
+            return;
+          }
+        }
+      }
+    }
+
+    // Entrée : synchroniser les listes numérotées suivantes si modification
+    if (e.key === 'Enter') {
+      const editor = document.getElementById('note-body-editor');
+      if (editor) {
+        setTimeout(() => this.syncOrderedListsNumbering(editor), 10);
+      }
     }
 
     if (modKey) {
@@ -2281,7 +2704,9 @@ const NotesManager = {
         return `<ul class="obsidian-list">${block.split(/\n/).join('')}</ul>`;
       }
       if (block.startsWith('<li class="obsidian-number-item"')) {
-        return `<ol class="obsidian-list">${block.split(/\n/).join('')}</ol>`;
+        const matchVal = block.match(/value="(\d+)"/);
+        const startAttr = (matchVal && matchVal[1] !== '1') ? ` start="${matchVal[1]}"` : '';
+        return `<ol class="obsidian-list"${startAttr}>${block.split(/\n/).join('')}</ol>`;
       }
       return `<p>${block.replace(/\n/g, '<br>')}</p>`;
     });
@@ -2326,7 +2751,10 @@ const NotesManager = {
     }
     this.renderNotesList();
     if (this.currentNoteId) {
-      this.selectNote(this.currentNoteId);
+      this.selectNote(this.currentNoteId, false);
+    }
+    if (this.layoutMode === 'folders') {
+      this.renderFoldersOverview();
     }
   },
 

@@ -123,6 +123,7 @@ const App = require('../js/app.js');
     StorageManager.saveProjects([]);
     StorageManager.saveNotes([]);
 
+    App.dashboardAgendaView = 'list';
     App.updateDashboard(true);
 
     const html = mockDom['dashboard-planned-tasks'].innerHTML;
@@ -157,6 +158,7 @@ const App = require('../js/app.js');
       }
     ]);
 
+    App.dashboardAgendaView = 'list';
     App.updateDashboard(true);
 
     const html = mockDom['dashboard-today-events'].innerHTML;
@@ -185,6 +187,7 @@ const App = require('../js/app.js');
       }
     ]);
 
+    App.dashboardAgendaView = 'list';
     App.updateDashboard(true);
 
     const html = mockDom['dashboard-recent-notes'].innerHTML;

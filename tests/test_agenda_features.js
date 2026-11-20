@@ -396,10 +396,10 @@ async function runTests() {
   // ---------------------------------------------------------------------------
   // 6. Vérification de la configuration Electron pour le correcteur orthographique
   // ---------------------------------------------------------------------------
-  await it("6.1 main.js configure spellcheck et les langues française et anglaise", () => {
+  await it("6.1 main.js configure spellcheck et la langue française", () => {
     const mainJsContent = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
     assert.ok(mainJsContent.includes('spellcheck: true'), "main.js doit déclarer spellcheck: true dans webPreferences");
-    assert.ok(mainJsContent.includes("setSpellCheckerLanguages(['fr', 'en-US'])"), "main.js doit configurer setSpellCheckerLanguages(['fr', 'en-US'])");
+    assert.ok(mainJsContent.includes("setSpellCheckerLanguages(['fr-FR', 'fr'])"), "main.js doit configurer setSpellCheckerLanguages(['fr-FR', 'fr'])");
   });
 
   console.log("==========================================================");

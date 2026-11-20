@@ -30,19 +30,19 @@ async function it(desc, fn) {
   console.log("   (Correctifs Débriefing, Créativité & Notes du jour)");
   console.log("==========================================================");
 
-  // 1. Version 1.2.3 synchronisée
-  await it("1.1 Version 1.2.3 synchronisée (package.json, index.html, app.js, settings.js)", () => {
+  // 1. Version 1.2.3 ou supérieure synchronisée
+  await it("1.1 Version 1.2.3 ou supérieure synchronisée (package.json, index.html, app.js, settings.js)", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-    assert.strictEqual(pkg.version, '1.2.3', "package.json doit être en version 1.2.3");
+    assert.ok(pkg.version >= '1.2.3', "package.json doit être en version 1.2.3 ou supérieure");
 
     const htmlContent = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-    assert(htmlContent.includes('id="updater-current-version-label">1.2.3</strong>'), "index.html affiche la version 1.2.3");
+    assert(htmlContent.includes(`id="updater-current-version-label">${pkg.version}</strong>`), "index.html affiche la version courante");
 
     const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
-    assert(appCode.includes("APP_VERSION: '1.2.3'"), "app.js est configuré sur la version 1.2.3");
+    assert(appCode.includes(`APP_VERSION: '${pkg.version}'`), "app.js est configuré sur la version courante");
 
     const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
-    assert(settingsCode.includes("currentVersion: '1.2.3'"), "settings.js est initialisé avec 1.2.3");
+    assert(settingsCode.includes(`currentVersion: '${pkg.version}'`), "settings.js est initialisé avec la version courante");
   });
 
   // 2. Changelog 1.2.3
@@ -177,12 +177,14 @@ async function it(desc, fn) {
       set innerHTML(val) { injectedHtml = val; }
     };
 
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     global.StorageManager = {
-      getTasks: () => [{ id: 't1', title: 'Tâche Test', completed: true, completedAt: '2026-11-16T10:00:00', projectId: 'p1', subtasks: [] }],
+      getTasks: () => [{ id: 't1', title: 'Tâche Test', completed: true, completedAt: `${todayKey}T10:00:00`, projectId: 'p1', subtasks: [] }],
       getProjects: () => [{ id: 'p1', title: 'Projet Test', color: '#3b82f6' }],
       getTrash: () => [],
-      getEvents: () => [{ id: 'e1', title: 'Créneau Créatif', start: '2026-11-16T10:00:00', end: '2026-11-16T11:00:00', isAllDay: false, projectId: 'p1' }],
-      getNotes: () => [{ id: 'n1', title: 'Note du jour', content: 'Contenu créatif', folder: 'Général', createdAt: '2026-11-16T11:00:00' }],
+      getEvents: () => [{ id: 'e1', title: 'Créneau Créatif', start: `${todayKey}T10:00:00`, end: `${todayKey}T11:00:00`, isAllDay: false, projectId: 'p1' }],
+      getNotes: () => [{ id: 'n1', title: 'Note du jour', content: 'Contenu créatif', folder: 'Général', createdAt: `${todayKey}T11:00:00` }],
       getSettings: () => ({ debriefEnabled: true, debriefHour: '17:00' })
     };
 
@@ -198,6 +200,100 @@ async function it(desc, fn) {
     assert(injectedHtml.includes('Temps dédié à la créativité'), "Le titre 'Temps dédié à la créativité' est bien généré");
     assert(injectedHtml.includes('Pensées, Écrits &amp; Notes'), "La section des notes est bien générée");
     assert(injectedHtml.includes('Ce qui a avancé avec succès'), "La section des tâches est bien générée");
+  });
+
+  // 9. Comparaison stricte des versions (Anti-boucle de mise à jour)
+  await it("1.9 Comparaison sémantique stricte isNewerVersion dans update-service, app.js et settings.js", () => {
+    const updateService = require('../services/update-service');
+    assert.strictEqual(typeof updateService.isNewerVersion, 'function', "updateService possède isNewerVersion");
+
+    // Tests unitaires de comparaison
+    assert.strictEqual(updateService.isNewerVersion('1.2.3', '1.2.2'), true, "1.2.3 est plus récent que 1.2.2");
+    assert.strictEqual(updateService.isNewerVersion('v1.2.3', '1.2.2'), true, "v1.2.3 avec préfixe 'v' est plus récent que 1.2.2");
+    assert.strictEqual(updateService.isNewerVersion('1.3.0', '1.2.9'), true, "1.3.0 est plus récent que 1.2.9");
+    assert.strictEqual(updateService.isNewerVersion('2.0.0', '1.9.9'), true, "2.0.0 est plus récent que 1.9.9");
+    
+    // Versions identiques : DOIT retourner false
+    assert.strictEqual(updateService.isNewerVersion('1.2.2', '1.2.2'), false, "1.2.2 n'est pas plus récent que 1.2.2");
+    assert.strictEqual(updateService.isNewerVersion('v1.2.2', '1.2.2'), false, "v1.2.2 n'est pas plus récent que 1.2.2");
+    assert.strictEqual(updateService.isNewerVersion('1.2.3', '1.2.3'), false, "1.2.3 n'est pas plus récent que 1.2.3");
+
+    // Versions antérieures : DOIT retourner false
+    assert.strictEqual(updateService.isNewerVersion('1.2.1', '1.2.2'), false, "1.2.1 n'est pas plus récent que 1.2.2");
+    assert.strictEqual(updateService.isNewerVersion('1.1.9', '1.2.0'), false, "1.1.9 n'est pas plus récent que 1.2.0");
+
+    // Valeurs nulles ou invalides
+    assert.strictEqual(updateService.isNewerVersion(null, '1.2.2'), false, "null n'est pas plus récent");
+    assert.strictEqual(updateService.isNewerVersion('1.2.3', null), false, "courant null retourne false");
+
+    // Vérifier la présence dans app.js et settings.js
+    const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
+    assert(appCode.includes("isNewerVersion(remoteVer, currentVer)"), "app.js intègre isNewerVersion");
+    assert(appCode.includes("removePendingUpdateIndicator()"), "app.js intègre removePendingUpdateIndicator()");
+
+    const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
+    assert(settingsCode.includes("isNewerVersion(remoteVer, currentVer)"), "settings.js intègre isNewerVersion");
+  });
+
+  // 10. UpdateService n'émet PAS update-available si la version est déjà à jour (1.2.2 -> 1.2.2)
+  await it("1.10 UpdateService bloque update-available et signale not-available si remote <= current", async () => {
+    const { UpdateService } = require('../services/update-service');
+    
+    // Simuler un autoUpdater retournant la version 1.2.2 alors que l'app est en 1.2.2
+    const fakeEvents = {};
+    const fakeAutoUpdater = {
+      on: (ev, handler) => { fakeEvents[ev] = handler; },
+      setFeedURL: () => {},
+      checkForUpdates: async () => ({
+        updateInfo: { version: '1.2.2', releaseNotes: 'Notes 1.2.2' }
+      })
+    };
+
+    const service = new UpdateService({
+      autoUpdater: fakeAutoUpdater,
+      currentVersion: '1.2.2'
+    });
+    service.init();
+
+    let availableEmitted = false;
+    let notAvailableEmitted = false;
+    service.on('update-available', () => { availableEmitted = true; });
+    service.on('update-not-available', () => { notAvailableEmitted = true; });
+
+    // Déclencher l'événement 'update-available' brut d'electron-updater
+    if (fakeEvents['update-available']) {
+      fakeEvents['update-available']({ version: '1.2.2' });
+    }
+
+    assert.strictEqual(availableEmitted, false, "update-available NE DOIT PAS être émis si la version est identique");
+    assert.strictEqual(notAvailableEmitted, true, "update-not-available DOIT être émis");
+    assert.strictEqual(service.status, 'not-available', "Le statut doit être not-available");
+
+    // Vérifier checkForUpdates
+    const res = await service.checkForUpdates(true);
+    assert.strictEqual(res.isUpdateAvailable, false, "isUpdateAvailable doit être faux");
+    assert.strictEqual(res.updateInfo, null, "updateInfo retourné doit être null");
+    assert.strictEqual(service.getStatus().status, 'not-available', "getStatus() retourne not-available");
+  });
+
+  // 11. Refus de téléchargement sécurisé si pas de nouvelle version
+  await it("1.11 downloadUpdate rejette l'opération en sécurité si aucune version plus récente n'existe", async () => {
+    const { UpdateService } = require('../services/update-service');
+    const service = new UpdateService({
+      currentVersion: '1.2.2'
+    });
+    service.init();
+    service.status = 'not-available';
+    service.updateInfo = { version: '1.2.2' };
+
+    let threw = false;
+    try {
+      await service.downloadUpdate();
+    } catch (err) {
+      threw = true;
+      assert(err.message.includes('plus récente') || err.message.includes('impossible'), "Message d'erreur explicite");
+    }
+    assert.strictEqual(threw, true, "downloadUpdate doit rejeter si la version n'est pas plus récente");
   });
 
   console.log("==========================================================");
