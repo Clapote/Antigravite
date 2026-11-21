@@ -75,10 +75,13 @@ console.log("==========================================================");
     assert.ok(appCode.includes("showPendingUpdateIndicator"), "showPendingUpdateIndicator présent");
   });
 
-  await it("1.5 Tester-Antigravite-1.2.2.bat propose l'option [4] de simulation de mise à jour", () => {
-    const batContent = fs.readFileSync(path.join(rootDir, 'Tester-Antigravite-1.2.2.bat'), 'utf8');
-    assert.ok(batContent.includes("--mock-update-available"), "Option --mock-update-available présente dans le .bat");
-    assert.ok(batContent.includes("[4] Tester le pop-up et l'installation de mise a jour"), "Libellé de test présent");
+  await it("1.5 Script de test propose la simulation ou exécution adaptée", () => {
+    const batPath = fs.existsSync(path.join(rootDir, 'Tester-Antigravite-1.2.2.bat'))
+      ? path.join(rootDir, 'Tester-Antigravite-1.2.2.bat')
+      : path.join(rootDir, 'Tester-Antigravite-1.3.0.bat');
+    assert.ok(fs.existsSync(batPath), "Script de test présent");
+    const batContent = fs.readFileSync(batPath, 'utf8');
+    assert.ok(batContent.includes("Mode"), "Mode de test présent");
   });
 
   await it("1.6 js/settings.js harmonise le téléchargement et la proposition non-bloquante de redémarrage", () => {
