@@ -132,6 +132,20 @@ const SettingsManager = {
         // B. Couleur d'accentuation
         const accentBubble = e.target.closest('.accent-option-bubble');
         if (accentBubble && accentBubble.dataset.accentVal) {
+          const customId = accentBubble.dataset.customAccentId;
+          const editBtn = e.target.closest('.bubble-edit-btn');
+          if (editBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (customId) this.openCustomAccentPopover(customId, editBtn);
+            return;
+          }
+          if (e.target.closest('.bubble-delete-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (customId) this.deleteCustomAccentColor(customId);
+            return;
+          }
           e.preventDefault();
           this.updateSetting('accentColor', accentBubble.dataset.accentVal);
           return;
@@ -180,6 +194,19 @@ const SettingsManager = {
         // F. Fond d'écran prédéfini ou retrait
         const wpCard = e.target.closest('.wallpaper-card');
         if (wpCard && wpCard.dataset.wallpaper) {
+          const customId = wpCard.dataset.customWpId;
+          if (e.target.closest('.wallpaper-edit-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (customId) this.editCustomWallpaper(customId);
+            return;
+          }
+          if (e.target.closest('.wallpaper-delete-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (customId) this.deleteCustomWallpaper(customId);
+            return;
+          }
           e.preventDefault();
           const val = wpCard.dataset.wallpaper;
           this.updateSetting('backgroundImage', val === 'none' ? null : val);
@@ -303,6 +330,18 @@ const SettingsManager = {
         }
       });
     }
+
+    // 2-bis. Ouverture du Studio de Création de Fond d'Écran
+    const btnOpenStudio = document.getElementById('btn-open-wallpaper-studio');
+    if (btnOpenStudio) {
+      btnOpenStudio.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.openWallpaperStudioModal();
+      });
+    }
+
+    // 2-ter. Événements des couleurs d'accentuation personnalisées
+    this.bindCustomAccentEvents();
 
     // 3. Import d'image personnalisée de fond d'écran
     const fileInput = document.getElementById('wallpaper-file-input');
@@ -657,6 +696,78 @@ const SettingsManager = {
     bindUiOverrideToggle('setting-disable-animations', 'disableAnimations');
     bindUiOverrideToggle('setting-disable-previews', 'disablePreviews');
     bindUiOverrideToggle('setting-disable-hover-effects', 'disableHoverEffects');
+
+    // 17. Historique pliable des versions antérieures du changelog
+    this.bindChangelogHistoryEvents();
+  },
+
+  bindChangelogHistoryEvents() {
+    if (typeof document === 'undefined') return;
+
+    const btnToggle = document.getElementById('btn-toggle-changelog-history');
+    const wrapper = document.getElementById('changelog-history-wrapper');
+    const chevron = document.getElementById('changelog-history-chevron');
+    const btnClose = document.getElementById('btn-close-changelog-history');
+    const pills = document.querySelectorAll('.changelog-history-pill');
+    const archivedCards = document.querySelectorAll('.changelog-archived-card');
+
+    const showCard = (targetVersion) => {
+      archivedCards.forEach(card => {
+        if (card.dataset.version === targetVersion) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+      pills.forEach(pill => {
+        if (pill.dataset.version === targetVersion) {
+          pill.classList.add('active');
+        } else {
+          pill.classList.remove('active');
+        }
+      });
+    };
+
+    if (btnToggle && wrapper && !btnToggle._hasChangelogHistoryListener) {
+      btnToggle._hasChangelogHistoryListener = true;
+      btnToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        const isHidden = (wrapper.style.display === 'none' || !wrapper.style.display);
+        if (isHidden) {
+          wrapper.style.display = 'block';
+          if (chevron) chevron.textContent = '▴';
+          const activePill = document.querySelector('.changelog-history-pill.active') || pills[0];
+          if (activePill && activePill.dataset.version) {
+            showCard(activePill.dataset.version);
+          }
+        } else {
+          wrapper.style.display = 'none';
+          if (chevron) chevron.textContent = '▾';
+        }
+      });
+    }
+
+    if (btnClose && wrapper && !btnClose._hasChangelogHistoryListener) {
+      btnClose._hasChangelogHistoryListener = true;
+      btnClose.addEventListener('click', (e) => {
+        e.preventDefault();
+        wrapper.style.display = 'none';
+        if (chevron) chevron.textContent = '▾';
+      });
+    }
+
+    pills.forEach(pill => {
+      if (!pill._hasChangelogHistoryListener) {
+        pill._hasChangelogHistoryListener = true;
+        pill.addEventListener('click', (e) => {
+          e.preventDefault();
+          const version = pill.dataset.version;
+          if (version) {
+            showCard(version);
+          }
+        });
+      }
+    });
   },
 
   updateGreetingPreview() {
@@ -707,9 +818,15 @@ const SettingsManager = {
       btnResetOrder._listenerBound = true;
       btnResetOrder.addEventListener('click', (e) => {
         e.preventDefault();
-        const defaultOrder = (StorageManager.DEFAULT_SETTINGS && StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder)
-          ? StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder
-          : ['tasks', 'projects', 'agenda', 'notes', 'focus', 'music', 'trash', 'backups'];
+        let defaultOrder = (StorageManager.DEFAULT_SETTINGS && StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder)
+          ? [...StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder]
+          : ['tasks', 'projects', 'agenda', 'notes', 'constellation', 'focus', 'music', 'trash', 'backups'];
+
+        if (!defaultOrder.includes('constellation')) {
+          const notesIdx = defaultOrder.indexOf('notes');
+          if (notesIdx !== -1) defaultOrder.splice(notesIdx + 1, 0, 'constellation');
+          else defaultOrder.push('constellation');
+        }
 
         defaultOrder.forEach(tabName => {
           const card = grid.querySelector(`.sidebar-tab-toggle-card[data-tab-name="${tabName}"]`);
@@ -882,9 +999,21 @@ const SettingsManager = {
     });
 
     // 2. Couleur d'accentuation
+    this.renderCustomAccentColors(settings);
+
     document.querySelectorAll('.accent-option-bubble').forEach(bubble => {
       bubble.classList.toggle('active', bubble.dataset.accentVal === settings.accentColor);
     });
+
+    const isCustomAccent = typeof settings.accentColor === 'string' && settings.accentColor.startsWith('#');
+    const hexInput = document.getElementById('accent-color-hex-input');
+    const pickerInput = document.getElementById('accent-color-picker-input');
+    const pickerPreview = document.getElementById('custom-accent-picker-preview');
+    if (isCustomAccent) {
+      if (hexInput) hexInput.value = settings.accentColor.toUpperCase();
+      if (pickerInput) pickerInput.value = settings.accentColor;
+      if (pickerPreview) pickerPreview.style.background = settings.accentColor;
+    }
 
     // 3. Densité d'affichage
     document.querySelectorAll('.density-option-btn').forEach(btn => {
@@ -915,6 +1044,10 @@ const SettingsManager = {
     // 6. Fond d'écran (Image derrière les panneaux)
     const PRESET_NAMES = ['nebula', 'aurora', 'mineral', 'sunset', 'ocean', 'forest', 'cyberpunk', 'minimal', 'lavender', 'solar', 'none'];
     const currentWp = settings.backgroundImage;
+    const isStudioWp = Array.isArray(settings.customWallpapers) && settings.customWallpapers.some(w => w.id === currentWp);
+
+    this.renderCustomWallpapers(settings);
+
     document.querySelectorAll('.wallpaper-card').forEach(card => {
       const wpVal = card.dataset.wallpaper;
       if (!currentWp || currentWp === 'none') {
@@ -922,8 +1055,8 @@ const SettingsManager = {
       } else if (wpVal) {
         card.classList.toggle('active', wpVal === currentWp);
       } else if (card.classList.contains('wallpaper-card-upload')) {
-        const isCustom = currentWp && !PRESET_NAMES.includes(currentWp);
-        card.classList.toggle('active', !!isCustom);
+        const isCustomFile = currentWp && !PRESET_NAMES.includes(currentWp) && !isStudioWp;
+        card.classList.toggle('active', !!isCustomFile);
       }
     });
 
@@ -947,8 +1080,8 @@ const SettingsManager = {
 
     const customThumb = document.getElementById('wallpaper-custom-thumb');
     if (customThumb) {
-      const isCustom = currentWp && !PRESET_NAMES.includes(currentWp);
-      if (isCustom) {
+      const isCustomFile = currentWp && !PRESET_NAMES.includes(currentWp) && !isStudioWp;
+      if (isCustomFile) {
         customThumb.style.backgroundImage = `url("${currentWp}")`;
         customThumb.innerHTML = '';
       } else {
@@ -1055,10 +1188,15 @@ const SettingsManager = {
 
     // 11-ter. Synchroniser la disposition des cartes d'onglets du volet latéral
     const grid = document.querySelector('.sidebar-tabs-toggle-grid');
-    const tabsOrder = (settings && Array.isArray(settings.sidebarTabsOrder))
-      ? settings.sidebarTabsOrder
-      : (StorageManager.DEFAULT_SETTINGS ? StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder : null);
+    let tabsOrder = (settings && Array.isArray(settings.sidebarTabsOrder))
+      ? [...settings.sidebarTabsOrder]
+      : (StorageManager.DEFAULT_SETTINGS ? [...StorageManager.DEFAULT_SETTINGS.sidebarTabsOrder] : null);
     if (grid && Array.isArray(tabsOrder)) {
+      if (!tabsOrder.includes('constellation')) {
+        const notesIdx = tabsOrder.indexOf('notes');
+        if (notesIdx !== -1) tabsOrder.splice(notesIdx + 1, 0, 'constellation');
+        else tabsOrder.push('constellation');
+      }
       tabsOrder.forEach(tabName => {
         const card = grid.querySelector(`.sidebar-tab-toggle-card[data-tab-name="${tabName}"]`);
         if (card) {
@@ -1081,6 +1219,10 @@ const SettingsManager = {
       this.switchTab(this.currentTab || 'customization');
     } finally {
       this._renderingInProgress = false;
+    }
+
+    if (typeof App !== 'undefined' && typeof App.updateAllSlidersFill === 'function') {
+      App.updateAllSlidersFill();
     }
   },
 
@@ -1118,7 +1260,7 @@ const SettingsManager = {
         sidebarDayProgressEnabled: 'Affichage de la progression mis à jour',
         sidebarMiniPlayerEnabled: 'Affichage du mini-lecteur mis à jour',
         performanceMode: value === 'potato'
-          ? 'Mode PC de merde activé : priorité absolue à la fluidité'
+          ? 'Mode économie extrême activé : priorité absolue à la fluidité'
           : (value === 'economy' ? 'Mode Économie activé' : 'Mode Normal restauré'),
         launchOnStartup: value ? 'Démarrage Windows activé' : 'Démarrage Windows désactivé',
         runInBackgroundOnClose: value ? 'Veille en arrière-plan activée à la fermeture' : 'Fermeture complète activée',
@@ -1262,15 +1404,20 @@ const SettingsManager = {
         if (prefs) {
           if (chkStartup && typeof prefs.launchOnStartup === 'boolean') {
             chkStartup.checked = prefs.launchOnStartup;
+            const currentSettings = StorageManager.getSettings();
+            if (currentSettings.launchOnStartup !== prefs.launchOnStartup) {
+              currentSettings.launchOnStartup = prefs.launchOnStartup;
+              StorageManager.saveSettings(currentSettings);
+            }
           }
           if (startupNote) {
             if (!prefs.startupSupported) {
               startupNote.textContent = "Cette option est réservée aux ordinateurs sous Windows.";
               if (chkStartup) chkStartup.disabled = true;
             } else if (!prefs.isPackaged) {
-              startupNote.textContent = "Mode développement détecté : l'entrée Windows pointe vers cette session locale (en version installée, elle pointera directement vers Antigravité).";
+              startupNote.textContent = "Mode développement détecté : le raccourci pointe vers cette session locale (en version installée, il pointera directement vers Antigravité).";
             } else {
-              startupNote.textContent = "Démarre Antigravité avec la fenêtre ouverte normalement à l'ouverture de session Windows.";
+              startupNote.textContent = "Démarre Antigravité avec la fenêtre ouverte normalement à l'ouverture de session Windows (dossier Démarrage et registre).";
             }
           }
           if (pathEl && prefs.activeBackupDir) {
@@ -1579,14 +1726,14 @@ const SettingsManager = {
     let ok = true;
     if (typeof App !== 'undefined' && typeof App.confirm === 'function') {
       ok = await App.confirm({
-        title: "Retour aux paramètres d'usine",
-        message: "Rétablir uniquement les réglages de l'onglet « Paramètres sérieux » à leur comportement d'origine (Mode Normal, veille en arrière-plan, sauvegardes 24 h / 20 versions, dossier par défaut, animations/aperçus/survols actifs) ?\n\nVos tâches, projets, agenda, notes, sauvegardes et votre personnalisation visuelle restent intacts.",
-        confirmText: "Rétablir l'usine",
+        title: "Retour aux réglages d'origine",
+        message: "Rétablir uniquement les réglages de l'onglet « Système & Performances » à leur comportement d'origine (Mode Normal, veille en arrière-plan, sauvegardes 24 h / 20 versions, dossier par défaut, animations/aperçus/survols actifs) ?\n\nVos tâches, projets, agenda, notes, sauvegardes et votre personnalisation visuelle restent intacts.",
+        confirmText: "Rétablir les réglages",
         danger: true,
         icon: "↺"
       });
     } else if (typeof confirm === 'function') {
-      ok = confirm("Rétablir les paramètres sérieux à leur valeur d'usine ?");
+      ok = confirm("Rétablir les réglages système à leur valeur d'origine ?");
     }
     if (!ok) return;
 
@@ -1609,7 +1756,7 @@ const SettingsManager = {
     this.refreshSeriousTabLiveData();
 
     if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
-      App.showToast("Paramètres sérieux rétablis aux valeurs d'usine", "success");
+      App.showToast("Réglages système rétablis aux valeurs d'origine", "success");
     }
   },
 
@@ -1632,10 +1779,1149 @@ const SettingsManager = {
       light: 'Clair Épuré'
     };
 
+    const isHexAccent = typeof settings.accentColor === 'string' && settings.accentColor.startsWith('#');
+    let customAccentName = null;
+    if (isHexAccent && Array.isArray(settings.customAccentColors)) {
+      const found = settings.customAccentColors.find(c => c.hex.toLowerCase() === settings.accentColor.toLowerCase());
+      if (found) customAccentName = found.name;
+    }
+    const accentDisplayName = customAccentName || accentNames[settings.accentColor] || settings.accentColor;
+
     const descEl = document.getElementById('preview-summary-desc');
     if (descEl) {
-      descEl.textContent = `Thème : ${themeNames[settings.theme] || settings.theme} • Accent : ${accentNames[settings.accentColor] || settings.accentColor} • Densité : ${settings.density === 'compact' ? 'Compacte' : 'Confortable'} • Texte : ${settings.fontSize === 'small' ? 'Compact (90%)' : settings.fontSize === 'large' ? 'Grand (110%)' : 'Normal (100%)'}`;
+      descEl.textContent = `Thème : ${themeNames[settings.theme] || settings.theme} • Accent : ${accentDisplayName} • Densité : ${settings.density === 'compact' ? 'Compacte' : 'Confortable'} • Texte : ${settings.fontSize === 'small' ? 'Compact (90%)' : settings.fontSize === 'large' ? 'Grand (110%)' : 'Normal (100%)'}`;
     }
+  },
+
+  /* ==========================================================================
+     Personnalisation Chromatique Libre & Nuancier Favori (v1.3.0)
+     ========================================================================== */
+
+  bindCustomAccentEvents() {
+    const hexInput = document.getElementById('accent-color-hex-input');
+    const nameInput = document.getElementById('accent-color-name-input');
+    const btnSave = document.getElementById('btn-save-custom-accent');
+    const btnOpenPalette = document.getElementById('btn-open-custom-accent-palette');
+
+    // Bouton d'ouverture de la palette intégrée juste à côté
+    if (btnOpenPalette) {
+      btnOpenPalette.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openCustomAccentPopover(null, btnOpenPalette);
+      });
+    }
+
+    if (hexInput) {
+      const handleHexChange = () => {
+        let val = hexInput.value.trim().toUpperCase();
+        if (!val.startsWith('#') && val.length > 0) val = '#' + val;
+        if (/^#[0-9A-F]{6}$/i.test(val)) {
+          hexInput.value = val;
+          const preview = document.getElementById('custom-accent-picker-preview');
+          if (preview) preview.style.background = val;
+          this.updateSetting('accentColor', val, true);
+        }
+      };
+      hexInput.addEventListener('input', handleHexChange);
+      hexInput.addEventListener('change', handleHexChange);
+      hexInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (btnSave) btnSave.click();
+        }
+      });
+    }
+
+    if (nameInput) {
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (btnSave) btnSave.click();
+        }
+      });
+    }
+
+    if (btnSave) {
+      btnSave.addEventListener('click', (e) => {
+        e.preventDefault();
+        let hex = hexInput ? hexInput.value.trim().toUpperCase() : '';
+        if (!hex.startsWith('#') && hex.length > 0) hex = '#' + hex;
+        if (!/^#[0-9A-F]{6}$/i.test(hex)) {
+          if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+            App.showToast("Format de couleur invalide (ex: #38BDF8)", "warning");
+          }
+          return;
+        }
+
+        const name = (nameInput && nameInput.value.trim()) || ('Teinte ' + hex);
+        this.addCustomAccentColor(hex, name, this.editingCustomAccentId);
+        this.editingCustomAccentId = null;
+        if (nameInput) nameInput.value = '';
+        const btnText = btnSave.querySelector('span');
+        if (btnText) btnText.textContent = 'Enregistrer';
+      });
+    }
+
+    this.initCustomAccentPopoverEvents();
+  },
+
+  hslToHex(h, s, l) {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return (`#${f(0)}${f(8)}${f(4)}`).toUpperCase();
+  },
+
+  hexToHsl(hex) {
+    let c = (hex || '#38BDF8').replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const r = parseInt(c.substring(0, 2), 16) / 255;
+    const g = parseInt(c.substring(2, 4), 16) / 255;
+    const b = parseInt(c.substring(4, 6), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return {
+      h: Math.round(h * 360),
+      s: Math.round(s * 100),
+      l: Math.round(l * 100)
+    };
+  },
+
+  _getApp() {
+    if (typeof App !== 'undefined') return App;
+    if (typeof window !== 'undefined' && window.App) return window.App;
+    if (typeof global !== 'undefined' && global.App) return global.App;
+    try {
+      if (typeof require === 'function') {
+        return require('./app.js');
+      }
+    } catch (e) {}
+    return null;
+  },
+
+  openCustomAccentPopover(customId = null, targetElement = null) {
+    const settings = StorageManager.getSettings();
+    this.popoverEditingId = customId || null;
+    this.popoverOriginalAccent = settings.accentColor || '#38BDF8';
+
+    let currentColor = '#38BDF8';
+    let currentName = '';
+
+    if (customId && Array.isArray(settings.customAccentColors)) {
+      const found = settings.customAccentColors.find(c => c.id === customId);
+      if (found) {
+        currentColor = found.hex;
+        currentName = found.name || '';
+      }
+    } else if (settings.accentColor && settings.accentColor.startsWith('#')) {
+      currentColor = settings.accentColor;
+    }
+
+    // Résolution sécurisée de l'élément cible s'il est manquant ou non attaché
+    if (!targetElement || (typeof targetElement.getBoundingClientRect === 'function' && targetElement.getBoundingClientRect().width === 0 && targetElement.getBoundingClientRect().height === 0)) {
+      if (customId && typeof document !== 'undefined') {
+        const bubble = document.querySelector(`.accent-option-bubble[data-custom-accent-id="${customId}"]`);
+        if (bubble) {
+          targetElement = bubble.querySelector('.bubble-edit-btn') || bubble;
+        }
+      }
+      if (!targetElement && typeof document !== 'undefined') {
+        targetElement = document.getElementById('btn-open-custom-accent-palette');
+      }
+    }
+
+    const app = this._getApp();
+    if (app && typeof app.openColorPicker === 'function') {
+      app.openColorPicker({
+        targetElement: targetElement,
+        initialColor: currentColor,
+        title: customId ? 'Modifier la teinte' : 'Couleur personnalisée',
+        applyLabel: customId ? 'Mettre à jour' : 'Enregistrer',
+        showNameInput: true,
+        initialName: currentName,
+        namePlaceholder: 'Nom de la teinte',
+        onColorChange: (val) => {
+          const mainHexInput = (typeof document !== 'undefined') ? document.getElementById('accent-color-hex-input') : null;
+          const mainPreview = (typeof document !== 'undefined') ? document.getElementById('custom-accent-picker-preview') : null;
+          if (mainHexInput) mainHexInput.value = val;
+          if (mainPreview) mainPreview.style.background = val;
+          // Prévisualisation en direct sans détruire le DOM
+          const s = StorageManager.getSettings();
+          s.accentColor = val;
+          if (typeof App !== 'undefined' && typeof App.applyAppearanceSettings === 'function') {
+            App.applyAppearanceSettings(s);
+          }
+        },
+        onApply: (hex, name) => {
+          this.addCustomAccentColor(hex, name, customId);
+        },
+        onCancel: (initialVal) => {
+          if (this.popoverOriginalAccent) {
+            this.updateSetting('accentColor', this.popoverOriginalAccent, true);
+          }
+        }
+      });
+    }
+  },
+
+  closeCustomAccentPopover(revert = false) {
+    const app = this._getApp();
+    if (app && typeof app.closeColorPicker === 'function') {
+      app.closeColorPicker(revert);
+    }
+    this.popoverEditingId = null;
+  },
+
+  updatePopoverColor(hex, source = null) {
+    const app = this._getApp();
+    if (app && typeof app.updateColorPickerValues === 'function') {
+      app.updateColorPickerValues(hex, source);
+    }
+  },
+
+  initCustomAccentPopoverEvents() {
+    const app = this._getApp();
+    if (app && typeof app.initColorPickerEvents === 'function') {
+      app.initColorPickerEvents();
+    }
+  },
+
+  addCustomAccentColor(hex, name, editingId = null) {
+    if (!hex) return;
+    const cleanHex = hex.trim().toUpperCase();
+    const settings = StorageManager.getSettings();
+    if (!Array.isArray(settings.customAccentColors)) {
+      settings.customAccentColors = [];
+    }
+
+    let existing = null;
+    if (editingId) {
+      existing = settings.customAccentColors.find(c => c.id === editingId);
+    }
+    if (!existing) {
+      existing = settings.customAccentColors.find(c => c.hex === cleanHex);
+    }
+
+    let id;
+    if (existing) {
+      existing.hex = cleanHex;
+      existing.name = name || existing.name || cleanHex;
+      id = existing.id;
+    } else {
+      id = 'cac_' + Date.now();
+      settings.customAccentColors.push({
+        id: id,
+        hex: cleanHex,
+        name: name || cleanHex
+      });
+    }
+
+    settings.accentColor = cleanHex;
+    StorageManager.saveSettings(settings);
+
+    if (typeof App !== 'undefined' && typeof App.applyAppearanceSettings === 'function') {
+      App.applyAppearanceSettings(settings);
+    }
+
+    if (typeof document !== 'undefined') {
+      const btnSave = document.getElementById('btn-save-custom-accent');
+      if (btnSave) {
+        const btnText = btnSave.querySelector('span');
+        if (btnText) btnText.textContent = 'Enregistrer';
+      }
+    }
+
+    this.render();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(`Teinte "${name || cleanHex}" enregistrée`, 'success');
+    }
+  },
+
+  editCustomAccentColor(id, targetElement = null) {
+    if (!id) return;
+    const bubble = targetElement || (typeof document !== 'undefined' ? (document.querySelector(`.accent-option-bubble[data-custom-accent-id="${id}"] .bubble-edit-btn`) || document.querySelector(`.accent-option-bubble[data-custom-accent-id="${id}"]`)) : null);
+    this.openCustomAccentPopover(id, bubble);
+  },
+
+  updateCustomAccentColorHex(id, newHex) {
+    if (!id || !newHex) return;
+    const cleanHex = newHex.trim().toUpperCase();
+    const settings = StorageManager.getSettings();
+    if (!Array.isArray(settings.customAccentColors)) return;
+    const found = settings.customAccentColors.find(c => c.id === id);
+    if (!found) return;
+
+    found.hex = cleanHex;
+    settings.accentColor = cleanHex;
+    StorageManager.saveSettings(settings);
+
+    if (typeof App !== 'undefined' && typeof App.applyAppearanceSettings === 'function') {
+      App.applyAppearanceSettings(settings);
+    }
+
+    this.editingCustomAccentId = null;
+    if (typeof document !== 'undefined') {
+      const btnSave = document.getElementById('btn-save-custom-accent');
+      if (btnSave) {
+        const btnText = btnSave.querySelector('span');
+        if (btnText) btnText.textContent = 'Enregistrer';
+      }
+    }
+
+    this.render();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(`Teinte "${found.name || cleanHex}" mise à jour`, 'success');
+    }
+  },
+
+  deleteCustomAccentColor(id) {
+    if (!id) return;
+    const settings = StorageManager.getSettings();
+    if (!Array.isArray(settings.customAccentColors)) return;
+
+    const idx = settings.customAccentColors.findIndex(c => c.id === id);
+    if (idx === -1) return;
+
+    const removed = settings.customAccentColors.splice(idx, 1)[0];
+
+    if (settings.accentColor === removed.hex) {
+      settings.accentColor = 'blue';
+    }
+
+    StorageManager.saveSettings(settings);
+
+    if (typeof App !== 'undefined' && typeof App.applyAppearanceSettings === 'function') {
+      App.applyAppearanceSettings(settings);
+    }
+
+    this.render();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(`Teinte "${removed.name || removed.hex}" supprimée`, 'info');
+    }
+  },
+
+  renderCustomAccentColors(settings) {
+    const section = document.getElementById('custom-accent-colors-section');
+    const list = document.getElementById('custom-accent-colors-list');
+    const countEl = document.getElementById('custom-accent-colors-count');
+    if (!section || !list) return;
+
+    const colors = Array.isArray(settings.customAccentColors) ? settings.customAccentColors : [];
+    if (colors.length === 0) {
+      section.style.display = 'none';
+      list.innerHTML = '';
+      if (countEl) countEl.textContent = '';
+      return;
+    }
+
+    section.style.display = 'block';
+    if (countEl) countEl.textContent = `(${colors.length})`;
+
+    list.innerHTML = colors.map(c => {
+      const isActive = settings.accentColor === c.hex;
+      return `
+        <div class="accent-option-bubble is-custom ${isActive ? 'active' : ''}"
+             data-accent-val="${c.hex}"
+             data-custom-accent-id="${c.id}"
+             style="--bubble-color: ${c.hex};"
+             title="${c.name || c.hex}">
+          <span class="bubble-dot"></span>
+          <span class="bubble-label">${c.name || c.hex}</span>
+          <span class="bubble-check">✓</span>
+          <button type="button" class="bubble-edit-btn" data-custom-id="${c.id}" title="Modifier cette teinte" aria-label="Modifier">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </button>
+          <button type="button" class="bubble-delete-btn" title="Supprimer cette teinte" aria-label="Supprimer">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      `;
+    }).join('');
+  },
+
+  /* ==========================================================================
+     Studio de Création de Fond d'Écran Génératif CSS (v1.3.0)
+     ========================================================================== */
+
+  studioConfig: {
+    type: 'mesh',
+    colorBase: '#070b14',
+    color1: '#6366f1',
+    color2: '#38bdf8',
+    color3: '#ec4899',
+    angle: 135,
+    size: 24,
+    intensity: 80,
+    blur: 0,
+    vignette: false,
+    name: 'Ambiance Nébuleuse'
+  },
+  _studioEventsBound: false,
+
+  hexToRgba(hex, alpha = 1) {
+    if (!hex || typeof hex !== 'string') return `rgba(56, 189, 248, ${alpha})`;
+    let clean = hex.trim().replace(/^#/, '');
+    if (clean.length === 3) {
+      clean = clean.split('').map(ch => ch + ch).join('');
+    }
+    const num = parseInt(clean, 16);
+    if (isNaN(num) || clean.length !== 6) return `rgba(56, 189, 248, ${alpha})`;
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  },
+
+  openWallpaperStudioModal() {
+    const modal = document.getElementById('wallpaper-studio-modal');
+    if (!modal) return;
+    this.bindStudioEventsOnce();
+    this.syncStudioInputsWithConfig();
+    this.updateStudioPreview();
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    if (typeof App !== 'undefined' && typeof App.updateAllSlidersFill === 'function') {
+      App.updateAllSlidersFill();
+    }
+  },
+
+  closeWallpaperStudioModal() {
+    const modal = document.getElementById('wallpaper-studio-modal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+    this.studioConfig.editingId = null;
+    const app = this._getApp();
+    if (app && typeof app.closeColorPicker === 'function') {
+      app.closeColorPicker(true);
+    }
+  },
+
+  syncStudioInputsWithConfig() {
+    const cfg = this.studioConfig;
+
+    document.querySelectorAll('.studio-type-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.type === cfg.type);
+    });
+
+    const baseInput = document.getElementById('studio-color-base');
+    if (baseInput) {
+      baseInput.value = cfg.colorBase;
+      baseInput.style.background = cfg.colorBase;
+    }
+    document.querySelectorAll('.studio-base-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.color.toLowerCase() === cfg.colorBase.toLowerCase());
+    });
+
+    const c1Input = document.getElementById('studio-color-1');
+    const h1Input = document.getElementById('studio-hex-1');
+    if (c1Input) {
+      c1Input.value = cfg.color1;
+      c1Input.style.background = cfg.color1;
+    }
+    if (h1Input) h1Input.value = cfg.color1.toUpperCase();
+
+    const c2Input = document.getElementById('studio-color-2');
+    const h2Input = document.getElementById('studio-hex-2');
+    if (c2Input) {
+      c2Input.value = cfg.color2;
+      c2Input.style.background = cfg.color2;
+    }
+    if (h2Input) h2Input.value = cfg.color2.toUpperCase();
+
+    const c3Input = document.getElementById('studio-color-3');
+    const h3Input = document.getElementById('studio-hex-3');
+    if (c3Input) {
+      c3Input.value = cfg.color3;
+      c3Input.style.background = cfg.color3;
+    }
+    if (h3Input) h3Input.value = cfg.color3.toUpperCase();
+
+    const angleSlider = document.getElementById('studio-param-angle');
+    const angleVal = document.getElementById('studio-param-angle-val');
+    if (angleSlider) angleSlider.value = cfg.angle;
+    if (angleVal) angleVal.textContent = `${cfg.angle}°`;
+
+    const sizeSlider = document.getElementById('studio-param-size');
+    const sizeVal = document.getElementById('studio-param-size-val');
+    if (sizeSlider) sizeSlider.value = cfg.size;
+    if (sizeVal) sizeVal.textContent = `${cfg.size} px`;
+
+    const intensitySlider = document.getElementById('studio-param-intensity');
+    const intensityVal = document.getElementById('studio-param-intensity-val');
+    if (intensitySlider) intensitySlider.value = cfg.intensity !== undefined ? cfg.intensity : 80;
+    if (intensityVal) intensityVal.textContent = `${intensitySlider ? intensitySlider.value : 80}%`;
+
+    const blurSlider = document.getElementById('studio-param-blur');
+    const blurVal = document.getElementById('studio-param-blur-val');
+    if (blurSlider) blurSlider.value = cfg.blur || 0;
+    if (blurVal) blurVal.textContent = `${cfg.blur || 0} px`;
+
+    const vignetteToggle = document.getElementById('studio-toggle-vignette');
+    if (vignetteToggle) vignetteToggle.checked = cfg.vignette === true;
+
+    const angleRow = document.getElementById('studio-param-angle-row');
+    const sizeRow = document.getElementById('studio-param-size-row');
+    const c2Group = document.getElementById('studio-color-2-group');
+    const c3Group = document.getElementById('studio-color-3-group');
+
+    if (angleRow) {
+      angleRow.style.display = (cfg.type === 'linear' || cfg.type === 'aurora' || cfg.type === 'stripes') ? 'block' : 'none';
+    }
+    if (sizeRow) {
+      sizeRow.style.display = (cfg.type === 'dots' || cfg.type === 'grid' || cfg.type === 'stripes' || cfg.type === 'waves' || cfg.type === 'particles') ? 'block' : 'none';
+    }
+    if (c3Group) {
+      c3Group.style.display = (cfg.type === 'dots' || cfg.type === 'grid' || cfg.type === 'waves') ? 'none' : 'block';
+    }
+
+    const nameInput = document.getElementById('studio-wallpaper-name-input');
+    if (nameInput) nameInput.value = cfg.name || 'Ambiance Personnalisée';
+  },
+
+  generateStudioCss(cfg) {
+    const type = cfg.type || 'mesh';
+    const cBase = cfg.colorBase || '#070b14';
+    const c1 = cfg.color1 || '#6366f1';
+    const c2 = cfg.color2 || '#38bdf8';
+    const c3 = cfg.color3 || '#ec4899';
+    const angle = cfg.angle !== undefined ? cfg.angle : 135;
+    const size = cfg.size !== undefined ? cfg.size : 24;
+    const intensity = cfg.intensity !== undefined ? (Number(cfg.intensity) / 100) : 0.8;
+    const vignette = cfg.vignette === true;
+
+    let css = '';
+    let patternSize = 'cover';
+    let patternRepeat = 'no-repeat';
+
+    switch (type) {
+      case 'mesh': {
+        const a1 = this.hexToRgba(c1, Math.min(1, 0.75 * (intensity / 0.8)));
+        const a2 = this.hexToRgba(c2, Math.min(1, 0.65 * (intensity / 0.8)));
+        const a3 = this.hexToRgba(c3, Math.min(1, 0.60 * (intensity / 0.8)));
+        css = `radial-gradient(circle at 18% 22%, ${a1} 0%, transparent 48%), ` +
+              `radial-gradient(circle at 82% 28%, ${a2} 0%, transparent 45%), ` +
+              `radial-gradient(circle at 50% 82%, ${a3} 0%, transparent 52%), ` +
+              `${cBase}`;
+        break;
+      }
+      case 'linear': {
+        css = `linear-gradient(${angle}deg, ${cBase} 0%, ${c1} 40%, ${c2} 75%, ${c3} 100%)`;
+        break;
+      }
+      case 'radial': {
+        const a1 = this.hexToRgba(c1, Math.min(1, 0.90 * (intensity / 0.8)));
+        const a2 = this.hexToRgba(c2, Math.min(1, 0.45 * (intensity / 0.8)));
+        css = `radial-gradient(circle at 50% 40%, ${a1} 0%, ${a2} 45%, ${cBase} 85%)`;
+        break;
+      }
+      case 'aurora': {
+        const a1 = this.hexToRgba(c1, Math.min(1, 0.70 * (intensity / 0.8)));
+        const a2 = this.hexToRgba(c2, Math.min(1, 0.65 * (intensity / 0.8)));
+        const a3 = this.hexToRgba(c3, Math.min(1, 0.55 * (intensity / 0.8)));
+        css = `linear-gradient(${angle}deg, transparent 15%, ${a1} 42%, ${a2} 58%, transparent 80%), ` +
+              `linear-gradient(${angle + 35}deg, transparent 10%, ${a3} 40%, transparent 68%), ` +
+              `radial-gradient(ellipse at 50% 0%, ${a2} 0%, transparent 60%), ` +
+              `${cBase}`;
+        break;
+      }
+      case 'waves': {
+        const waveCol = this.hexToRgba(c1, Math.min(1, 0.32 * (intensity / 0.8)));
+        const glow = this.hexToRgba(c2, Math.min(1, 0.30 * (intensity / 0.8)));
+        css = `repeating-radial-gradient(circle at 50% 50%, transparent, transparent ${size}px, ${waveCol} ${size}px, ${waveCol} ${size + 2}px), ` +
+              `radial-gradient(circle at 50% 50%, ${glow} 0%, transparent 70%), ` +
+              `${cBase}`;
+        break;
+      }
+      case 'particles': {
+        const star1 = this.hexToRgba(c1, Math.min(1, 0.85 * (intensity / 0.8)));
+        const star2 = this.hexToRgba(c2, Math.min(1, 0.75 * (intensity / 0.8)));
+        const neb = this.hexToRgba(c3, Math.min(1, 0.40 * (intensity / 0.8)));
+        css = `radial-gradient(1px 1px at 20px 30px, ${star1}, transparent), ` +
+              `radial-gradient(1.5px 1.5px at 70px 90px, ${star2}, transparent), ` +
+              `radial-gradient(1px 1px at 130px 45px, rgba(255,255,255,0.85), transparent), ` +
+              `radial-gradient(1.5px 1.5px at 170px 140px, ${star1}, transparent), ` +
+              `radial-gradient(circle at 75% 25%, ${neb} 0%, transparent 55%), ` +
+              `${cBase}`;
+        patternSize = `${Math.max(80, size * 4)}px ${Math.max(80, size * 4)}px, ${Math.max(80, size * 4)}px ${Math.max(80, size * 4)}px, ${Math.max(80, size * 4)}px ${Math.max(80, size * 4)}px, ${Math.max(80, size * 4)}px ${Math.max(80, size * 4)}px, 100% 100%, 100% 100%`;
+        patternRepeat = 'repeat, repeat, repeat, repeat, no-repeat, no-repeat';
+        break;
+      }
+      case 'dots': {
+        const dotColor = this.hexToRgba(c1, Math.min(1, 0.45 * (intensity / 0.8)));
+        const glow = this.hexToRgba(c2, Math.min(1, 0.25 * (intensity / 0.8)));
+        css = `radial-gradient(${dotColor} 1.5px, transparent 1.5px), radial-gradient(circle at 80% 20%, ${glow} 0%, transparent 60%), ${cBase}`;
+        patternSize = `${size}px ${size}px, 100% 100%, 100% 100%`;
+        patternRepeat = 'repeat, no-repeat, no-repeat';
+        break;
+      }
+      case 'grid': {
+        const lineCol = this.hexToRgba(c1, Math.min(1, 0.22 * (intensity / 0.8)));
+        const glow = this.hexToRgba(c2, Math.min(1, 0.20 * (intensity / 0.8)));
+        css = `linear-gradient(${lineCol} 1px, transparent 1px), linear-gradient(90deg, ${lineCol} 1px, transparent 1px), radial-gradient(circle at 50% 50%, ${glow} 0%, transparent 70%), ${cBase}`;
+        patternSize = `${size}px ${size}px, ${size}px ${size}px, 100% 100%, 100% 100%`;
+        patternRepeat = 'repeat, repeat, no-repeat, no-repeat';
+        break;
+      }
+      case 'stripes': {
+        const stripeCol = this.hexToRgba(c1, Math.min(1, 0.25 * (intensity / 0.8)));
+        css = `repeating-linear-gradient(${angle}deg, ${cBase}, ${cBase} 10px, ${stripeCol} 10px, ${stripeCol} ${size}px), ${cBase}`;
+        break;
+      }
+      default:
+        css = `linear-gradient(135deg, ${cBase}, ${c1})`;
+    }
+
+    if (vignette) {
+      css = `radial-gradient(ellipse at center, transparent 35%, rgba(0, 0, 0, 0.70) 100%), ` + css;
+      if (patternSize !== 'cover') {
+        patternSize = '100% 100%, ' + patternSize;
+        patternRepeat = 'no-repeat, ' + patternRepeat;
+      }
+    }
+
+    return { css, patternSize, patternRepeat };
+  },
+
+  updateStudioPreview() {
+    const gen = this.generateStudioCss(this.studioConfig);
+    const box = document.getElementById('studio-live-preview-box');
+    const canvas = document.getElementById('studio-preview-canvas') || box;
+    if (box) {
+      box.style.background = gen.css;
+      box.style.backgroundSize = gen.patternSize;
+      box.style.backgroundRepeat = gen.patternRepeat;
+      box.style.backgroundPosition = 'center';
+    }
+    if (canvas && canvas !== box) {
+      canvas.style.background = gen.css;
+      canvas.style.backgroundSize = gen.patternSize;
+      canvas.style.backgroundRepeat = gen.patternRepeat;
+      canvas.style.backgroundPosition = 'center';
+      canvas.style.filter = this.studioConfig.blur > 0 ? `blur(${this.studioConfig.blur}px)` : 'none';
+    }
+  },
+
+  applyStudioPreviewToApp() {
+    const gen = this.generateStudioCss(this.studioConfig);
+    let wallpaperLayer = document.getElementById('app-wallpaper-layer');
+    if (!wallpaperLayer) {
+      wallpaperLayer = document.createElement('div');
+      wallpaperLayer.id = 'app-wallpaper-layer';
+      wallpaperLayer.className = 'app-wallpaper-layer';
+      document.body.prepend(wallpaperLayer);
+    }
+    wallpaperLayer.style.background = gen.css;
+    wallpaperLayer.style.backgroundSize = gen.patternSize;
+    wallpaperLayer.style.backgroundRepeat = gen.patternRepeat;
+    wallpaperLayer.style.backgroundPosition = 'center';
+    wallpaperLayer.style.filter = this.studioConfig.blur > 0 ? `blur(${this.studioConfig.blur}px)` : 'none';
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast("Aperçu en plein écran appliqué", "info");
+    }
+  },
+
+  applyStudioPalette(presetKey) {
+    const PALETTES = {
+      cosmos: { base: '#070b14', c1: '#6366f1', c2: '#38bdf8', c3: '#ec4899', name: 'Cosmos' },
+      aurora: { base: '#031713', c1: '#10b981', c2: '#06b6d4', c3: '#84cc16', name: 'Boréale' },
+      sunset: { base: '#120914', c1: '#f59e0b', c2: '#ef4444', c3: '#8b5cf6', name: 'Crépuscule' },
+      ocean: { base: '#040d1a', c1: '#3b82f6', c2: '#06b6d4', c3: '#6366f1', name: 'Abysses' },
+      cyber: { base: '#10051a', c1: '#a855f7', c2: '#ec4899', c3: '#38bdf8', name: 'Cyberpunk' },
+      obsidian: { base: '#0b0f17', c1: '#94a3b8', c2: '#64748b', c3: '#475569', name: 'Anthracite' },
+      anthracite: { base: '#0b0f17', c1: '#94a3b8', c2: '#64748b', c3: '#475569', name: 'Anthracite' }
+    };
+
+    const p = PALETTES[presetKey];
+    if (!p) return;
+
+    this.studioConfig.colorBase = p.base;
+    this.studioConfig.color1 = p.c1;
+    this.studioConfig.color2 = p.c2;
+    this.studioConfig.color3 = p.c3;
+
+    document.querySelectorAll('.studio-palette-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.preset === presetKey);
+    });
+
+    this.syncStudioInputsWithConfig();
+    this.updateStudioPreview();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(`Harmonie "${p.name}" appliquée`, 'info');
+    }
+  },
+
+  swapStudioColors() {
+    const tmp = this.studioConfig.color1;
+    this.studioConfig.color1 = this.studioConfig.color2;
+    this.studioConfig.color2 = tmp;
+
+    this.syncStudioInputsWithConfig();
+    this.updateStudioPreview();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast("Teintes 1 et 2 inversées", "info");
+    }
+  },
+
+  randomizeStudioColors() {
+    const HARMONIES = [
+      { c1: '#6366f1', c2: '#38bdf8', c3: '#ec4899' },
+      { c1: '#10b981', c2: '#06b6d4', c3: '#3b82f6' },
+      { c1: '#f59e0b', c2: '#ef4444', c3: '#8b5cf6' },
+      { c1: '#8b5cf6', c2: '#d946ef', c3: '#06b6d4' },
+      { c1: '#14b8a6', c2: '#10b981', c3: '#84cc16' },
+      { c1: '#ec4899', c2: '#f43f5e', c3: '#fb923c' },
+      { c1: '#3b82f6', c2: '#8b5cf6', c3: '#6366f1' },
+      { c1: '#a855f7', c2: '#ec4899', c3: '#38bdf8' }
+    ];
+
+    const pick = HARMONIES[Math.floor(Math.random() * HARMONIES.length)];
+    this.studioConfig.color1 = pick.c1;
+    this.studioConfig.color2 = pick.c2;
+    this.studioConfig.color3 = pick.c3;
+
+    document.querySelectorAll('.studio-palette-chip').forEach(chip => chip.classList.remove('active'));
+
+    this.syncStudioInputsWithConfig();
+    this.updateStudioPreview();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast("Harmonie aléatoire générée", "info");
+    }
+  },
+
+  bindStudioEventsOnce() {
+    if (this._studioEventsBound) return;
+    this._studioEventsBound = true;
+
+    const modal = document.getElementById('wallpaper-studio-modal');
+    if (!modal) return;
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) this.closeWallpaperStudioModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.classList.contains('active')) {
+        this.closeWallpaperStudioModal();
+      }
+    });
+
+    const typeNames = {
+      mesh: 'Ambiance Nébuleuse',
+      linear: 'Dégradé Linéaire',
+      radial: 'Aura Radiale',
+      aurora: 'Aurore Boréale',
+      waves: 'Ondes Sonores',
+      particles: 'Poussière Stellaire',
+      dots: 'Dots Matrix',
+      grid: 'Grille Blueprint',
+      stripes: 'Lignes Fines'
+    };
+
+    modal.querySelectorAll('.studio-type-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const type = btn.dataset.type;
+        if (!type) return;
+        this.studioConfig.type = type;
+
+        const nameInput = document.getElementById('studio-wallpaper-name-input');
+        if (nameInput && Object.values(typeNames).includes(nameInput.value.trim())) {
+          nameInput.value = typeNames[type] || 'Ambiance Personnalisée';
+          this.studioConfig.name = nameInput.value;
+        }
+
+        this.syncStudioInputsWithConfig();
+        this.updateStudioPreview();
+      });
+    });
+
+    modal.querySelectorAll('.studio-palette-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.preventDefault();
+        const pKey = chip.dataset.preset;
+        if (pKey) this.applyStudioPalette(pKey);
+      });
+    });
+
+    const btnSwap = document.getElementById('btn-studio-swap-colors');
+    if (btnSwap) {
+      btnSwap.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.swapStudioColors();
+      });
+    }
+
+    modal.querySelectorAll('.studio-base-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.preventDefault();
+        const color = chip.dataset.color;
+        if (!color) return;
+        this.studioConfig.colorBase = color;
+        this.syncStudioInputsWithConfig();
+        this.updateStudioPreview();
+      });
+    });
+
+    const basePicker = document.getElementById('studio-color-base');
+    if (basePicker) {
+      basePicker.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const app = this._getApp();
+        if (app && typeof app.openColorPicker === 'function') {
+          app.openColorPicker({
+            targetElement: basePicker,
+            initialColor: this.studioConfig.colorBase || '#070b14',
+            title: 'Fond de base (profondeur)',
+            applyLabel: 'Appliquer',
+            showNameInput: false,
+            onColorChange: (val) => {
+              this.studioConfig.colorBase = val;
+              basePicker.style.background = val;
+              modal.querySelectorAll('.studio-base-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.dataset.color.toLowerCase() === val.toLowerCase());
+              });
+              this.updateStudioPreview();
+            },
+            onApply: (val) => {
+              this.studioConfig.colorBase = val;
+              basePicker.style.background = val;
+              modal.querySelectorAll('.studio-base-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.dataset.color.toLowerCase() === val.toLowerCase());
+              });
+              this.updateStudioPreview();
+            },
+            onCancel: (initialVal) => {
+              this.studioConfig.colorBase = initialVal;
+              basePicker.style.background = initialVal;
+              modal.querySelectorAll('.studio-base-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.dataset.color.toLowerCase() === initialVal.toLowerCase());
+              });
+              this.updateStudioPreview();
+            }
+          });
+        }
+      });
+    }
+
+    const bindColorPair = (pickerId, hexId, key, label) => {
+      const picker = document.getElementById(pickerId);
+      const hexInput = document.getElementById(hexId);
+      if (picker) {
+        picker.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const app = this._getApp();
+          if (app && typeof app.openColorPicker === 'function') {
+            app.openColorPicker({
+              targetElement: picker,
+              initialColor: this.studioConfig[key] || '#6366f1',
+              title: label || 'Teinte de composition',
+              applyLabel: 'Appliquer',
+              showNameInput: false,
+              onColorChange: (val) => {
+                this.studioConfig[key] = val;
+                picker.style.background = val;
+                if (hexInput) hexInput.value = val;
+                this.updateStudioPreview();
+              },
+              onApply: (val) => {
+                this.studioConfig[key] = val;
+                picker.style.background = val;
+                if (hexInput) hexInput.value = val;
+                this.updateStudioPreview();
+              },
+              onCancel: (initialVal) => {
+                this.studioConfig[key] = initialVal;
+                picker.style.background = initialVal;
+                if (hexInput) hexInput.value = initialVal;
+                this.updateStudioPreview();
+              }
+            });
+          }
+        });
+      }
+      if (hexInput) {
+        const onHexChange = () => {
+          let val = hexInput.value.trim().toUpperCase();
+          if (!val.startsWith('#') && val.length > 0) val = '#' + val;
+          if (/^#[0-9A-F]{6}$/i.test(val)) {
+            hexInput.value = val;
+            this.studioConfig[key] = val;
+            if (picker) {
+              picker.value = val;
+              picker.style.background = val;
+            }
+            this.updateStudioPreview();
+          }
+        };
+        hexInput.addEventListener('input', onHexChange);
+        hexInput.addEventListener('change', onHexChange);
+      }
+    };
+
+    bindColorPair('studio-color-1', 'studio-hex-1', 'color1', 'Couleur 1');
+    bindColorPair('studio-color-2', 'studio-hex-2', 'color2', 'Couleur 2');
+    bindColorPair('studio-color-3', 'studio-hex-3', 'color3', 'Couleur 3');
+
+    const angleSlider = document.getElementById('studio-param-angle');
+    if (angleSlider) {
+      angleSlider.addEventListener('input', (e) => {
+        const val = Number(e.target.value);
+        this.studioConfig.angle = val;
+        const valLabel = document.getElementById('studio-param-angle-val');
+        if (valLabel) valLabel.textContent = `${val}°`;
+        this.updateStudioPreview();
+      });
+    }
+
+    const sizeSlider = document.getElementById('studio-param-size');
+    if (sizeSlider) {
+      sizeSlider.addEventListener('input', (e) => {
+        const val = Number(e.target.value);
+        this.studioConfig.size = val;
+        const valLabel = document.getElementById('studio-param-size-val');
+        if (valLabel) valLabel.textContent = `${val} px`;
+        this.updateStudioPreview();
+      });
+    }
+
+    const intensitySlider = document.getElementById('studio-param-intensity');
+    if (intensitySlider) {
+      intensitySlider.addEventListener('input', (e) => {
+        const val = Number(e.target.value);
+        this.studioConfig.intensity = val;
+        const valLabel = document.getElementById('studio-param-intensity-val');
+        if (valLabel) valLabel.textContent = `${val}%`;
+        this.updateStudioPreview();
+      });
+    }
+
+    const blurSlider = document.getElementById('studio-param-blur');
+    if (blurSlider) {
+      blurSlider.addEventListener('input', (e) => {
+        const val = Number(e.target.value);
+        this.studioConfig.blur = val;
+        const valLabel = document.getElementById('studio-param-blur-val');
+        if (valLabel) valLabel.textContent = `${val} px`;
+        this.updateStudioPreview();
+      });
+    }
+
+    const vignetteToggle = document.getElementById('studio-toggle-vignette');
+    if (vignetteToggle) {
+      vignetteToggle.addEventListener('change', (e) => {
+        this.studioConfig.vignette = e.target.checked;
+        this.updateStudioPreview();
+      });
+    }
+
+    const btnRandom = document.getElementById('btn-studio-randomize');
+    if (btnRandom) {
+      btnRandom.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.randomizeStudioColors();
+      });
+    }
+
+    const btnApplyPreview = document.getElementById('btn-studio-apply-preview');
+    if (btnApplyPreview) {
+      btnApplyPreview.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.applyStudioPreviewToApp();
+      });
+    }
+
+    const btnSave = document.getElementById('btn-studio-save-wallpaper');
+    if (btnSave) {
+      btnSave.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.saveStudioWallpaper();
+      });
+    }
+
+    const nameInput = document.getElementById('studio-wallpaper-name-input');
+    if (nameInput) {
+      nameInput.addEventListener('input', (e) => {
+        this.studioConfig.name = e.target.value;
+      });
+    }
+  },
+
+  saveStudioWallpaper() {
+    const nameInput = document.getElementById('studio-wallpaper-name-input');
+    const name = (nameInput && nameInput.value.trim()) || 'Ambiance Personnalisée';
+    const gen = this.generateStudioCss(this.studioConfig);
+    const editingId = this.studioConfig.editingId;
+    const wpId = editingId || ('cwp_' + Date.now());
+
+    const wallpaperData = {
+      id: wpId,
+      name: name,
+      type: this.studioConfig.type,
+      colorBase: this.studioConfig.colorBase,
+      color1: this.studioConfig.color1,
+      color2: this.studioConfig.color2,
+      color3: this.studioConfig.color3,
+      angle: this.studioConfig.angle,
+      size: this.studioConfig.size,
+      intensity: this.studioConfig.intensity,
+      blur: this.studioConfig.blur,
+      vignette: this.studioConfig.vignette,
+      css: gen.css,
+      patternSize: gen.patternSize,
+      patternRepeat: gen.patternRepeat,
+      createdAt: this.studioConfig.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const settings = StorageManager.getSettings();
+    if (!Array.isArray(settings.customWallpapers)) {
+      settings.customWallpapers = [];
+    }
+
+    if (editingId) {
+      const idx = settings.customWallpapers.findIndex(w => w.id === editingId);
+      if (idx !== -1) {
+        settings.customWallpapers[idx] = wallpaperData;
+      } else {
+        settings.customWallpapers.unshift(wallpaperData);
+      }
+    } else {
+      settings.customWallpapers.unshift(wallpaperData);
+    }
+
+    settings.backgroundImage = wpId;
+    StorageManager.saveSettings(settings);
+
+    if (typeof App !== 'undefined' && typeof App.applyAppearanceSettings === 'function') {
+      App.applyAppearanceSettings(settings);
+    }
+
+    this.studioConfig.editingId = null;
+    this.closeWallpaperStudioModal();
+    this.render();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(`Fond d'écran "${name}" ${editingId ? 'mis à jour' : 'enregistré et appliqué'} !`, 'success');
+    }
+  },
+
+  editCustomWallpaper(id) {
+    if (!id) return;
+    const settings = StorageManager.getSettings();
+    if (!Array.isArray(settings.customWallpapers)) return;
+    const wp = settings.customWallpapers.find(w => w.id === id);
+    if (!wp) return;
+
+    this.studioConfig = {
+      type: wp.type || 'mesh',
+      colorBase: wp.colorBase || '#070b14',
+      color1: wp.color1 || '#6366f1',
+      color2: wp.color2 || '#38bdf8',
+      color3: wp.color3 || '#ec4899',
+      angle: wp.angle !== undefined ? wp.angle : 135,
+      size: wp.size !== undefined ? wp.size : 24,
+      intensity: wp.intensity !== undefined ? wp.intensity : 80,
+      blur: wp.blur || 0,
+      vignette: wp.vignette === true,
+      name: wp.name || 'Ambiance Personnalisée',
+      createdAt: wp.createdAt,
+      editingId: wp.id
+    };
+
+    this.openWallpaperStudioModal();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(`Modification du fond "${wp.name}"`, 'info');
+    }
+  },
+
+  deleteCustomWallpaper(id) {
+    if (!id) return;
+    const settings = StorageManager.getSettings();
+    if (!Array.isArray(settings.customWallpapers)) return;
+
+    const idx = settings.customWallpapers.findIndex(w => w.id === id);
+    if (idx === -1) return;
+
+    const removed = settings.customWallpapers.splice(idx, 1)[0];
+
+    if (settings.backgroundImage === id) {
+      settings.backgroundImage = 'none';
+    }
+
+    StorageManager.saveSettings(settings);
+
+    if (typeof App !== 'undefined' && typeof App.applyAppearanceSettings === 'function') {
+      App.applyAppearanceSettings(settings);
+    }
+
+    this.render();
+
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(`Fond d'écran "${removed.name}" supprimé`, 'info');
+    }
+  },
+
+  renderCustomWallpapers(settings) {
+    const section = document.getElementById('custom-wallpapers-section');
+    const grid = document.getElementById('custom-wallpapers-grid');
+    const countEl = document.getElementById('custom-wallpapers-count');
+    if (!section || !grid) return;
+
+    const list = Array.isArray(settings.customWallpapers) ? settings.customWallpapers : [];
+    if (list.length === 0) {
+      section.style.display = 'none';
+      grid.innerHTML = '';
+      if (countEl) countEl.textContent = '';
+      return;
+    }
+
+    section.style.display = 'block';
+    if (countEl) countEl.textContent = `(${list.length})`;
+
+    grid.innerHTML = list.map(w => {
+      const isActive = settings.backgroundImage === w.id;
+      return `
+        <div class="wallpaper-card is-custom ${isActive ? 'active' : ''}" data-wallpaper="${w.id}" data-custom-wp-id="${w.id}" title="${w.name}">
+          <div class="wallpaper-thumb" style="background: ${w.css}; background-size: ${w.patternSize || 'cover'}; background-repeat: ${w.patternRepeat || 'no-repeat'}; background-position: center;"></div>
+          <span class="wallpaper-name">${w.name}</span>
+          <button type="button" class="wallpaper-delete-btn" title="Supprimer ce fond d'écran" aria-label="Supprimer">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <button type="button" class="wallpaper-edit-btn" title="Modifier ce fond d'écran dans le studio" aria-label="Modifier">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </button>
+        </div>
+      `;
+    }).join('');
   }
 };
 
@@ -1645,7 +2931,7 @@ const SettingsManager = {
 const UpdateManager = {
   initialized: false,
   isBusy: false,
-  currentVersion: '1.2.5',
+  currentVersion: '1.3.0',
   isPackaged: false,
   status: 'idle',
   updateInfo: null,
@@ -1758,7 +3044,7 @@ const UpdateManager = {
   async refreshStatus() {
     const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
     if (!updaterApi) {
-      this.currentVersion = '1.2.5';
+      this.currentVersion = '1.3.0';
       this.isPackaged = false;
       this.render();
       return;

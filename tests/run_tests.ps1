@@ -490,6 +490,54 @@ if (Test-Path $nodePath) {
 Assert-Test "Fonctionnalités v1.2.5 (Visibilité dossiers notes, note attachée agenda, cadence horloge 1s et pérennité icône)" $v125FeaturesPass
 
 # -----------------------------------------------------------------------------
+# TEST 34 : Nouveautés v1.3.0 (Démarrage Windows Garanti & Fiabilisation Système)
+# -----------------------------------------------------------------------------
+Write-Host "`n34. Vérification des fonctionnalités v1.3.0..." -ForegroundColor Yellow
+
+$v126FeaturesPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v126_features.js")
+    $v126FeaturesPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Fonctionnalités v1.3.0 (Démarrage Windows garanti dans le dossier Startup, double synchro registre et options sérieuses)" $v126FeaturesPass
+
+# -----------------------------------------------------------------------------
+# TEST 35 : Module Constellation (Mind Map & Arbre Décisionnel Global)
+# -----------------------------------------------------------------------------
+Write-Host "`n35. Vérification du module Constellation..." -ForegroundColor Yellow
+
+$constellationPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_constellation.js")
+    $constellationPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Module Constellation (Mind Map interactive, Arbre horizontal, Constellation rayonnante et passerelles)" $constellationPass
+
+# -----------------------------------------------------------------------------
+# TEST 36 : Contrôles de Fenêtre (Réduire, Agrandir, Fermer & Harmonie Chromatique)
+# -----------------------------------------------------------------------------
+Write-Host "`n36. Vérification des contrôles de fenêtre et raccord chromatique..." -ForegroundColor Yellow
+
+$windowControlsPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_window_controls.js")
+    $windowControlsPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Contrôles de fenêtre (Raccord chromatique absolu, zéro décalage et synchronisation native)" $windowControlsPass
+
+# -----------------------------------------------------------------------------
+# TEST 37 : Nouveautés v1.3.0 UX, Archivage & Constellation Planétaire
+# -----------------------------------------------------------------------------
+Write-Host "`n37. Vérification de l'expérience utilisateur, archivage et gravitation..." -ForegroundColor Yellow
+
+$uxArchivingPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_ux_and_archiving.js")
+    $uxArchivingPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "UX v1.3.0 (Archivage cascade projets/tâches, bouton replier/déplier unique, orbite planétaire & bilan hebdo)" $uxArchivingPass
+
+# -----------------------------------------------------------------------------
 # BILAN
 # -----------------------------------------------------------------------------
 Write-Host "`n==========================================================" -ForegroundColor Cyan

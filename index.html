@@ -76,6 +76,12 @@
           </span>
           <span>Notes</span>
         </li>
+        <li class="nav-item" data-screen="constellation" title="Constellation">
+          <span class="icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17L12 5L19 15Z"/><circle cx="12" cy="5" r="2.5" fill="currentColor"/><circle cx="5" cy="17" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg>
+          </span>
+          <span>Constellation</span>
+        </li>
         <li class="nav-item" data-screen="focus" title="Focus">
           <span class="icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -204,6 +210,20 @@
           <button id="btn-global-quick-add" class="btn btn-primary">
             <span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
             <span>Nouvelle tâche</span>
+          </button>
+        </div>
+
+        <!-- Contrôles intégrés de la fenêtre (Réduire, Agrandir/Restaurer, Fermer) -->
+        <div class="window-controls-container" id="window-controls-container" aria-label="Contrôles de la fenêtre">
+          <button type="button" class="btn-win-control btn-win-minimize" id="btn-win-minimize" title="Réduire" aria-label="Réduire">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 5.5H9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="btn-win-control btn-win-maximize" id="btn-win-maximize" title="Agrandir / Restaurer" aria-label="Agrandir / Restaurer">
+            <svg id="icon-win-maximize" width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="1.5" y="1.5" width="7" height="7" stroke="currentColor" stroke-width="1.2"/></svg>
+            <svg id="icon-win-restore" width="10" height="10" viewBox="0 0 10 10" fill="none" style="display: none;"><path d="M3 1.5H8.5V7M1.5 3H7V8.5H1.5V3Z" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button type="button" class="btn-win-control btn-win-close" id="btn-win-close" title="Fermer" aria-label="Fermer">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2L8 8M8 2L2 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
           </button>
         </div>
       </header>
@@ -344,8 +364,7 @@
             </select>
           </div>
           <div class="tasks-toolbar-actions">
-            <button id="btn-tasks-expand-all" class="btn btn-secondary btn-sm" title="Tout déplier dans l'arborescence"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg> <span>Tout déplier</span></button>
-            <button id="btn-tasks-collapse-all" class="btn btn-secondary btn-sm" title="Tout replier au premier niveau"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg> <span>Tout replier</span></button>
+            <button id="btn-tasks-toggle-collapse" class="btn btn-secondary btn-sm" title="Tout replier au premier niveau"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg> <span>Tout replier</span></button>
             <button id="btn-new-task" class="btn btn-primary btn-sm"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span>Ajouter une tâche</span></button>
           </div>
         </div>
@@ -357,7 +376,18 @@
       <section id="screen-projects" class="screen-view">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap;">
           <p style="color:var(--text-muted); font-size:0.9rem; margin: 0;">Organisez vos activités personnelles par projet avec suivi d'avancement automatique.</p>
-          <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <!-- Filtre Actifs / Archivés -->
+            <div class="filter-group" style="display: inline-flex; align-items: center; gap: 4px;">
+              <button type="button" class="project-filter-chip filter-chip active" id="btn-projects-filter-active" data-filter="active">Actifs</button>
+              <button type="button" class="project-filter-chip filter-chip" id="btn-projects-filter-archived" data-filter="archived">Archivés</button>
+            </div>
+
+            <!-- Déplier / Replier tout (bouton unique toggle) -->
+            <div class="project-collapse-actions" style="display: inline-flex; align-items: center; gap: 4px;">
+              <button type="button" id="btn-projects-toggle-collapse" class="btn btn-secondary btn-sm" title="Tout replier au premier niveau"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg> <span>Tout replier</span></button>
+            </div>
+
             <!-- Bascule d'affichage Grille / Lignes -->
             <div class="project-view-toggle segmented-group" style="display: inline-flex; align-items: center; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 2px; height: 30px; box-sizing: border-box;">
               <button type="button" id="btn-project-view-grid" class="btn-project-view active" data-view="grid" title="Affichage en cases (Grille)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg> <span>Grille</span></button>
@@ -386,12 +416,6 @@
             <button type="button" class="btn-agenda-view" data-view="day">Jour</button>
             <button type="button" class="btn-agenda-view active" data-view="week">Semaine</button>
             <button type="button" class="btn-agenda-view" data-view="month">Mois</button>
-          </div>
-
-          <!-- Légende épurée sans logo -->
-          <div class="agenda-color-legend" style="display: flex; gap: 10px; align-items: center; font-size: 0.75rem;">
-            <span style="display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted);"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #8b5cf6;"></span> Local</span>
-            <span style="display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted);"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #1a73e8;"></span> Google</span>
           </div>
 
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -631,6 +655,94 @@
             </div>
           </div>
           <div id="notes-folders-grid" class="notes-folders-grid"></div>
+        </div>
+      </section>
+
+      <!-- ÉCRAN : CONSTELLATION & MIND MAP INTERACTIVE -->
+      <section id="screen-constellation" class="screen-view">
+        <div class="constellation-screen-wrapper">
+          <!-- Barre d'outils supérieure flottante -->
+          <div class="constellation-toolbar">
+            <!-- Sélecteur de mode de disposition (Arbre horizontal / Constellation rayonnante) -->
+            <div class="constellation-toolbar-group">
+              <div class="segmented-group" id="constellation-mode-segmented">
+                <button type="button" class="btn btn-sm active" id="btn-constellation-mode-tree" data-mode="tree" title="Arbre décisionnel horizontal (de gauche à droite)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                  <span>Arbre décisionnel</span>
+                </button>
+                <button type="button" class="btn btn-sm" id="btn-constellation-mode-radial" data-mode="radial" title="Constellation rayonnante (depuis le centre)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M5 17L12 5L19 15Z"/><circle cx="12" cy="5" r="2.5" fill="currentColor"/><circle cx="5" cy="17" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg>
+                  <span>Constellation rayonnante</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Filtres rapides par type -->
+            <div class="constellation-toolbar-group constellation-filters-group">
+              <button type="button" class="btn btn-sm filter-pill active" id="filter-constellation-projects" data-filter="projects" title="Afficher ou masquer les projets">
+                <span class="filter-dot" style="background-color: #6366f1;"></span>
+                <span>Projets</span>
+              </button>
+              <button type="button" class="btn btn-sm filter-pill active" id="filter-constellation-tasks" data-filter="tasks" title="Afficher ou masquer les tâches">
+                <span class="filter-dot" style="background-color: #38bdf8;"></span>
+                <span>Tâches</span>
+              </button>
+              <button type="button" class="btn btn-sm filter-pill active" id="filter-constellation-events" data-filter="events" title="Afficher ou masquer les créneaux d'agenda">
+                <span class="filter-dot" style="background-color: #8b5cf6;"></span>
+                <span>Agenda</span>
+              </button>
+              <button type="button" class="btn btn-sm filter-pill active" id="filter-constellation-notes" data-filter="notes" title="Afficher ou masquer les notes">
+                <span class="filter-dot" style="background-color: #10b981;"></span>
+                <span>Notes</span>
+              </button>
+              <button type="button" class="btn btn-sm filter-pill" id="filter-constellation-hide-done" data-filter="hideDone" title="Masquer les tâches achevées">
+                <span>✓ Masquer faites</span>
+              </button>
+            </div>
+
+            <!-- Recherche instantanée -->
+            <div class="constellation-toolbar-group constellation-search-group">
+              <div class="constellation-search-box">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="constellation-search-input" placeholder="Rechercher un élément..." autocomplete="off">
+                <button type="button" id="btn-clear-constellation-search" class="btn-clear-search" style="display:none;" title="Effacer la recherche">×</button>
+              </div>
+            </div>
+
+            <!-- Contrôles de navigation et de zoom -->
+            <div class="constellation-toolbar-group constellation-zoom-group">
+              <button type="button" class="btn btn-icon btn-sm" id="btn-constellation-zoom-out" title="Zoom arrière (-)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <span id="constellation-zoom-val" class="zoom-value-label" title="Niveau de zoom actuel">100%</span>
+              <button type="button" class="btn btn-icon btn-sm" id="btn-constellation-zoom-in" title="Zoom avant (+)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-constellation-fit-all" title="Ajuster la vue pour cadrer l'ensemble du graphe">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                <span>Cadrer tout</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Canevas Whiteboard infini (Pan & Zoom) -->
+          <div id="constellation-viewport" class="constellation-viewport" tabindex="0" role="region" aria-label="Espace de travail Constellation">
+            <div id="constellation-canvas" class="constellation-canvas">
+              <!-- Couche SVG pour les courbes de connexion de Bézier -->
+              <svg id="constellation-svg" class="constellation-svg" aria-hidden="true"></svg>
+              <!-- Couche DOM pour les cartes de nœuds interactives -->
+              <div id="constellation-nodes-container" class="constellation-nodes-container"></div>
+            </div>
+
+            <!-- Astuce et statistiques discrètes en bas -->
+            <div class="constellation-footer-info">
+              <span id="constellation-stats-badge" class="constellation-stats-badge">Chargement...</span>
+              <span class="constellation-hint-pill">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>Maintenir le clic gauche pour naviguer · Molette pour zoomer · Clic sur un nœud pour ouvrir</span>
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1118,7 +1230,7 @@
             </button>
             <button type="button" class="settings-tab-btn" data-settings-tab="serious">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-              <span>Paramètres sérieux</span>
+              <span>Système &amp; Performances</span>
             </button>
           </div>
 
@@ -1283,6 +1395,38 @@
                 <span class="bubble-check">✓</span>
               </div>
             </div>
+
+            <!-- Sélecteur chromatique libre & Nuancier favori -->
+            <div class="custom-accent-container" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-main);">Teinte personnalisée sur-mesure</span>
+                  <span style="font-size: 0.74rem; color: var(--text-dim);">(Palette chromatique libre)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <button type="button" id="btn-open-custom-accent-palette" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; margin: 0;">
+                    <span id="custom-accent-picker-preview" style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.4); background: #38bdf8;"></span>
+                    <span>Choisir dans la palette</span>
+                  </button>
+                  <input type="color" id="accent-color-picker-input" style="display: none;">
+                  <input type="text" id="accent-color-hex-input" class="form-control" placeholder="#38BDF8" maxlength="7" style="width: 88px; height: 30px; font-family: monospace; font-size: 0.8rem; text-transform: uppercase; padding: 2px 8px; text-align: center;">
+                  <input type="text" id="accent-color-name-input" class="form-control" placeholder="Nom (optionnel)" maxlength="24" style="width: 145px; height: 30px; font-size: 0.8rem; padding: 2px 10px;">
+                  <button type="button" id="btn-save-custom-accent" class="btn btn-secondary btn-sm" title="Enregistrer cette couleur dans vos favoris" style="height: 30px; display: inline-flex; align-items: center; gap: 5px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    <span>Enregistrer</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Liste des teintes personnalisées enregistrées par l'utilisateur -->
+              <div id="custom-accent-colors-section" style="display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                  <span>Mes couleurs d'accentuation</span>
+                  <span id="custom-accent-colors-count" style="font-size: 0.72rem; color: var(--text-dim); font-weight: normal;"></span>
+                </div>
+                <div id="custom-accent-colors-list" class="accent-options-list" style="margin-top: 4px;"></div>
+              </div>
+            </div>
           </div>
 
           <!-- 3. Typographie & Taille de police -->
@@ -1339,15 +1483,21 @@
 
           <!-- 5. Fond d'écran (Image derrière les panneaux) -->
           <div class="settings-section" id="settings-section-wallpaper">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
               <div>
                 <h4 class="settings-section-title">Image d'arrière-plan (Fond d'écran)</h4>
                 <p class="settings-section-desc">Affichez une ambiance ou une image personnalisée derrière les panneaux de l'application.</p>
               </div>
-              <button type="button" id="btn-remove-wallpaper" class="btn btn-secondary btn-sm" style="display: none;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                <span>Retirer le fond d'écran</span>
-              </button>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" id="btn-open-wallpaper-studio" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                  <span>Studio de création</span>
+                </button>
+                <button type="button" id="btn-remove-wallpaper" class="btn btn-secondary btn-sm" style="display: none;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Retirer le fond</span>
+                </button>
+              </div>
             </div>
 
             <!-- Grille de sélection des fonds prédéfinis et image personnalisée -->
@@ -1448,15 +1598,24 @@
               <input type="file" id="wallpaper-file-input" accept="image/*" style="display: none;">
             </div>
 
+            <!-- Galerie des fonds d'écran personnalisés générés par l'utilisateur -->
+            <div id="custom-wallpapers-section" style="display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+              <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <span>Mes créations de fonds d'écran</span>
+                <span id="custom-wallpapers-count" style="font-size: 0.72rem; color: var(--text-dim); font-weight: normal;"></span>
+              </div>
+              <div id="custom-wallpapers-grid" class="wallpaper-presets-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 10px;"></div>
+            </div>
+
             <!-- Contrôles avancés (Opacité & Flou de l'image) -->
-            <div id="wallpaper-controls" style="display: none; background: var(--bg-primary); border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 10px; border: 1px solid var(--border-color);">
+            <div id="wallpaper-controls" style="display: none; background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 10px; border: 1px solid var(--border-color);">
               <div class="form-row" style="margin-bottom: 0; gap: 16px;">
                 <div class="form-group" style="flex: 1;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <label for="wallpaper-opacity-slider" style="font-size: 0.8rem; font-weight: 500; margin-bottom: 0;">Opacité de l'image :</label>
                     <span id="wallpaper-opacity-val" style="font-size: 0.82rem; color: var(--accent); font-weight: 600;">25%</span>
                   </div>
-                  <input type="range" id="wallpaper-opacity-slider" min="5" max="80" step="5" value="25" style="width: 100%; accent-color: var(--accent); cursor: pointer;">
+                  <input type="range" id="wallpaper-opacity-slider" class="settings-slider" min="5" max="80" step="5" value="25">
                   <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">Permet de voir l'image tout en gardant une excellente lisibilité de vos tâches.</span>
                 </div>
                 <div class="form-group" style="flex: 1;">
@@ -1464,7 +1623,7 @@
                     <label for="wallpaper-blur-slider" style="font-size: 0.8rem; font-weight: 500; margin-bottom: 0;">Flou d'arrière-plan (Adoucissement) :</label>
                     <span id="wallpaper-blur-val" style="font-size: 0.82rem; color: var(--accent); font-weight: 600;">0 px</span>
                   </div>
-                  <input type="range" id="wallpaper-blur-slider" min="0" max="20" step="2" value="0" style="width: 100%; accent-color: var(--accent); cursor: pointer;">
+                  <input type="range" id="wallpaper-blur-slider" class="settings-slider" min="0" max="20" step="2" value="0">
                   <span style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">Floute doucement les détails pour un rendu plus artistique et zen.</span>
                 </div>
               </div>
@@ -1607,7 +1766,7 @@
                       <label for="slider-notification-volume" style="font-size: 0.8rem; font-weight: 500; margin-bottom: 0;">Volume :</label>
                       <span id="label-notification-volume" style="font-size: 0.8rem; color: var(--accent); font-weight: 600;">60%</span>
                     </div>
-                    <input type="range" id="slider-notification-volume" min="0" max="100" step="5" value="60" style="width: 100%; accent-color: var(--accent); cursor: pointer;">
+                    <input type="range" id="slider-notification-volume" class="settings-slider" min="0" max="100" step="5" value="60">
                   </div>
                 </div>
               </div>
@@ -1695,6 +1854,21 @@
                   </div>
                   <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Notes">
                     <input type="checkbox" id="toggle-tab-notes" class="form-checkbox" checked data-tab-name="notes">
+                  </label>
+                </div>
+
+                <!-- Constellation -->
+                <div class="sidebar-tab-toggle-card" draggable="true" data-tab-name="constellation">
+                  <div class="tab-drag-handle" title="Glisser pour réorganiser"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+                  <div class="tab-toggle-info">
+                    <span class="tab-toggle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17L12 5L19 15Z"/><circle cx="12" cy="5" r="2.5" fill="currentColor"/><circle cx="5" cy="17" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg></span>
+                    <div>
+                      <div class="tab-toggle-name">Constellation</div>
+                      <div class="tab-toggle-desc">Mind map &amp; arbre décisionnel global</div>
+                    </div>
+                  </div>
+                  <label class="tab-toggle-checkbox-wrapper" title="Activer ou désactiver l'onglet Constellation">
+                    <input type="checkbox" id="toggle-tab-constellation" class="form-checkbox" checked data-tab-name="constellation">
                   </label>
                 </div>
 
@@ -1974,7 +2148,7 @@
               </div>
               <div id="updater-version-chip" class="status-chip status-disconnected" style="font-size: 0.82rem; font-weight: 600;">
                 <span id="updater-version-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--text-dim);"></span>
-                <span>Version <strong id="updater-current-version-label">1.2.5</strong></span>
+                <span>Version <strong id="updater-current-version-label">1.3.0</strong></span>
               </div>
             </div>
 
@@ -2208,21 +2382,117 @@
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; flex-wrap: wrap;">
                 <h4 class="settings-section-title" style="margin: 0;"><svg class="app-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Notes de mise à jour &amp; Nouveautés</h4>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                  <button type="button" id="btn-reopen-whats-new" class="btn btn-secondary btn-sm" onclick="if(window.App) window.App.openWhatsNewModal();" title="Afficher la fenêtre d'aperçu des nouveautés 1.2.0">
-                    <span>Aperçu des nouveautés</span>
-                  </button>
                   <span class="changelog-badge-current">Dernière version</span>
                 </div>
               </div>
               <p class="settings-section-desc">Historique détaillé des évolutions majeures de la version 1.2.0 pour organiser vos projets, votre temps et vos performances.</p>
 
               <div class="changelog-container">
-                <!-- Version 1.2.5 (Correctifs Dossiers Notes, Création Note depuis Agenda, Fluidité Horloge & Icônes) -->
+                <!-- Version 1.3.0 (Archivage Projets, Constellation Orbitale, Démarrage Windows Garanti & Ergonomie) -->
                 <div class="changelog-release-card" style="border-color: var(--accent);">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                      <span class="changelog-version-tag" style="background: var(--accent); color: #fff;">Version 1.2.5</span>
+                      <span class="changelog-version-tag" style="background: var(--accent); color: #fff;">Version 1.3.0</span>
                       <span class="changelog-badge-current">Actuelle</span>
+                      <span style="font-size: 0.76rem; color: var(--text-dim);">(Archivage projets, Constellation orbitale, Contrôles unifiés, Démarrage Windows &amp; Ergonomie)</span>
+                    </div>
+                    <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
+                  </div>
+                  <p class="changelog-release-lead">Mise à jour majeure introduisant l'archivage complet des projets et de leurs sous-projets (avec masquage intelligent des tâches associées), le bouton unique bascule « Tout replier / Tout déplier », la gravitation planétaire dans la Constellation Mind Map, les statistiques hebdomadaires bienveillantes du débriefing, la simplification de l'expérience au premier lancement, l'harmonisation absolue des contrôles de fenêtre natifs, la fiabilisation du démarrage automatique Windows (shell:startup) et l'harmonisation générale du vocabulaire.</p>
+
+                  <div class="changelog-categories">
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M5 17L12 5L19 15Z"/><circle cx="12" cy="5" r="2.5" fill="currentColor"/><circle cx="5" cy="17" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg>Constellation : Mind Map &amp; Gravitation Planétaire</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Gravitation par projet :</strong> Dans le mode constellation rayonnante, les tâches, sous-tâches, événements et notes gravitent désormais en orbites planétaires harmonieuses directement autour de leur projet respectif.</li>
+                        <li><strong>Arbre décisionnel horizontal :</strong> Organisation visuelle fluide de gauche à droite reliant tous les pôles, projets, tâches, rendez-vous et notes sans superposition.</li>
+                        <li><strong>Interactions directes :</strong> Clic gauche immédiat vers les modales/éditeurs, menu contextuel complet au clic droit (sur nœuds ou sur canevas vierge) et raccourcis clavier (+, -, 0/F, 1, 2).</li>
+                        <li><strong>Performances et fluidité :</strong> Relaxation physique anti-collision ultra-optimisée avec arrêt anticipé et synchronisation en temps réel.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>Projets &amp; Tâches : Archivage, Repliage universel &amp; Arborescence</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Archivage et désarchivage complet :</strong> Possibilité de marquer un projet comme terminé/archivé. L'archivage cascade automatiquement à ses sous-projets avec confirmation, masque ses tâches des vues actives (sans suppression), tout en conservant les notes et l'agenda intacts.</li>
+                        <li><strong>Bouton unique bascule « Tout replier / Tout déplier » :</strong> Commande universelle interactive dans les Tâches et les Projets dont le libellé et l'icône s'adaptent dynamiquement à l'état de la vue.</li>
+                        <li><strong>Arborescence hiérarchique en vue ligne :</strong> Connecteurs graphiques fins et branches en L reliant clairement les projets parents à leurs sous-projets.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Bilan &amp; Expérience Utilisateur Simplifiée</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Statistiques hebdomadaires consolidées :</strong> Bannière à 4 indicateurs bienveillants intégrée en haut du bilan du week-end (tâches accomplies, heures/créneaux honorés, projets en progression, répartition de l'effort).</li>
+                        <li><strong>Premier lancement épuré :</strong> Configuration par défaut allégée pour les nouveaux utilisateurs (7 onglets essentiels activés, widgets secondaires et débriefing désactivés au départ), sans modifier les réglages des utilisateurs existants.</li>
+                        <li><strong>Harmonisation du vocabulaire :</strong> Adoption d'un ton plus sobre et professionnel (« Mode économie extrême », « Système &amp; Performances ») tout en préservant la bienveillance générale du logiciel.</li>
+                        <li><strong>Écosystème Markdown universel :</strong> Préréglage de fond rebaptisé « Anthracite » et conservation de 100 % des capacités Markdown, wikilinks et callouts sous appellation universelle.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>Système : Démarrage automatique Windows garanti</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Dossier Démarrage Windows (shell:startup) :</strong> Création directe d'un raccourci système natif assurant un lancement infaillible au démarrage du PC, même lorsque le registre Windows ou les outils tiers restreignent les clés HKCU\Run.</li>
+                        <li><strong>Détection bidirectionnelle en temps réel :</strong> Synchronisation dynamique entre l'interface Système &amp; Performances et l'état réel de Windows.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>Interface : Contrôles de fenêtre intégrés &amp; Nuancier universel</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Boutons Réduire / Grand écran / Fermer intégrés :</strong> Intégration directe dans le bandeau supérieur en éliminant toute surcouche DirectComposition, pour un raccord de couleur parfait et transparent quel que soit le thème ou fond actif.</li>
+                        <li><strong>Nuancier universel avec favoris :</strong> Sélecteur chromatique anti-débordement écran avec clampage strict, gestion des couleurs favorites réutilisables d'un clic partout dans l'application.</li>
+                      </ul>
+                    </div>
+
+                    <div class="changelog-category-block">
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>Studio de création de fonds d'écran</h5>
+                      <ul class="changelog-features-list">
+                        <li><strong>Générateur CSS en direct :</strong> Ambiances nébuleuses (Mesh), dégradés directionnels, auras radiales, dots matrix, grilles blueprint et rayures fines avec sauvegarde personnalisée.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section Historique des versions antérieures (Pliable avec sélecteur de version) -->
+                <div class="changelog-history-section">
+                  <div class="changelog-history-bar">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-size: 0.84rem; font-weight: 600; color: var(--text-main);">Historique des versions antérieures</span>
+                      <span style="font-size: 0.72rem; color: var(--text-muted); background: var(--bg-tertiary); padding: 2px 7px; border-radius: 999px;">v1.2.0 à v1.2.5</span>
+                    </div>
+                    <button type="button" id="btn-toggle-changelog-history" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+                      <span>Consulter les anciennes notes</span>
+                      <span id="changelog-history-chevron" style="display: inline-block; font-size: 0.75rem;">▾</span>
+                    </button>
+                  </div>
+
+                  <div id="changelog-history-wrapper" class="changelog-history-wrapper" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px;">Choisir une version :</span>
+                        <div class="changelog-history-pills">
+                          <button type="button" class="changelog-history-pill active" data-version="1.2.5">v1.2.5</button>
+                          <button type="button" class="changelog-history-pill" data-version="1.2.4">v1.2.4</button>
+                          <button type="button" class="changelog-history-pill" data-version="1.2.3">v1.2.3</button>
+                          <button type="button" class="changelog-history-pill" data-version="1.2.2">v1.2.2</button>
+                          <button type="button" class="changelog-history-pill" data-version="1.2.1">v1.2.1</button>
+                          <button type="button" class="changelog-history-pill" data-version="1.2.0">v1.2.0</button>
+                        </div>
+                      </div>
+                      <button type="button" id="btn-close-changelog-history" class="btn-icon" style="width: 24px; height: 24px;" title="Refermer l'historique">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+
+                    <div id="changelog-archived-cards">
+                      <!-- Version 1.2.5 (Correctifs Dossiers Notes, Création Note depuis Agenda, Fluidité Horloge & Icônes) -->
+                      <div class="changelog-release-card changelog-archived-card" data-version="1.2.5">
+                  <div class="changelog-release-header">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                      <span class="changelog-version-tag">Version 1.2.5</span>
                       <span style="font-size: 0.76rem; color: var(--text-dim);">(Dossiers Notes, Note depuis Agenda, Horloge temps réel &amp; Fiabilité icônes)</span>
                     </div>
                     <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
@@ -2263,7 +2533,7 @@
                 </div>
 
                 <!-- Version 1.2.4 (Tri & Regroupement des Tâches, Priorisation Agenda 1h) -->
-                <div class="changelog-release-card">
+                <div class="changelog-release-card changelog-archived-card" data-version="1.2.4" style="display: none;">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <span class="changelog-version-tag">Version 1.2.4</span>
@@ -2323,7 +2593,7 @@
                 </div>
 
                 <!-- Version 1.2.3 (Correctifs Débriefing, Créativité & Agenda) -->
-                <div class="changelog-release-card">
+                <div class="changelog-release-card changelog-archived-card" data-version="1.2.3" style="display: none;">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <span class="changelog-version-tag">Version 1.2.3</span>
@@ -2361,7 +2631,7 @@
                 </div>
 
                 <!-- Version 1.2.2 (Identité Visuelle SVG, Journée Entière & Optimisations) -->
-                <div class="changelog-release-card">
+                <div class="changelog-release-card changelog-archived-card" data-version="1.2.2" style="display: none;">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <span class="changelog-version-tag">Version 1.2.2</span>
@@ -2439,7 +2709,7 @@
                 </div>
 
                 <!-- Version 1.2.1 (Nouveautés & Confort d'usage) -->
-                <div class="changelog-release-card">
+                <div class="changelog-release-card changelog-archived-card" data-version="1.2.1" style="display: none;">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <span class="changelog-version-tag">Version 1.2.1</span>
@@ -2490,7 +2760,7 @@
                   </div>
                 </div>
 
-                <div class="changelog-release-card">
+                <div class="changelog-release-card changelog-archived-card" data-version="1.2.0" style="display: none;">
                   <div class="changelog-release-header">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <span class="changelog-version-tag">Version 1.2.0</span>
@@ -2499,7 +2769,7 @@
                     </div>
                     <span style="font-size: 0.8rem; color: var(--text-dim);">Novembre 2026</span>
                   </div>
-                  <p class="changelog-release-lead">Mise à jour majeure regroupant toutes les nouveautés construites depuis la v1.1.2 : sous-projets imbriqués, nouvel onglet « Paramètres sérieux », espace Musique complet, mode Focus Pomodoro, Corbeille, Recherche universelle et refonte ergonomique de l'ensemble des écrans.</p>
+                  <p class="changelog-release-lead">Mise à jour majeure regroupant toutes les nouveautés construites depuis la v1.1.2 : sous-projets imbriqués, nouvel onglet « Système &amp; Performances », espace Musique complet, mode Focus Pomodoro, Corbeille, Recherche universelle et refonte ergonomique de l'ensemble des écrans.</p>
 
                   <div class="changelog-categories">
                     <div class="changelog-category-block">
@@ -2512,9 +2782,9 @@
                     </div>
 
                     <div class="changelog-category-block">
-                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Nouvel onglet « Paramètres sérieux » &amp; Optimisation</h5>
+                      <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Nouvel onglet « Système &amp; Performances » &amp; Optimisation</h5>
                       <ul class="changelog-features-list">
-                        <li><strong>Performances et ressources :</strong> 3 profils adaptés à votre PC (<em>Mode Normal</em>, <em>Mode Économie</em> et <em>Mode PC de merde</em>), consultation et vidage du cache Chromium/mémoire sans perte de données, et diagnostic RAM / CPU / GPU / DOM en direct.</li>
+                        <li><strong>Performances et ressources :</strong> 3 profils adaptés à votre PC (<em>Mode Normal</em>, <em>Mode Économie</em> et <em>Mode économie extrême</em>), consultation et vidage du cache Chromium/mémoire sans perte de données, et diagnostic RAM / CPU / GPU / DOM en direct.</li>
                         <li><strong>Démarrage et fonctionnement :</strong> Option de lancement automatique au démarrage de Windows, choix explicite entre fermeture complète ou maintien discret dans la barre de notification à la fermeture de la fenêtre, et gestion du basculement système (<code>Ctrl</code> + <code>Maj</code> + <code>A</code>).</li>
                         <li><strong>Données, sauvegardes &amp; interface :</strong> Fréquence des sauvegardes automatiques configurable (dont désactivation complète), nombre maximal de versions conservées avec purge disque, choix et migration du dossier de sauvegarde, désactivation indépendante des animations/aperçus/survols, et bouton <em>Retour aux paramètres d'usine</em>.</li>
                       </ul>
@@ -2532,7 +2802,7 @@
                     <div class="changelog-category-block">
                       <h5 class="changelog-category-title"><svg class="app-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>Notes enrichies &amp; Recherche universelle</h5>
                       <ul class="changelog-features-list">
-                        <li><strong>Éditeur de notes unique (WYSIWYG) :</strong> Saisie directe avec barre d'outils complète (titres H1–H6, gras, italique, souligné, barré, surlignage, listes, liens, code) et raccourcis (<code>Ctrl</code>+<code>B</code>/<code>I</code>/<code>U</code>/<code>K</code>), nettoyage automatique du HTML collé et compatibilité Markdown / Obsidian.</li>
+                        <li><strong>Éditeur de notes unique (WYSIWYG) :</strong> Saisie directe avec barre d'outils complète (titres H1–H6, gras, italique, souligné, barré, surlignage, listes, liens, code) et raccourcis (<code>Ctrl</code>+<code>B</code>/<code>I</code>/<code>U</code>/<code>K</code>), nettoyage automatique du HTML collé et compatibilité Markdown universelle.</li>
                         <li><strong>Liaison agenda &amp; projets :</strong> Sélecteurs compacts, coloration par projet, création directe d'un créneau d'agenda depuis l'en-tête d'une note, et liste chronologique des événements associés.</li>
                         <li><strong>Recherche universelle (<kbd>Ctrl</kbd> + <kbd>F</kbd> / <kbd>Ctrl</kbd> + <kbd>K</kbd>) :</strong> Retrouvez instantanément n'importe quelle tâche, sous-tâche, projet, note ou créneau d'agenda au clavier depuis n'importe quel écran.</li>
                       </ul>
@@ -2564,13 +2834,17 @@
                     </div>
                   </div>
                 </div>
-              </div>
+
+                    </div><!-- Fin #changelog-archived-cards -->
+                  </div><!-- Fin #changelog-history-wrapper -->
+                </div><!-- Fin .changelog-history-section -->
+              </div><!-- Fin .changelog-container -->
             </div>
 
           </div><!-- Fin #settings-pane-help -->
 
           <!-- ==========================================
-               VOLET 5 : PARAMÈTRES SÉRIEUX
+               VOLET 5 : SYSTÈME & PERFORMANCES
                ========================================== -->
           <div id="settings-pane-serious" class="settings-tab-pane" style="display: none;">
 
@@ -2579,17 +2853,17 @@
               <div class="serious-header-copy">
                 <h4 class="serious-header-title">
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-                  <span>Paramètres sérieux — Sous le capot</span>
+                  <span>Système &amp; Performances — Sous le capot</span>
                 </h4>
                 <p class="serious-header-desc">Ici, on touche aux entrailles du moteur. Le comportement habituel d'Antigravité correspond aux réglages d'usine — expérimentez librement ou remettez tout à plat en un clic.</p>
               </div>
-              <button type="button" id="btn-reset-serious-factory" class="btn-serious-factory-reset" title="Rétablir uniquement les options de Paramètres sérieux à leurs valeurs d'usine">
+              <button type="button" id="btn-reset-serious-factory" class="btn-serious-factory-reset" title="Rétablir uniquement les options système et performances à leurs valeurs d'origine">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                <span>Retour aux paramètres d'usine</span>
+                <span>Retour aux réglages d'origine</span>
               </button>
             </div>
 
-            <!-- Sous-onglets de Paramètres sérieux -->
+            <!-- Sous-onglets de Système & Performances -->
             <div class="serious-subtabs-nav" id="serious-subtabs-nav">
               <button type="button" class="serious-subtab-btn active" data-serious-subtab="performance">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
@@ -2644,7 +2918,7 @@
                     <div class="perf-mode-header">
                       <span class="perf-mode-title">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
-                        <span>Mode PC de merde</span>
+                        <span>Mode économie extrême</span>
                       </span>
                     </div>
                     <span class="perf-mode-desc">Antigravité ne juge pas votre matériel. Antigravité s'adapte à lui. Priorité absolue à la fluidité et à la consommation minimale.</span>
@@ -2867,7 +3141,7 @@
             <div id="serious-pane-ui" class="serious-subtab-pane">
               <div class="serious-info-banner">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--accent);"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <span>Ces trois interrupteurs s'appliquent <strong>indépendamment</strong> du profil choisi dans <em>Performances et ressources</em> (Normal, Économie ou PC de merde).</span>
+                <span>Ces trois interrupteurs s'appliquent <strong>indépendamment</strong> du profil choisi dans <em>Performances et ressources</em> (Normal, Économie ou Économie extrême).</span>
               </div>
 
               <div class="settings-section" id="serious-section-ui-overrides">
@@ -2992,8 +3266,15 @@
           </select>
         </div>
         <div class="form-group">
-          <label for="project-input-color">Couleur d'identification</label>
-          <input type="color" id="project-input-color" class="form-control" style="height:40px; padding:2px;" value="#3b82f6">
+          <label>Couleur d'identification</label>
+          <div class="project-color-picker-row" style="display: flex; align-items: center; gap: 10px;">
+            <button type="button" id="btn-project-color-picker" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; cursor: pointer;">
+              <span id="project-color-badge" style="display: inline-block; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.4); background: #3b82f6; box-shadow: 0 2px 6px rgba(0,0,0,0.2);"></span>
+              <span id="project-color-label" style="font-family: monospace; font-size: 0.82rem; font-weight: 600;">#3B82F6</span>
+              <span style="font-size: 0.74rem; color: var(--text-dim); margin-left: 2px;">(Choisir dans la palette)</span>
+            </button>
+            <input type="hidden" id="project-input-color" value="#3b82f6">
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -3068,7 +3349,10 @@
         </div>
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between;">
-        <button id="btn-project-detail-edit" class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span>Modifier le projet</span></button>
+        <div style="display: flex; gap: 8px;">
+          <button id="btn-project-detail-edit" class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span>Modifier le projet</span></button>
+          <button id="btn-project-detail-archive" class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg><span id="btn-project-detail-archive-text">Archiver</span></button>
+        </div>
         <button class="btn btn-primary" onclick="ProjectsManager.closeProjectDetailModal()">Fermer</button>
       </div>
     </div>
@@ -3134,10 +3418,10 @@
               <span class="color-swatch" data-color="#6366f1" style="background:#6366f1;" title="Indigo profond"></span>
               <span class="color-swatch" data-color="#ef4444" style="background:#ef4444;" title="Rouge vif"></span>
               <span class="color-swatch" data-color="#64748b" style="background:#64748b;" title="Ardoise neutre"></span>
-              <label class="color-swatch color-swatch-custom" id="event-color-custom-btn" title="Nuance sur mesure (palette complète)">
+              <button type="button" class="color-swatch color-swatch-custom" id="event-color-custom-btn" title="Nuance sur mesure (palette complète)" style="border: none; cursor: pointer;">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));"><path d="M12 5v14M5 12h14"/></svg>
-                <input type="color" id="event-input-color" value="#8b5cf6">
-              </label>
+              </button>
+              <input type="hidden" id="event-input-color" value="#8b5cf6">
             </div>
           </div>
         </div>
@@ -3301,6 +3585,16 @@
     <div class="context-menu-divider"></div>
     <div id="notes-folder-menu-items" class="context-menu-items"></div>
   </div>
+
+  <!-- MENU CONTEXTUEL CONSTELLATION & MIND MAP (CLIC DROIT SUR UN NŒUD) -->
+  <div id="constellation-context-menu" class="context-menu constellation-context-menu" style="display: none; z-index: 2100;">
+    <div id="constellation-context-header" class="context-menu-header"></div>
+    <div class="context-menu-divider"></div>
+    <div id="constellation-context-items" class="context-menu-items"></div>
+  </div>
+
+  <!-- CARTE FLOTTANTE D'INFORMATIONS AU SURVOL (CONSTELLATION RAYONNANTE & ARBRE) -->
+  <div id="constellation-hover-card" class="constellation-hover-card" style="display: none; z-index: 2050;"></div>
 
   <!-- MODALE CRÉATION / RENOMMAGE DE PLAYLIST -->
   <div id="playlist-form-modal" class="modal-overlay" style="z-index: 1100;">
@@ -3496,8 +3790,8 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             </div>
             <div class="whats-new-item-content">
-              <div class="whats-new-item-title">Onglet « Paramètres sérieux » &amp; Optimisation</div>
-              <div class="whats-new-item-desc">Profils (<em>Normal</em>, <em>Économie</em>, <em>Mode PC de merde</em>), diagnostic RAM/CPU, vidage du cache, démarrage Windows, maintien en barre de notification, sauvegardes avancées et retour d'usine.</div>
+              <div class="whats-new-item-title">Onglet « Système &amp; Performances » &amp; Optimisation</div>
+              <div class="whats-new-item-desc">Profils (<em>Normal</em>, <em>Économie</em>, <em>Mode économie extrême</em>), diagnostic RAM/CPU, vidage du cache, démarrage Windows, maintien en barre de notification, sauvegardes avancées et retour d'usine.</div>
             </div>
           </div>
 
@@ -3537,7 +3831,7 @@
             </div>
             <div class="whats-new-item-content">
               <div class="whats-new-item-title">Notes WYSIWYG &amp; Tâches unifiées</div>
-              <div class="whats-new-item-desc">Éditeur riche unique compatible Obsidian avec nettoyage du collage HTML, bouton <em>Créer un créneau</em> depuis une note, date/heure prévues en <code>datetime-local</code> et chevrons de sous-tâches rotatifs.</div>
+              <div class="whats-new-item-desc">Éditeur riche unique compatible Markdown avec nettoyage du collage HTML, bouton <em>Créer un créneau</em> depuis une note, date/heure prévues en <code>datetime-local</code> et chevrons de sous-tâches rotatifs.</div>
             </div>
           </div>
 
@@ -3629,6 +3923,259 @@
     </div>
   </div>
 
+  <!-- MODALE DU STUDIO DE CRÉATION DE FOND D'ÉCRAN -->
+  <div id="wallpaper-studio-modal" class="modal-overlay">
+    <div class="modal-content wallpaper-studio-dialog">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--accent-light); color: var(--accent); display: flex; align-items: center; justify-content: center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.08rem; font-weight: 600;">Studio de Création de Fond d'Écran</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Générez des ambiances nébuleuses, dégradés et textures géométriques sur-mesure</span>
+          </div>
+        </div>
+        <button type="button" class="btn-icon" onclick="SettingsManager.closeWallpaperStudioModal();" title="Fermer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+
+      <div class="modal-body" style="padding: 18px 24px; overflow-y: auto; flex: 1;">
+        <div class="studio-layout">
+          <!-- Colonne gauche : Commandes & Réglages -->
+          <div class="studio-controls-column">
+            <!-- 1. Type d'ambiance -->
+            <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; display: block;">Type d'ambiance :</label>
+            <div class="studio-type-selector">
+              <button type="button" class="studio-type-btn active" data-type="mesh">Nébuleuse Mesh</button>
+              <button type="button" class="studio-type-btn" data-type="linear">Dégradé Linéaire</button>
+              <button type="button" class="studio-type-btn" data-type="radial">Aura Radiale</button>
+              <button type="button" class="studio-type-btn" data-type="aurora">Aurore Boréale</button>
+              <button type="button" class="studio-type-btn" data-type="waves">Ondes Sonores</button>
+              <button type="button" class="studio-type-btn" data-type="particles">Poussière Stellaire</button>
+              <button type="button" class="studio-type-btn" data-type="dots">Dots Matrix</button>
+              <button type="button" class="studio-type-btn" data-type="grid">Grille Blueprint</button>
+              <button type="button" class="studio-type-btn" data-type="stripes">Lignes Fines</button>
+            </div>
+
+            <!-- 2. Palette & Couleurs -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px; margin-bottom: 8px;">
+              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0;">Harmonies &amp; Couleurs :</label>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" id="btn-studio-swap-colors" class="btn btn-secondary btn-sm" style="font-size: 0.74rem; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px;" title="Intervertir les deux teintes principales">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+                  <span>Inverser</span>
+                </button>
+                <button type="button" id="btn-studio-randomize" class="btn btn-secondary btn-sm" style="font-size: 0.74rem; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px;" title="Générer une harmonie aléatoire">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                  <span>Aléatoire</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Harmonies chromatiques prédéfinies en un clic -->
+            <div class="studio-palette-presets" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+              <button type="button" class="studio-palette-chip" data-preset="cosmos" title="Cosmos : Bleu Nuit, Indigo &amp; Rose">🌌 Cosmos</button>
+              <button type="button" class="studio-palette-chip" data-preset="aurora" title="Aurore : Émeraude, Cyan &amp; Menthe">🍃 Boréale</button>
+              <button type="button" class="studio-palette-chip" data-preset="sunset" title="Crépuscule : Ambre, Corail &amp; Violet">🌅 Crépuscule</button>
+              <button type="button" class="studio-palette-chip" data-preset="ocean" title="Abysses : Bleu Océan &amp; Turquoise">🌊 Abysses</button>
+              <button type="button" class="studio-palette-chip" data-preset="cyber" title="Cyberpunk : Améthyste &amp; Néon">🔮 Cyberpunk</button>
+              <button type="button" class="studio-palette-chip" data-preset="anthracite" title="Anthracite : Sombre Minimaliste">🖤 Anthracite</button>
+            </div>
+
+            <!-- Choix couleur de base (fond sombre) -->
+            <div style="margin-bottom: 12px; background: var(--bg-secondary); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.76rem; color: var(--text-muted); font-weight: 500;">Fond de base (profondeur) :</span>
+                <button type="button" id="studio-color-base" class="studio-color-btn" style="width: 28px; height: 26px; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; border-radius: 4px; background: #070b14; padding: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.3);" title="Choisir dans la palette"></button>
+              </div>
+              <div class="studio-base-presets" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button type="button" class="studio-base-chip" data-color="#000000" title="Noir OLED">Noir OLED</button>
+                <button type="button" class="studio-base-chip active" data-color="#070b14" title="Bleu Nuit">Bleu Nuit</button>
+                <button type="button" class="studio-base-chip" data-color="#0f172a" title="Ardoise">Ardoise</button>
+                <button type="button" class="studio-base-chip" data-color="#141018" title="Prune Sombre">Prune</button>
+                <button type="button" class="studio-base-chip" data-color="#041a16" title="Forêt Abyssale">Émeraude</button>
+              </div>
+            </div>
+
+            <!-- Teintes secondaires 1 & 2 & 3 -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+              <div>
+                <label for="studio-color-1" style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Couleur 1 :</label>
+                <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-secondary); padding: 4px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                  <button type="button" id="studio-color-1" class="studio-color-btn" style="width: 24px; height: 24px; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; border-radius: 4px; background: #6366f1; padding: 0;" title="Choisir dans la palette"></button>
+                  <input type="text" id="studio-hex-1" value="#6366F1" maxlength="7" style="width: 55px; border: none; background: transparent; font-family: monospace; font-size: 0.72rem; color: var(--text-main); text-transform: uppercase;">
+                </div>
+              </div>
+              <div id="studio-color-2-group">
+                <label for="studio-color-2" style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Couleur 2 :</label>
+                <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-secondary); padding: 4px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                  <button type="button" id="studio-color-2" class="studio-color-btn" style="width: 24px; height: 24px; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; border-radius: 4px; background: #38bdf8; padding: 0;" title="Choisir dans la palette"></button>
+                  <input type="text" id="studio-hex-2" value="#38BDF8" maxlength="7" style="width: 55px; border: none; background: transparent; font-family: monospace; font-size: 0.72rem; color: var(--text-main); text-transform: uppercase;">
+                </div>
+              </div>
+              <div id="studio-color-3-group">
+                <label for="studio-color-3" style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Couleur 3 :</label>
+                <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-secondary); padding: 4px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                  <button type="button" id="studio-color-3" class="studio-color-btn" style="width: 24px; height: 24px; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; border-radius: 4px; background: #ec4899; padding: 0;" title="Choisir dans la palette"></button>
+                  <input type="text" id="studio-hex-3" value="#EC4899" maxlength="7" style="width: 55px; border: none; background: transparent; font-family: monospace; font-size: 0.72rem; color: var(--text-main); text-transform: uppercase;">
+                </div>
+              </div>
+            </div>
+
+            <!-- Réglages avancés (Angle, Taille, Intensité, Flou, Vignette) -->
+            <div id="studio-param-angle-row" style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--text-muted); margin-bottom: 4px;">
+                <span>Orientation / Angle :</span>
+                <span id="studio-param-angle-val" style="color: var(--accent); font-weight: 600;">135°</span>
+              </div>
+              <input type="range" id="studio-param-angle" class="settings-slider" min="0" max="360" step="5" value="135">
+            </div>
+
+            <div id="studio-param-intensity-row" style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--text-muted); margin-bottom: 4px;">
+                <span>Intensité &amp; Éclat lumineux :</span>
+                <span id="studio-param-intensity-val" style="color: var(--accent); font-weight: 600;">80%</span>
+              </div>
+              <input type="range" id="studio-param-intensity" class="settings-slider" min="20" max="100" step="5" value="80">
+            </div>
+
+            <div id="studio-param-blur-row" style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--text-muted); margin-bottom: 4px;">
+                <span>Flou vaporeux (Adoucissement) :</span>
+                <span id="studio-param-blur-val" style="color: var(--accent); font-weight: 600;">0 px</span>
+              </div>
+              <input type="range" id="studio-param-blur" class="settings-slider" min="0" max="25" step="1" value="0">
+            </div>
+
+            <div id="studio-param-size-row" style="margin-bottom: 12px; display: none;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--text-muted); margin-bottom: 4px;">
+                <span>Taille &amp; Espacement du motif :</span>
+                <span id="studio-param-size-val" style="color: var(--accent); font-weight: 600;">24 px</span>
+              </div>
+              <input type="range" id="studio-param-size" class="settings-slider" min="12" max="64" step="2" value="24">
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-secondary); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 12px;">
+              <div>
+                <span style="font-size: 0.78rem; font-weight: 500; color: var(--text-main); display: block;">Vignette d'obscurité cinématique</span>
+                <span style="font-size: 0.72rem; color: var(--text-dim);">Assombrit les coins pour recentrer l'attention</span>
+              </div>
+              <label class="toggle-switch" style="margin: 0; cursor: pointer;">
+                <input type="checkbox" id="studio-toggle-vignette">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Colonne droite : Aperçu en direct (Plein format dégagé, sans fenêtre obstruante) -->
+          <div class="studio-preview-column">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+              <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0;">Aperçu du rendu immersif :</label>
+              <span style="font-size: 0.72rem; color: var(--text-dim);">Rendu haute fidélité temps réel</span>
+            </div>
+            <div id="studio-live-preview-box" class="studio-preview-card" style="position: relative; overflow: hidden;">
+              <div id="studio-preview-canvas" style="position: absolute; inset: -15px; background-size: cover; background-position: center; transition: background 0.15s ease, filter 0.15s ease;"></div>
+              <div style="position: absolute; top: 14px; right: 14px; font-size: 0.7rem; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: rgba(0,0,0,0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: rgba(255,255,255,0.85); border: 1px solid rgba(255,255,255,0.12); pointer-events: none; z-index: 2;">Aperçu direct plein format</div>
+            </div>
+
+            <!-- Nom de la création -->
+            <div style="margin-top: 4px;">
+              <label for="studio-wallpaper-name-input" style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Nom de votre création :</label>
+              <input type="text" id="studio-wallpaper-name-input" class="form-control" placeholder="Ma création personnalisée" value="Ambiance Nébuleuse" style="width: 100%; font-size: 0.84rem;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; background: var(--bg-secondary);">
+        <button type="button" class="btn btn-secondary" onclick="SettingsManager.closeWallpaperStudioModal();">Annuler</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btn-studio-apply-preview" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Tester en plein écran</span>
+          </button>
+          <button type="button" id="btn-studio-save-wallpaper" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span>Sauvegarder et appliquer</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POPOVER SÉLECTEUR CHROMATIQUE INTÉGRÉ (Ouverture juste à côté de l'élément) -->
+  <div id="custom-accent-color-popover" class="accent-color-popover" style="display: none;" role="dialog" aria-label="Palette chromatique">
+    <div class="accent-popover-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="popover-color-swatch-badge" class="popover-color-badge" style="background: #38bdf8;"></span>
+        <div style="display: flex; flex-direction: column;">
+          <span id="popover-color-title" style="font-size: 0.82rem; font-weight: 600; color: var(--text-main);">Palette chromatique</span>
+          <span id="popover-color-hex-sub" style="font-size: 0.72rem; font-family: monospace; color: var(--text-dim);">#38BDF8</span>
+        </div>
+      </div>
+      <button type="button" id="btn-close-accent-popover" class="btn-icon" style="width: 24px; height: 24px;" title="Fermer la palette" aria-label="Fermer">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Nuancier de sélection rapide (18 teintes harmonieuses) -->
+    <div class="popover-swatches-grid">
+      <button type="button" class="popover-swatch" data-hex="#EF4444" style="background: #ef4444;" title="Rouge"></button>
+      <button type="button" class="popover-swatch" data-hex="#F97316" style="background: #f97316;" title="Orange"></button>
+      <button type="button" class="popover-swatch" data-hex="#F59E0B" style="background: #f59e0b;" title="Ambre"></button>
+      <button type="button" class="popover-swatch" data-hex="#84CC16" style="background: #84cc16;" title="Lime"></button>
+      <button type="button" class="popover-swatch" data-hex="#10B981" style="background: #10b981;" title="Émeraude"></button>
+      <button type="button" class="popover-swatch" data-hex="#14B8A6" style="background: #14b8a6;" title="Menthe"></button>
+      <button type="button" class="popover-swatch" data-hex="#06B6D4" style="background: #06b6d4;" title="Cyan"></button>
+      <button type="button" class="popover-swatch" data-hex="#38BDF8" style="background: #38bdf8;" title="Bleu ciel"></button>
+      <button type="button" class="popover-swatch" data-hex="#3B82F6" style="background: #3b82f6;" title="Bleu royal"></button>
+      <button type="button" class="popover-swatch" data-hex="#6366F1" style="background: #6366f1;" title="Indigo"></button>
+      <button type="button" class="popover-swatch" data-hex="#8B5CF6" style="background: #8b5cf6;" title="Violet"></button>
+      <button type="button" class="popover-swatch" data-hex="#A855F7" style="background: #a855f7;" title="Pourpre"></button>
+      <button type="button" class="popover-swatch" data-hex="#D946EF" style="background: #d946ef;" title="Fuchsia"></button>
+      <button type="button" class="popover-swatch" data-hex="#EC4899" style="background: #ec4899;" title="Rose"></button>
+      <button type="button" class="popover-swatch" data-hex="#F43F5E" style="background: #f43f5e;" title="Rubis"></button>
+      <button type="button" class="popover-swatch" data-hex="#0284C7" style="background: #0284c7;" title="Océan"></button>
+      <button type="button" class="popover-swatch" data-hex="#64748B" style="background: #64748b;" title="Ardoise"></button>
+      <button type="button" class="popover-swatch" data-hex="#475569" style="background: #475569;" title="Acier"></button>
+    </div>
+
+    <!-- Nuancier des teintes favorites créées par l'utilisateur -->
+    <div id="popover-custom-swatches" class="popover-custom-swatches" style="display: none;"></div>
+
+    <!-- Glissière de Teinte (Spectre 360°) -->
+    <div style="margin-top: 8px;">
+      <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 4px;">
+        <span>Spectre de couleur</span>
+        <span id="popover-hue-val">199°</span>
+      </div>
+      <input type="range" id="popover-hue-slider" min="0" max="360" value="199" class="popover-hue-range">
+    </div>
+
+    <!-- Glissière de Nuance / Clarté (20% à 80%) -->
+    <div style="margin-top: 8px;">
+      <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 4px;">
+        <span>Luminosité & Nuance</span>
+        <span id="popover-lightness-val">60%</span>
+      </div>
+      <input type="range" id="popover-lightness-slider" min="20" max="80" value="60" class="popover-lightness-range">
+    </div>
+
+    <!-- Code Hex & Nom -->
+    <div style="display: flex; gap: 8px; margin-top: 10px;">
+      <input type="text" id="popover-input-hex" class="form-control" maxlength="7" placeholder="#38BDF8" style="width: 84px; height: 30px; font-family: monospace; font-size: 0.78rem; text-transform: uppercase; padding: 2px 6px; text-align: center;">
+      <div id="popover-name-group" style="flex: 1; display: flex;">
+        <input type="text" id="popover-input-name" class="form-control" placeholder="Nom de la teinte" maxlength="24" style="width: 100%; height: 30px; font-size: 0.78rem; padding: 2px 8px;">
+      </div>
+    </div>
+
+    <!-- Boutons d'action -->
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+      <button type="button" id="btn-cancel-accent-popover" class="btn btn-secondary btn-sm" style="height: 28px; font-size: 0.76rem; padding: 0 10px;">Annuler</button>
+      <button type="button" id="btn-apply-accent-popover" class="btn btn-primary btn-sm" style="height: 28px; font-size: 0.76rem; padding: 0 12px;">Appliquer</button>
+    </div>
+  </div>
+
   <!-- Conteneur de Toasts -->
   <div id="toast-container"></div>
 
@@ -3639,6 +4186,7 @@
   <script src="./js/projects.js"></script>
   <script src="./js/agenda.js"></script>
   <script src="./js/notes.js"></script>
+  <script src="./js/constellation.js"></script>
   <script src="./js/backups.js"></script>
   <script src="./js/google-sync.js"></script>
   <script src="./js/settings.js"></script>

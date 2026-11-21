@@ -527,11 +527,38 @@ const DebriefManager = {
       };
     });
 
+    // Consolidation des statistiques hebdomadaires
+    const distinctActiveProjectIds = new Set();
+    completedTasks.forEach(t => { if (t.projectId) distinctActiveProjectIds.add(t.projectId); });
+    weekEvents.forEach(e => { if (e.projectId) distinctActiveProjectIds.add(e.projectId); });
+    weekNotes.forEach(n => { if (n.projectId) distinctActiveProjectIds.add(n.projectId); });
+
+    const effortByProject = Array.from(byProject.values()).map(group => {
+      const p = group.project;
+      const count = group.tasks.length;
+      const percent = completedTasks.length > 0 ? Math.round((count / completedTasks.length) * 100) : 0;
+      return {
+        id: p.id,
+        title: p.title,
+        color: p.color || '#3b82f6',
+        count,
+        percent
+      };
+    }).sort((a, b) => b.count - a.count);
+
+    const weeklyStats = {
+      completedTasksCount: completedTasks.length,
+      eventsHonoredCount: weekEvents.length,
+      activeProjectsCount: distinctActiveProjectIds.size,
+      effortDistribution: effortByProject
+    };
+
     return {
       startDate: startDateStr,
       endDate: endDateStr,
       rangeSetting,
       mode: 'weekly',
+      stats: weeklyStats,
       completedTasks,
       byProject: Array.from(byProject.values()),
       events: formattedWeekEvents,
@@ -625,6 +652,79 @@ const DebriefManager = {
 
     // Construction du contenu ordonné, élégant et approfondi
     let html = '';
+
+    // Bannière récapitulative consolidée pour le bilan hebdomadaire du week-end
+    if (mode === 'weekly' && data.stats) {
+      let effortHtml = '';
+      if (data.stats.effortDistribution && data.stats.effortDistribution.length > 0) {
+        effortHtml = `
+          <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+            ${data.stats.effortDistribution.slice(0, 3).map(item => `
+              <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.73rem;">
+                <span style="display: inline-flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px;">
+                  <span style="width: 7px; height: 7px; border-radius: 50%; background-color: ${item.color}; flex-shrink: 0;"></span>
+                  <span style="color: var(--text-main); font-weight: 500;">${this.escapeHtml(item.title)}</span>
+                </span>
+                <span style="color: var(--text-muted); font-weight: 600;">${item.percent}%</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else {
+        effortHtml = `<div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 4px;">Rythme équilibré</div>`;
+      }
+
+      html += `
+        <div class="debrief-weekly-stats-banner" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 22px;">
+          <div class="debrief-stat-card" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>Tâches accomplies</span>
+            </div>
+            <div style="font-size: 1.55rem; font-weight: 700; color: var(--text-main); margin-top: 4px;">
+              ${data.stats.completedTasksCount}
+            </div>
+            <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">
+              ${data.stats.completedTasksCount > 0 ? 'Objectifs franchis avec succès' : 'Semaine de repos et réflexion'}
+            </div>
+          </div>
+
+          <div class="debrief-stat-card" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span>Temps & créneaux</span>
+            </div>
+            <div style="font-size: 1.55rem; font-weight: 700; color: var(--text-main); margin-top: 4px;">
+              ${data.stats.eventsHonoredCount}
+            </div>
+            <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">
+              ${data.stats.eventsHonoredCount > 0 ? 'Moments clés honorés' : 'Emploi du temps aéré'}
+            </div>
+          </div>
+
+          <div class="debrief-stat-card" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span>Projets en mouvement</span>
+            </div>
+            <div style="font-size: 1.55rem; font-weight: 700; color: var(--text-main); margin-top: 4px;">
+              ${data.stats.activeProjectsCount}
+            </div>
+            <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">
+              ${data.stats.activeProjectsCount > 0 ? 'Dossiers ayant progressé' : 'Focus sur l’essentiel'}
+            </div>
+          </div>
+
+          <div class="debrief-stat-card" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10h-10z"/></svg>
+              <span>Répartition de l’effort</span>
+            </div>
+            ${effortHtml}
+          </div>
+        </div>
+      `;
+    }
 
     const hasTasks = data.completedTasks.length > 0;
     const hasEvents = (data.events && data.events.length > 0) || (data.eventsCount > 0);

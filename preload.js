@@ -100,6 +100,22 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
     return ipcRenderer.invoke('antigravite:toggle-window-visibility');
   },
 
+  // Contrôles de fenêtre intégrés
+  windowControls: Object.freeze({
+    minimize: () => ipcRenderer.invoke('antigravite:window-minimize'),
+    maximize: () => ipcRenderer.invoke('antigravite:window-maximize'),
+    close: () => ipcRenderer.invoke('antigravite:window-close'),
+    isMaximized: () => ipcRenderer.invoke('antigravite:window-is-maximized'),
+    onMaximizeChanged: (callback) => {
+      if (typeof callback !== 'function') return () => {};
+      const handler = (_event, isMaximized) => callback(isMaximized);
+      ipcRenderer.on('antigravite:window-maximize-changed', handler);
+      return () => {
+        ipcRenderer.removeListener('antigravite:window-maximize-changed', handler);
+      };
+    }
+  }),
+
   setTitleBarOverlay: (options) => {
     return ipcRenderer.invoke('antigravite:set-title-bar-overlay', options);
   },

@@ -233,6 +233,8 @@ const StorageManager = {
     fontFamily: 'system',    // 'system' | 'tech' | 'rounded'
     borderRadius: 'modern',  // 'minimal' | 'modern' | 'soft'
     glassStyle: 'balanced',  // 'balanced' | 'glass' | 'solid'
+    customAccentColors: [],  // [{ id, name, hex, createdAt }] - Nuancier personnel
+    customWallpapers: [],    // [{ id, name, type, css, patternSize, patternRepeat, config, createdAt }] - Fonds créés dans le studio
     backgroundImage: null,   // null | 'nebula' | 'aurora' | 'mineral' | 'sunset' | 'ocean' | 'forest' | 'cyberpunk' | 'minimal' | 'lavender' | 'solar' | 'data:image/...'
     backgroundOpacity: 25,   // 5 à 80 (%)
     backgroundBlur: 0,       // 0 à 20 (px)
@@ -244,24 +246,26 @@ const StorageManager = {
     agendaNotificationStages: ['60m', '30m', 'now'], // Choix multiples : '60m', '30m', 'now'
     notificationSound: 'zen', // 'zen' | 'chime' | 'pop' | 'none'
     notificationVolume: 60,  // 0 à 100 (%)
-    sidebarDayProgressEnabled: true, // Afficher la progression de la journée sous les onglets à gauche
-    sidebarMiniPlayerEnabled: true,  // Afficher le mini-lecteur de musique dans le volet latéral
-    sidebarStickyNoteEnabled: true,  // Afficher le module Post-it mémo dans le volet latéral
+    sidebarDayProgressEnabled: false, // Afficher la progression de la journée sous les onglets à gauche
+    sidebarMiniPlayerEnabled: false,  // Afficher le mini-lecteur de musique dans le volet latéral
+    sidebarStickyNoteEnabled: false,  // Afficher le module Post-it mémo dans le volet latéral
     sidebarVisibleScreens: {
+      agenda: true,
       tasks: true,
       projects: true,
-      agenda: true,
       notes: true,
-      focus: true,
-      music: true,
       trash: true,
-      backups: true
+      constellation: false,
+      focus: false,
+      music: false,
+      backups: false
     },
     sidebarTabsOrder: [
+      'agenda',
       'tasks',
       'projects',
-      'agenda',
       'notes',
+      'constellation',
       'focus',
       'music',
       'trash',
@@ -274,7 +278,7 @@ const StorageManager = {
     greetingMood: 'mixed',   // 'mixed' | 'warm' | 'witty' | 'custom'
     customGreetingPhrase: '', // Phrase personnalisée sur-mesure (si mode custom)
     // Débriefing et bilan
-    debriefEnabled: true,             // Activer le débriefing du jour et de la semaine
+    debriefEnabled: false,             // Activer le débriefing du jour et de la semaine
     debriefHour: '17:00',             // Heure d'apparition du bilan en semaine (défaut 17:00)
     debriefWeekendRange: 'mon-fri',   // Périmètre hebdo le week-end : 'mon-fri' | 'mon-sat' | 'mon-sun'
     debriefAlwaysShowTab: false,      // Garder l'onglet visible en permanence ou uniquement aux heures dédiées

@@ -523,7 +523,7 @@
 
 [data-density="compact"] .top-bar {
   height: 50px;
-  padding: 0 165px 0 20px;
+  padding: 0 0 0 20px;
 }
 
 [data-density="compact"] .nav-item {
@@ -1881,12 +1881,14 @@ body.sidebar-collapsed #theme-toggle-btn > span {
   align-items: center;
   justify-content: space-between;
   padding-left: 28px;
-  padding-right: 165px; /* Dégagement sécurisé pour les boutons Réduire / Agrandir / Fermer natifs Windows */
+  padding-right: 0;
   flex-shrink: 0;
   -webkit-app-region: drag;
   user-select: none;
   min-width: 860px;
   box-sizing: border-box;
+  margin-top: 0;
+  border-top: none;
 }
 
 .top-bar-title {
@@ -1911,6 +1913,7 @@ body.sidebar-collapsed #theme-toggle-btn > span {
   align-items: center;
   gap: 10px;
   margin-left: auto;
+  margin-right: 12px;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
@@ -1921,6 +1924,69 @@ body.sidebar-collapsed #theme-toggle-btn > span {
 .top-bar a,
 .brand-icon {
   -webkit-app-region: no-drag;
+}
+
+/* ==========================================================
+   Contrôles de Fenêtre Intégrés (Réduire, Agrandir, Fermer)
+   Couleur de fond 100% harmonieuse et unifiée avec le bandeau
+   ========================================================== */
+
+.window-controls-container {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.btn-win-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  -webkit-app-region: no-drag;
+  padding: 0;
+  outline: none;
+}
+
+.btn-win-control:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.btn-win-control:active {
+  background-color: var(--bg-active);
+}
+
+.btn-win-control.btn-win-close:hover {
+  background-color: #e81123 !important;
+  color: #ffffff !important;
+}
+
+.btn-win-control.btn-win-close:active {
+  background-color: #c4101e !important;
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .btn-win-control {
+  color: #334155;
+}
+
+[data-theme="light"] .btn-win-control:hover {
+  color: #000000;
+  background-color: rgba(0, 0, 0, 0.07);
+}
+
+[data-theme="light"] .btn-win-control.btn-win-close:hover {
+  background-color: #e81123 !important;
+  color: #ffffff !important;
 }
 
 @media (max-width: 1100px) {
@@ -1935,7 +2001,7 @@ body.sidebar-collapsed #theme-toggle-btn > span {
   }
   .top-bar {
     padding-left: 14px;
-    padding-right: 155px;
+    padding-right: 0;
   }
 }
 
@@ -4128,6 +4194,8 @@ body.sidebar-collapsed .btn-toggle-sidebar svg,
   padding: 12px 18px;
   gap: 16px;
   min-height: 60px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .project-row .project-color-bar {
@@ -4175,6 +4243,81 @@ body.sidebar-collapsed .btn-toggle-sidebar svg,
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+/* Arborescence et liens visuels des projets en vue ligne (comme pour les tâches) */
+.project-tree-node {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-tree-node.is-root {
+  margin-bottom: 2px;
+}
+
+.project-tree-node.is-child {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ligne verticale de l'arborescence reliant le projet parent aux sous-projets */
+.project-tree-node.is-child::before {
+  content: "";
+  position: absolute;
+  left: -20px;
+  top: -10px;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--tree-line);
+  transition: background-color var(--transition-fast);
+  z-index: 1;
+}
+
+/* Si c'est le dernier sous-projet de la branche, la ligne s'arrête exactement à son connecteur */
+.project-tree-node.is-child:last-child::before {
+  height: 40px;
+  bottom: auto;
+}
+
+/* Connecteur horizontal en L reliant la ligne verticale au sous-projet */
+.project-tree-node.is-child::after {
+  content: "";
+  position: absolute;
+  left: -20px;
+  top: 30px;
+  width: 20px;
+  height: 2px;
+  background-color: var(--tree-line);
+  border-bottom-left-radius: 4px;
+  transition: background-color var(--transition-fast);
+  z-index: 1;
+}
+
+/* Surbrillance interactive au survol d'un sous-projet */
+.project-tree-node.is-child:hover::before,
+.project-tree-node.is-child:hover::after {
+  background-color: var(--tree-line-hover);
+}
+
+/* Conteneur indenté des sous-projets en vue ligne */
+.subprojects-container {
+  position: relative;
+  margin-left: 24px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  box-sizing: border-box;
+}
+
+.subprojects-container.collapsed {
+  display: none;
 }
 
 /* Poignée de drag & drop et états de glisser-déposer sur les projets */
@@ -4311,6 +4454,20 @@ button.project-parent-pill:hover {
 
 .project-family-toggle-btn.is-collapsed .project-family-chevron {
   transform: rotate(-90deg);
+}
+
+button.project-subcount-pill {
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+button.project-subcount-pill:hover {
+  background-color: rgba(16, 185, 129, 0.20);
+  border-color: rgba(16, 185, 129, 0.55);
+}
+
+button.project-subcount-pill.is-collapsed .project-family-chevron {
+  transform: rotate(-90deg) !important;
 }
 
 [data-theme="light"] .project-subcount-pill,
@@ -6080,7 +6237,7 @@ button.project-parent-pill:hover {
   }
 }
 
-/* Barre d'outils Markdown Obsidian */
+/* Barre d'outils Markdown & Format riche */
 .notes-format-bar {
   display: flex;
   align-items: center;
@@ -6457,7 +6614,7 @@ button.project-parent-pill:hover {
   font-size: 0.9rem;
 }
 
-/* Typographie & Éléments Markdown Obsidian dans l'aperçu */
+/* Typographie & Éléments Markdown dans l'aperçu */
 .notes-preview h1,
 .notes-preview h2,
 .notes-preview h3,
@@ -6497,7 +6654,8 @@ button.project-parent-pill:hover {
   font-style: italic;
 }
 
-.obsidian-highlight {
+.obsidian-highlight,
+.note-highlight {
   background-color: rgba(234, 179, 8, 0.32);
   color: inherit;
   padding: 0.1em 0.35em;
@@ -6505,12 +6663,14 @@ button.project-parent-pill:hover {
   border-bottom: 1px solid rgba(234, 179, 8, 0.5);
 }
 
-.obsidian-del {
+.obsidian-del,
+.note-del {
   text-decoration: line-through;
   color: var(--text-dim);
 }
 
-.obsidian-wikilink {
+.obsidian-wikilink,
+.note-wikilink {
   color: var(--accent);
   text-decoration: underline;
   text-decoration-style: dotted;
@@ -6518,12 +6678,14 @@ button.project-parent-pill:hover {
   transition: color 0.15s ease;
 }
 
-.obsidian-wikilink:hover {
+.obsidian-wikilink:hover,
+.note-wikilink:hover {
   color: var(--accent-hover);
   text-decoration-style: dotted;
 }
 
-.obsidian-tag {
+.obsidian-tag,
+.note-tag {
   display: inline-block;
   background-color: var(--accent-light);
   color: var(--accent);
@@ -6534,8 +6696,9 @@ button.project-parent-pill:hover {
   margin: 0 2px;
 }
 
-/* Callouts Obsidian */
-.obsidian-callout {
+/* Callouts & Encadrés Markdown */
+.obsidian-callout,
+.note-callout {
   border-left: 4px solid var(--accent);
   background-color: var(--bg-secondary);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
@@ -8025,6 +8188,232 @@ select.form-control option {
   opacity: 1;
 }
 
+/* Pastilles de teintes personnalisées créées par l'utilisateur */
+.accent-option-bubble.is-custom {
+  position: relative;
+  padding-right: 50px;
+}
+
+.accent-option-bubble .bubble-edit-btn {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.accent-option-bubble.is-custom:hover .bubble-edit-btn {
+  opacity: 1;
+}
+
+.accent-option-bubble .bubble-edit-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.accent-option-bubble .bubble-delete-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.accent-option-bubble.is-custom:hover .bubble-delete-btn {
+  opacity: 1;
+}
+
+.accent-option-bubble .bubble-delete-btn:hover {
+  background: #f43f5e;
+  color: #ffffff;
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Popover Sélecteur Chromatique Intégré (v1.2.6) */
+.accent-color-popover {
+  position: fixed;
+  z-index: 1500;
+  width: 275px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  background-color: rgba(18, 24, 38, 0.95);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-md, 12px);
+  padding: 12px 14px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.2);
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+.studio-color-btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.studio-color-btn:hover {
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="light"] .accent-color-popover {
+  background-color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.14), 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="oled"] .accent-color-popover {
+  background-color: rgba(0, 0, 0, 0.96);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.accent-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.popover-color-badge {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: background-color 0.1s ease;
+}
+
+.popover-swatches-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.popover-custom-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  margin-bottom: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-section-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+
+.popover-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.popover-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.popover-swatch:hover {
+  transform: scale(1.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+
+.popover-swatch.active {
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.popover-hue-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+}
+
+.popover-hue-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.popover-lightness-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #000000 0%, var(--popover-cur-hue, #38bdf8) 50%, #ffffff 100%);
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+}
+
+.popover-lightness-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
 /* Grille duo (Densité & Taille) */
 .settings-grid-duo {
   display: grid;
@@ -8144,6 +8533,359 @@ select.form-control option {
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Cartes de fonds d'écran personnalisés créés dans le studio */
+.wallpaper-card.is-custom {
+  position: relative;
+}
+
+.wallpaper-card .wallpaper-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 23, 42, 0.85);
+  color: #f43f5e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  z-index: 2;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.wallpaper-card .wallpaper-edit-btn {
+  position: absolute;
+  top: 32px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 23, 42, 0.85);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  z-index: 2;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.wallpaper-card.is-custom:hover .wallpaper-delete-btn,
+.wallpaper-card.is-custom:hover .wallpaper-edit-btn {
+  opacity: 1;
+}
+
+.wallpaper-card .wallpaper-delete-btn:hover {
+  background: #f43f5e;
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.wallpaper-card .wallpaper-edit-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+/* ==========================================================
+   Studio de Création de Fond d'Écran
+   ========================================================== */
+
+.wallpaper-studio-dialog {
+  width: calc(100vw - 48px);
+  max-width: 1540px;
+  height: calc(100vh - 48px);
+  max-height: 95vh;
+  margin: auto;
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+}
+
+.studio-layout {
+  display: grid;
+  grid-template-columns: 460px 1fr;
+  gap: 36px;
+  height: 100%;
+  align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .studio-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+.studio-preview-card {
+  flex: 1;
+  min-height: 420px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+  background-size: cover;
+  background-position: center;
+  transition: background 0.25s ease;
+}
+
+.studio-preview-glass-content {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: 22px 26px;
+  width: 380px;
+  max-width: 88%;
+  color: #ffffff;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+}
+
+.studio-type-selector {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.studio-type-btn {
+  padding: 6px 11px;
+  border-radius: var(--radius-sm);
+  font-size: 0.77rem;
+  font-weight: 500;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.studio-type-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-main);
+}
+
+.studio-type-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.studio-base-chip {
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  border-radius: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.studio-base-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-main);
+}
+
+.studio-base-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-light);
+  font-weight: 600;
+}
+
+.studio-palette-chip {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.73rem;
+  font-weight: 500;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.studio-palette-chip:hover {
+  background: var(--bg-card);
+  border-color: var(--accent);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.studio-palette-chip.active {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ==========================================================
+   Glissières / Tirettes de réglage (Sliders de paramètres & Studio)
+   Curseur et piste parfaitement alignés, ultra-fluides sans à-coup
+   ========================================================== */
+
+.settings-slider,
+#wallpaper-opacity-slider,
+#wallpaper-blur-slider,
+#slider-notification-volume,
+#studio-param-angle,
+#studio-param-size,
+#studio-param-intensity,
+#studio-param-blur {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  vertical-align: middle;
+  border: none;
+}
+
+/* Piste de glissement (Track) avec remplissage dynamique à gauche du curseur */
+.settings-slider::-webkit-slider-runnable-track,
+#wallpaper-opacity-slider::-webkit-slider-runnable-track,
+#wallpaper-blur-slider::-webkit-slider-runnable-track,
+#slider-notification-volume::-webkit-slider-runnable-track,
+#studio-param-angle::-webkit-slider-runnable-track,
+#studio-param-size::-webkit-slider-runnable-track,
+#studio-param-intensity::-webkit-slider-runnable-track,
+#studio-param-blur::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--slider-percent, 0%), rgba(255, 255, 255, 0.18) var(--slider-percent, 0%), rgba(255, 255, 255, 0.18) 100%);
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+}
+
+/* Curseur circulaire (Thumb) exactement centré sur la piste (6px - 16px) / 2 = -5px */
+.settings-slider::-webkit-slider-thumb,
+#wallpaper-opacity-slider::-webkit-slider-thumb,
+#wallpaper-blur-slider::-webkit-slider-thumb,
+#slider-notification-volume::-webkit-slider-thumb,
+#studio-param-angle::-webkit-slider-thumb,
+#studio-param-size::-webkit-slider-thumb,
+#studio-param-intensity::-webkit-slider-thumb,
+#studio-param-blur::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #ffffff;
+  margin-top: -5px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.settings-slider:focus-visible::-webkit-slider-thumb,
+#wallpaper-opacity-slider:focus-visible::-webkit-slider-thumb,
+#wallpaper-blur-slider:focus-visible::-webkit-slider-thumb,
+#slider-notification-volume:focus-visible::-webkit-slider-thumb,
+#studio-param-angle:focus-visible::-webkit-slider-thumb,
+#studio-param-size:focus-visible::-webkit-slider-thumb,
+#studio-param-intensity:focus-visible::-webkit-slider-thumb,
+#studio-param-blur:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--accent-light), 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* Firefox */
+.settings-slider::-moz-range-track,
+#wallpaper-opacity-slider::-moz-range-track,
+#wallpaper-blur-slider::-moz-range-track,
+#slider-notification-volume::-moz-range-track,
+#studio-param-angle::-moz-range-track,
+#studio-param-size::-moz-range-track,
+#studio-param-intensity::-moz-range-track,
+#studio-param-blur::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+}
+
+.settings-slider::-moz-range-thumb,
+#wallpaper-opacity-slider::-moz-range-thumb,
+#wallpaper-blur-slider::-moz-range-thumb,
+#slider-notification-volume::-moz-range-thumb,
+#studio-param-angle::-moz-range-thumb,
+#studio-param-size::-moz-range-thumb,
+#studio-param-intensity::-moz-range-thumb,
+#studio-param-blur::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #ffffff;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.settings-slider::-moz-range-progress,
+#wallpaper-opacity-slider::-moz-range-progress,
+#wallpaper-blur-slider::-moz-range-progress,
+#slider-notification-volume::-moz-range-progress,
+#studio-param-angle::-moz-range-progress,
+#studio-param-size::-moz-range-progress,
+#studio-param-intensity::-moz-range-progress,
+#studio-param-blur::-moz-range-progress {
+  height: 6px;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+/* Mode clair */
+[data-theme="light"] .settings-slider::-webkit-slider-runnable-track,
+[data-theme="light"] #wallpaper-opacity-slider::-webkit-slider-runnable-track,
+[data-theme="light"] #wallpaper-blur-slider::-webkit-slider-runnable-track,
+[data-theme="light"] #slider-notification-volume::-webkit-slider-runnable-track,
+[data-theme="light"] #studio-param-angle::-webkit-slider-runnable-track,
+[data-theme="light"] #studio-param-size::-webkit-slider-runnable-track,
+[data-theme="light"] #studio-param-intensity::-webkit-slider-runnable-track,
+[data-theme="light"] #studio-param-blur::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--slider-percent, 0%), #cbd5e1 var(--slider-percent, 0%), #cbd5e1 100%);
+}
+
+[data-theme="light"] .settings-slider::-moz-range-track,
+[data-theme="light"] #wallpaper-opacity-slider::-moz-range-track,
+[data-theme="light"] #wallpaper-blur-slider::-moz-range-track,
+[data-theme="light"] #slider-notification-volume::-moz-range-track,
+[data-theme="light"] #studio-param-angle::-moz-range-track,
+[data-theme="light"] #studio-param-size::-moz-range-track,
+[data-theme="light"] #studio-param-intensity::-moz-range-track,
+[data-theme="light"] #studio-param-blur::-moz-range-track {
+  background: #cbd5e1;
 }
 
 /* ==========================================================
@@ -10827,6 +11569,80 @@ kbd {
 }
 
 /* ==========================================================
+   Historique pliable des versions antérieures (Paramètres)
+   ========================================================== */
+.changelog-history-section {
+  margin-top: 18px;
+  border-top: 1px dashed var(--border-color);
+  padding-top: 16px;
+}
+
+.changelog-history-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.changelog-history-wrapper {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  animation: fadeInChangelogHistory 0.22s ease-out;
+}
+
+@keyframes fadeInChangelogHistory {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.changelog-history-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.changelog-history-pill {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.changelog-history-pill:hover {
+  color: var(--text-main);
+  border-color: var(--accent);
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.changelog-history-pill.active {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.changelog-archived-card {
+  margin-top: 4px;
+}
+
+/* ==========================================================
    Modale Nouveautés au premier lancement après mise à jour
    ========================================================== */
 .whats-new-modal-content {
@@ -12343,3 +13159,631 @@ kbd {
 [data-theme="light"] .debrief-hero-card {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), var(--shadow-sm);
 }
+
+/* ==========================================================================
+   CONSTELLATION & MIND MAP INTERACTIVE (v1.2.6)
+   ========================================================================== */
+
+#screen-constellation {
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 100%;
+  overflow: hidden;
+}
+
+.constellation-screen-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Barre d'outils supérieure flottante */
+.constellation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(18, 24, 38, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 30;
+  flex-wrap: wrap;
+}
+
+[data-theme="light"] .constellation-toolbar {
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="oled"] .constellation-toolbar {
+  background: rgba(0, 0, 0, 0.92);
+  border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+
+.constellation-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.constellation-filters-group .filter-pill {
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.constellation-filters-group .filter-pill.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: var(--text-main);
+}
+
+.filter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Boîte de recherche */
+.constellation-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.constellation-search-box .search-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.constellation-search-box input {
+  padding: 4px 26px 4px 28px;
+  height: 28px;
+  font-size: 0.76rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  color: var(--text-main);
+  width: 175px;
+  transition: width 0.2s ease, border-color 0.2s ease;
+}
+
+.constellation-search-box input:focus {
+  width: 220px;
+  border-color: var(--accent);
+  outline: none;
+}
+
+.constellation-search-box .btn-clear-search {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+/* Zoom label */
+.zoom-value-label {
+  font-size: 0.76rem;
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--text-dim);
+  min-width: 42px;
+  text-align: center;
+}
+
+/* Canevas Whiteboard infini */
+.constellation-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  background-color: var(--bg-primary);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1.2px, transparent 1.2px);
+  background-size: 26px 26px;
+  outline: none;
+}
+
+[data-theme="light"] .constellation-viewport {
+  background-image: radial-gradient(rgba(0, 0, 0, 0.08) 1.2px, transparent 1.2px);
+}
+
+.constellation-viewport.is-dragging {
+  cursor: grabbing !important;
+}
+
+.constellation-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* SVG des courbes de liaison */
+.constellation-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+.constellation-path {
+  stroke-width: 2.2px;
+  stroke-linecap: round;
+  stroke-opacity: 0.42;
+  transition: stroke-opacity 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+}
+
+.constellation-path.path-active {
+  stroke-opacity: 0.95;
+  stroke-width: 3.2px;
+  filter: drop-shadow(0 0 6px var(--accent));
+}
+
+.constellation-path.path-dimmed {
+  stroke-opacity: 0.12;
+}
+
+/* Conteneur des cartes de nœuds */
+.constellation-nodes-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+
+.constellation-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: var(--radius-md, 10px);
+  background: rgba(22, 30, 46, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 4px solid var(--accent);
+  padding: 8px 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.constellation-node * {
+  pointer-events: none;
+}
+
+.constellation-node .constellation-fold-btn {
+  pointer-events: auto;
+}
+
+[data-theme="light"] .constellation-node {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="oled"] .constellation-node {
+  background: rgba(0, 0, 0, 0.92);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.constellation-node:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+.constellation-node.node-type-root {
+  border-left-width: 5px;
+  background: rgba(30, 41, 59, 0.94);
+  box-shadow: 0 8px 24px rgba(56, 189, 248, 0.2);
+}
+
+.constellation-node.is-completed {
+  opacity: 0.72;
+}
+
+.constellation-node.is-completed .constellation-node-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.constellation-node.path-dimmed,
+.constellation-node.search-dimmed {
+  opacity: 0.2;
+  filter: grayscale(40%);
+  pointer-events: none;
+}
+
+.constellation-node.path-active {
+  box-shadow: 0 0 0 2px var(--accent), 0 10px 26px rgba(0, 0, 0, 0.45);
+  z-index: 6;
+}
+
+.constellation-node.search-match {
+  box-shadow: 0 0 0 3px #10b981, 0 10px 28px rgba(16, 185, 129, 0.45);
+  z-index: 20;
+}
+
+.constellation-node-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.constellation-node-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.constellation-node-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.constellation-node-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.constellation-node-subtitle {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.constellation-node-pill {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-dim);
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.constellation-node-pill.pill-urgent {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.constellation-node-pill.pill-done {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.constellation-fold-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.constellation-fold-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.constellation-fold-btn.collapsed {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Informations de pied de page */
+.constellation-footer-info {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 25;
+}
+
+.constellation-stats-badge,
+.constellation-hint-pill {
+  background: rgba(18, 24, 38, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+
+[data-theme="light"] .constellation-stats-badge,
+[data-theme="light"] .constellation-hint-pill {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================
+   Constellation : Filtrage Stable & Mode Rayonnant Amélioré
+   ========================================================== */
+
+/* Masquage instantané par les filtres sans déplacer la disposition */
+.constellation-node.is-filter-hidden {
+  display: none !important;
+}
+.constellation-path.is-filter-hidden {
+  display: none !important;
+}
+
+/* Mode Constellation rayonnante : orbes stellaires compacts anti-superposition */
+.constellation-mode-radial .constellation-node {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  align-items: center !important;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: box-shadow 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.constellation-mode-radial .constellation-node.node-type-root {
+  width: 56px !important;
+  height: 56px !important;
+  border-width: 3px !important;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.6), 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.constellation-mode-radial .constellation-node:hover {
+  box-shadow: 0 0 26px rgba(56, 189, 248, 0.85), 0 8px 22px rgba(0, 0, 0, 0.6) !important;
+  z-index: 100 !important;
+}
+
+.constellation-mode-radial .constellation-node:hover .constellation-node-icon {
+  transform: scale(1.18);
+}
+
+.constellation-mode-radial .constellation-node .constellation-node-content,
+.constellation-mode-radial .constellation-node .constellation-node-pill,
+.constellation-mode-radial .constellation-node .constellation-fold-btn {
+  display: none !important;
+}
+
+.constellation-mode-radial .constellation-node .constellation-node-main {
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.constellation-mode-radial .constellation-node .constellation-node-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: transparent !important;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.constellation-mode-radial .constellation-node.node-type-root .constellation-node-icon {
+  width: 48px;
+  height: 48px;
+}
+
+/* Carte flottante d'aperçu d'un nœud au survol */
+.constellation-hover-card {
+  position: fixed;
+  z-index: 2400;
+  min-width: 250px;
+  max-width: 330px;
+  background: rgba(18, 25, 40, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-md, 10px);
+  padding: 12px 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  pointer-events: none !important;
+  transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+  box-sizing: border-box;
+}
+
+[data-theme="light"] .constellation-hover-card {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="oled"] .constellation-hover-card {
+  background: rgba(0, 0, 0, 0.96);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+@keyframes constellationHoverCardIn {
+  from { opacity: 0; transform: scale(0.95) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.constellation-hover-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.constellation-hover-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.constellation-hover-title-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.constellation-hover-type {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.constellation-hover-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.constellation-hover-body {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.constellation-hover-progress {
+  margin-top: 6px;
+}
+
+.constellation-hover-progress-bar {
+  height: 5px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.constellation-hover-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.constellation-hover-footer {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 6px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Menu contextuel Constellation */
+.constellation-context-menu {
+  min-width: 230px;
+  max-width: 310px;
+}
+
+.constellation-context-menu .context-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.constellation-context-menu .context-menu-header-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.constellation-context-menu .context-menu-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.constellation-context-menu .context-menu-header-title {
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.constellation-context-menu .context-menu-header-type {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+

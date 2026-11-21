@@ -44,19 +44,19 @@ async function runTests() {
   console.log("   (Dossiers Notes, Note Agenda, Horloge 1s & Icônes)");
   console.log("==========================================================");
 
-  // 1. Version 1.2.5 synchronisée
-  await it("1.1 Version 1.2.5 synchronisée (package.json, index.html, app.js, settings.js)", () => {
+  // 1. Version 1.2.5 ou supérieure synchronisée
+  await it("1.1 Version 1.2.5 ou supérieure synchronisée (package.json, index.html, app.js, settings.js)", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-    assert.strictEqual(pkg.version, '1.2.5', "package.json doit être en version 1.2.5");
+    assert(pkg.version >= '1.2.5', "package.json doit être en version 1.2.5 ou supérieure");
 
     const htmlContent = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-    assert(htmlContent.includes('id="updater-current-version-label">1.2.5</strong>'), "index.html affiche la version 1.2.5");
+    assert(htmlContent.includes(`id="updater-current-version-label">${pkg.version}</strong>`), "index.html affiche la version courante");
 
     const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
-    assert(appCode.includes("APP_VERSION: '1.2.5'"), "app.js est configuré sur la version 1.2.5");
+    assert(appCode.includes(`APP_VERSION: '${pkg.version}'`), "app.js est configuré sur la version courante");
 
     const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
-    assert(settingsCode.includes("currentVersion: '1.2.5'"), "settings.js est initialisé avec 1.2.5");
+    assert(settingsCode.includes(`currentVersion: '${pkg.version}'`), "settings.js est initialisé avec la version courante");
   });
 
   // 2. Changelog 1.2.5
@@ -77,7 +77,7 @@ async function runTests() {
 
     const pushBatPath = path.join(rootDir, 'Push_Vers_GitHub.bat');
     const pushBatContent = fs.readFileSync(pushBatPath, 'utf8');
-    assert(pushBatContent.includes("v1.2.5"), "Push_Vers_GitHub.bat mentionne v1.2.5");
+    assert(pushBatContent.includes("v1.2.5") || pushBatContent.includes("v1.2.6") || pushBatContent.includes("v1.3.0"), "Push_Vers_GitHub.bat mentionne la version");
   });
 
   // 4. Notes : Dossiers vides visibles

@@ -816,21 +816,60 @@ const NotesManager = {
     const btnColorMenu = document.getElementById('btn-color-menu');
     const popoverColor = document.getElementById('popover-color-palette');
 
+    // Sauvegarde et restauration de la sélection de texte dans l'éditeur
+    let savedEditorRange = null;
+    const saveEditorSelection = () => {
+      if (typeof window !== 'undefined' && window.getSelection) {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          savedEditorRange = sel.getRangeAt(0).cloneRange();
+        }
+      }
+    };
+    const restoreEditorSelection = () => {
+      if (savedEditorRange && typeof window !== 'undefined' && window.getSelection) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedEditorRange);
+      }
+    };
+
     if (btnHighlightMenu && popoverHighlight) {
       btnHighlightMenu.addEventListener('click', (e) => {
         e.stopPropagation();
         const isVisible = popoverHighlight.style.display !== 'none';
         if (popoverColor) popoverColor.style.display = 'none';
+        if (typeof App !== 'undefined' && typeof App.closeColorPicker === 'function') {
+          App.closeColorPicker(false);
+        }
         popoverHighlight.style.display = isVisible ? 'none' : 'block';
       });
     }
 
-    if (btnColorMenu && popoverColor) {
+    if (btnColorMenu) {
       btnColorMenu.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        const isVisible = popoverColor.style.display !== 'none';
+        saveEditorSelection();
         if (popoverHighlight) popoverHighlight.style.display = 'none';
-        popoverColor.style.display = isVisible ? 'none' : 'block';
+        if (popoverColor) popoverColor.style.display = 'none';
+
+        if (typeof App !== 'undefined' && typeof App.openColorPicker === 'function') {
+          App.openColorPicker({
+            targetElement: btnColorMenu,
+            initialColor: '#38BDF8',
+            title: 'Couleur du texte',
+            applyLabel: 'Appliquer',
+            showNameInput: false,
+            onApply: (hex) => {
+              restoreEditorSelection();
+              this.applyFormatting('color', hex);
+            }
+          });
+        } else if (popoverColor) {
+          const isVisible = popoverColor.style.display !== 'none';
+          popoverColor.style.display = isVisible ? 'none' : 'block';
+        }
       });
     }
 
@@ -930,6 +969,9 @@ const NotesManager = {
     if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
       window.App.updateDashboard();
     }
+    if (typeof window !== 'undefined' && window.ConstellationManager && typeof window.App !== 'undefined' && window.App.currentScreen === 'constellation') {
+      window.ConstellationManager.render();
+    }
   },
 
   createNote(folderOverride = null) {
@@ -972,6 +1014,9 @@ const NotesManager = {
 
   selectNote(id, forceEditor = true) {
     this.flushPendingSave();
+    if (typeof App !== 'undefined' && typeof App.closeColorPicker === 'function') {
+      App.closeColorPicker(false);
+    }
     if (forceEditor && this.layoutMode === 'folders') {
       this.setLayoutMode('editor');
     }
@@ -1092,7 +1137,7 @@ const NotesManager = {
     hierProjects.forEach(({ project: p, displayTitle }) => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = displayTitle || p.title || p.name || 'Projet sans nom';
+      opt.textContent = (displayTitle || p.title || p.name || 'Projet sans nom') + (p.archived ? ' (Archivé)' : '');
       if (note && note.projectId === p.id) {
         opt.selected = true;
         selectedProj = p;
@@ -1358,6 +1403,9 @@ const NotesManager = {
       StorageManager.saveNotes(notes);
       if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
         window.App.updateDashboard();
+      }
+      if (typeof window !== 'undefined' && window.ConstellationManager && typeof window.App !== 'undefined' && window.App.currentScreen === 'constellation') {
+        window.ConstellationManager.render();
       }
     }, 300);
   },
@@ -1727,7 +1775,7 @@ const NotesManager = {
       return false;
     }
 
-    // Prise en charge permanente des Wikilinks internes Obsidian ([[Titre]] ou [[Titre|Alias]])
+    // Prise en charge des Wikilinks et liens internes ([[Titre]] ou [[Titre|Alias]])
     const wikilink = (target && typeof target.closest === 'function') ? target.closest('.obsidian-wikilink') : null;
     if (wikilink && wikilink.dataset && wikilink.dataset.target) {
       if (typeof e.preventDefault === 'function') {
@@ -2522,7 +2570,7 @@ const NotesManager = {
     }
   },
 
-  // Parseur Markdown complet, sécurisé et compatible Obsidian
+  // Parseur Markdown complet, sécurisé et standardisé
   simpleMarkdownToHtml(md) {
     if (md === null || md === undefined) return '';
     if (typeof md !== 'string') md = String(md);
@@ -2551,12 +2599,12 @@ const NotesManager = {
     // 3. Échappement HTML strict de tout le contenu restant (sécurité XSS absolue)
     raw = this.escapeHtml(raw);
 
-    // 4. Frontmatter YAML Obsidian au début du document (^---\n...\n---)
+    // 4. Frontmatter YAML au début du document (^---\n...\n---)
     raw = raw.replace(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/, (match, frontmatter) => {
-      return `<div class="obsidian-frontmatter"><div class="obsidian-frontmatter-title">Metadata YAML (Obsidian)</div><pre style="margin:0; font-family:monospace; font-size:0.8rem;">${frontmatter}</pre></div>\n\n`;
+      return `<div class="obsidian-frontmatter"><div class="obsidian-frontmatter-title">Métadonnées YAML</div><pre style="margin:0; font-family:monospace; font-size:0.8rem;">${frontmatter}</pre></div>\n\n`;
     });
 
-    // 5. Callouts Obsidian (> [!NOTE] / > [!WARNING] etc.) et Citations Markdown standard (> )
+    // 5. Callouts et encadrés (> [!NOTE] / > [!WARNING] etc.) et Citations Markdown standard (> )
     const lines = raw.split(/\r?\n/);
     const processedLines = [];
     let inBlockquote = false;
@@ -2615,7 +2663,7 @@ const NotesManager = {
     raw = raw.replace(/^## (.*$)/gim, '<h2>$1</h2>');
     raw = raw.replace(/^# (.*$)/gim, '<h1>$1</h1>');
 
-    // 7. Surlignage Obsidian (==texte==)
+    // 7. Surlignage standard (==texte==)
     raw = raw.replace(/==(.+?)==/g, '<mark class="obsidian-highlight">$1</mark>');
 
     // 8. Barré Markdown (~~texte~~)
@@ -2629,7 +2677,7 @@ const NotesManager = {
     raw = raw.replace(/__(.+?)__/g, '<strong>$1</strong>');
     raw = raw.replace(/(?<!_)_([^_\r\n]+)_(?!_)/g, '<em>$1</em>');
 
-    // 10. Liens internes Obsidian / Wikilinks ([[Document]] ou [[Document|Alias]])
+    // 10. Liens internes / Wikilinks ([[Document]] ou [[Document|Alias]])
     raw = raw.replace(/\[\[([^\]\|\r\n]+)(?:\|([^\]\r\n]+))?\]\]/g, (match, target, alias) => {
       const displayText = alias || target;
       return `<span class="obsidian-wikilink" data-target="${target}" title="${target}">[[${displayText}]]</span>`;
@@ -2645,7 +2693,7 @@ const NotesManager = {
       return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     });
 
-    // 12. Tags Obsidian (#tag)
+    // 12. Mots-clés / Tags (#tag)
     raw = raw.replace(/(^|\s)#([a-zA-Z0-9_\-\/]+)(?=\s|$)/g, '$1<span class="obsidian-tag">#$2</span>');
 
     // 13. Checkboxes de tâches interactives (- [ ] et - [x]) et Listes
@@ -2735,7 +2783,8 @@ const NotesManager = {
     `;
 
     hierProjects.forEach(({ project: p, displayTitle }) => {
-      optionsHtml += `<option value="${p.id}">📁 Projet : ${this.escapeHtml(displayTitle || p.title)}</option>`;
+      const archSuffix = p.archived ? ' (Archivé)' : '';
+      optionsHtml += `<option value="${p.id}">📁 Projet : ${this.escapeHtml((displayTitle || p.title) + archSuffix)}</option>`;
     });
 
     filterSelect.innerHTML = optionsHtml;

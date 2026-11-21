@@ -46,7 +46,7 @@ async function runTests() {
   // 1. Version 1.2.4 ou supérieure synchronisée
   await it("1.1 Version 1.2.4 ou supérieure synchronisée (package.json, index.html, app.js, settings.js)", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-    assert(pkg.version === '1.2.4' || pkg.version === '1.2.5', "package.json doit être en version 1.2.4 ou supérieure");
+    assert(pkg.version >= '1.2.4', "package.json doit être en version 1.2.4 ou supérieure");
 
     const htmlContent = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
     assert(htmlContent.includes(`id="updater-current-version-label">${pkg.version}</strong>`), "index.html affiche la version courante");

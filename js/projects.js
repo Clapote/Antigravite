@@ -5,6 +5,7 @@
 
 const ProjectsManager = {
   viewMode: (typeof localStorage !== 'undefined' && localStorage.getItem('antigravite_project_view')) || 'grid',
+  currentFilter: 'active',
   draggedProjectId: null,
   collapsedFamilies: null,
   _activeDropFamilyGroup: null,
@@ -164,18 +165,196 @@ const ProjectsManager = {
 
   bindEvents() {
     const btnNew = document.getElementById('btn-new-project');
-    if (btnNew) {
+    if (btnNew && !btnNew._hasProjectsListener) {
+      btnNew._hasProjectsListener = true;
       btnNew.addEventListener('click', () => this.openProjectModal());
     }
 
     const btnGrid = document.getElementById('btn-project-view-grid');
-    if (btnGrid) {
+    if (btnGrid && !btnGrid._hasProjectsListener) {
+      btnGrid._hasProjectsListener = true;
       btnGrid.addEventListener('click', () => this.setViewMode('grid'));
     }
 
     const btnList = document.getElementById('btn-project-view-list');
-    if (btnList) {
+    if (btnList && !btnList._hasProjectsListener) {
+      btnList._hasProjectsListener = true;
       btnList.addEventListener('click', () => this.setViewMode('list'));
+    }
+
+    const btnToggle = document.getElementById('btn-projects-toggle-collapse') || document.getElementById('btn-projects-expand-all');
+    if (btnToggle && !btnToggle._hasProjectsCollapseListener) {
+      btnToggle._hasProjectsCollapseListener = true;
+      btnToggle.addEventListener('click', () => this.toggleAllCollapse());
+    }
+
+    const btnCollapse = document.getElementById('btn-projects-collapse-all');
+    if (btnCollapse && !btnCollapse._hasProjectsCollapseListener) {
+      btnCollapse._hasProjectsCollapseListener = true;
+      btnCollapse.addEventListener('click', () => this.collapseAll());
+    }
+
+    const btnFilterActive = document.getElementById('btn-projects-filter-active');
+    if (btnFilterActive && !btnFilterActive._hasProjectsListener) {
+      btnFilterActive._hasProjectsListener = true;
+      btnFilterActive.addEventListener('click', () => this.setFilter('active'));
+    }
+
+    const btnFilterArchived = document.getElementById('btn-projects-filter-archived');
+    if (btnFilterArchived && !btnFilterArchived._hasProjectsListener) {
+      btnFilterArchived._hasProjectsListener = true;
+      btnFilterArchived.addEventListener('click', () => this.setFilter('archived'));
+    }
+  },
+
+  setFilter(filter) {
+    this.currentFilter = (filter === 'archived') ? 'archived' : 'active';
+    this.render();
+  },
+
+  // Basculer entre tout déplier et tout replier
+  toggleAllCollapse() {
+    this._ensureCollapsedFamiliesLoaded();
+    if (this.collapsedFamilies.size > 0) {
+      this.expandAll();
+    } else {
+      this.collapseAll();
+    }
+  },
+
+  // Synchronise le titre et l'icône du bouton unique de bascule
+  updateToggleCollapseButton() {
+    if (typeof document === 'undefined') return;
+    const btn = document.getElementById('btn-projects-toggle-collapse') || document.getElementById('btn-projects-expand-all');
+    if (!btn) return;
+    this._ensureCollapsedFamiliesLoaded();
+    const hasCollapsed = this.collapsedFamilies.size > 0;
+    const label = hasCollapsed ? 'Tout déplier' : 'Tout replier';
+    const title = hasCollapsed ? "Tout déplier dans l'arborescence" : "Tout replier au premier niveau";
+    const icon = hasCollapsed
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+    btn.innerHTML = `${icon} <span>${label}</span>`;
+    btn.title = title;
+  },
+
+  expandAll() {
+    this._ensureCollapsedFamiliesLoaded();
+    this.collapsedFamilies.clear();
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('antigravite_collapsed_project_families', JSON.stringify([]));
+      } catch (e) {}
+    }
+    this.render();
+    this.updateToggleCollapseButton();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+      window.App.showToast("Tous les projets ont été dépliés", 'info');
+    }
+  },
+
+  collapseAll() {
+    this._ensureCollapsedFamiliesLoaded();
+    const projects = this.getAll();
+    projects.forEach(p => {
+      if (p.parentProjectId) this.collapsedFamilies.add(String(p.parentProjectId));
+    });
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('antigravite_collapsed_project_families', JSON.stringify(Array.from(this.collapsedFamilies)));
+      } catch (e) {}
+    }
+    this.render();
+    this.updateToggleCollapseButton();
+    if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+      window.App.showToast("Tous les sous-projets ont été repliés", 'info');
+    }
+  },
+
+  async archiveProject(id) {
+    const projects = this.getAll();
+    const target = projects.find(p => p.id === id);
+    if (!target) return;
+
+    const subprojectIds = [];
+    const collectChildren = (parentId) => {
+      projects.filter(p => p.parentProjectId === parentId).forEach(sub => {
+        subprojectIds.push(sub.id);
+        collectChildren(sub.id);
+      });
+    };
+    collectChildren(id);
+
+    if (subprojectIds.length > 0) {
+      let ok = true;
+      if (typeof App !== 'undefined' && typeof App.confirm === 'function') {
+        ok = await App.confirm({
+          title: "Archiver le projet et ses sous-projets",
+          message: `Voulez-vous archiver le projet « ${target.title} » et ses ${subprojectIds.length} sous-projet(s) ?\n\nLeurs tâches actives seront masquées sans être supprimées. Vos notes resteront consultables et les événements d'agenda inchangés.`,
+          confirmText: "Archiver la branche",
+          danger: false,
+          icon: "📦"
+        });
+      } else if (typeof confirm === 'function') {
+        ok = confirm(`Archiver « ${target.title} » et ses ${subprojectIds.length} sous-projets ?`);
+      }
+      if (!ok) return;
+    }
+
+    const now = new Date().toISOString();
+    const idsToArchive = new Set([id, ...subprojectIds]);
+    projects.forEach(p => {
+      if (idsToArchive.has(p.id)) {
+        p.archived = true;
+        p.archivedAt = now;
+      }
+    });
+
+    this.saveAll(projects);
+    this.render();
+    if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') {
+      TasksManager.render();
+    }
+    if (typeof App !== 'undefined' && typeof App.updateDashboard === 'function') {
+      App.updateDashboard(true);
+    }
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast(subprojectIds.length > 0 ? "Projet et sous-projets archivés" : "Projet archivé", "info");
+    }
+  },
+
+  async unarchiveProject(id) {
+    const projects = this.getAll();
+    const target = projects.find(p => p.id === id);
+    if (!target) return;
+
+    const subprojectIds = [];
+    const collectChildren = (parentId) => {
+      projects.filter(p => p.parentProjectId === parentId).forEach(sub => {
+        subprojectIds.push(sub.id);
+        collectChildren(sub.id);
+      });
+    };
+    collectChildren(id);
+
+    const idsToRestore = new Set([id, ...subprojectIds]);
+    projects.forEach(p => {
+      if (idsToRestore.has(p.id)) {
+        p.archived = false;
+        delete p.archivedAt;
+      }
+    });
+
+    this.saveAll(projects);
+    this.render();
+    if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') {
+      TasksManager.render();
+    }
+    if (typeof App !== 'undefined' && typeof App.updateDashboard === 'function') {
+      App.updateDashboard(true);
+    }
+    if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      App.showToast("Projet et tâches réactivés", "success");
     }
   },
 
@@ -318,6 +497,9 @@ const ProjectsManager = {
     this.render();
     if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') TasksManager.render();
     if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') window.App.updateDashboard();
+    if (typeof window !== 'undefined' && window.ConstellationManager && typeof window.App !== 'undefined' && window.App.currentScreen === 'constellation') {
+      window.ConstellationManager.render();
+    }
   },
 
   addProject(projectData) {
@@ -598,19 +780,31 @@ const ProjectsManager = {
     };
 
     const parentColor = (parentProject && parentProject.color) ? parentProject.color : 'var(--accent)';
+    const isArchived = Boolean(p.archived);
+    const archivedBadgeHtml = isArchived
+      ? `<span class="project-archived-pill" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: rgba(148, 163, 184, 0.2); color: var(--text-dim);" title="Ce projet est archivé"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>Archivé</span>`
+      : '';
     const subBadgeHtml = parentProject
       ? `<button type="button" class="project-parent-pill" style="border-color: ${this._colorWithAlpha(parentColor, 0.35, 'var(--border-color)')};" title="Sous-projet de ${this.escapeHtml(parentProject.title)} — Cliquer pour ouvrir le parent" onclick="event.stopPropagation(); ProjectsManager.openProjectDetailModal('${parentProject.id}')"><span class="project-parent-dot" style="background-color: ${parentColor};"></span><span>${this.escapeHtml(parentProject.title)}</span></button>`
       : '';
     const childrenBadgeHtml = childrenCount > 0
-      ? `<span class="project-subcount-pill" title="${childrenCount} sous-projet(s) imbriqué(s)">↳ ${childrenCount} sous-projet${childrenCount > 1 ? 's' : ''}</span>`
+      ? (isList
+          ? `<button type="button" class="project-subcount-pill project-family-toggle-pill ${isCollapsedFamily ? 'is-collapsed' : ''}" style="cursor: pointer;" title="${isCollapsedFamily ? 'Afficher les sous-projets' : 'Masquer les sous-projets'}" onclick="event.stopPropagation(); ProjectsManager.toggleFamilyCollapse('${p.id}')"><svg class="project-family-chevron ${isCollapsedFamily ? 'is-collapsed' : ''}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle; transition: transform var(--transition-fast); transform: ${isCollapsedFamily ? 'rotate(-90deg)' : 'rotate(0deg)'};"><polyline points="6 9 12 15 18 9"/></svg><span>${childrenCount} sous-projet${childrenCount > 1 ? 's' : ''}</span></button>`
+          : `<span class="project-subcount-pill" title="${childrenCount} sous-projet(s) imbriqué(s)">↳ ${childrenCount} sous-projet${childrenCount > 1 ? 's' : ''}</span>`
+        )
       : '';
     const familyToggleBtnHtml = (isFamilyParent && childrenCount > 0)
       ? `<button type="button" class="project-family-toggle-btn ${isCollapsedFamily ? 'is-collapsed' : ''}" title="${isCollapsedFamily ? 'Afficher' : 'Masquer'} les sous-projets" aria-expanded="${!isCollapsedFamily}" onclick="event.stopPropagation(); ProjectsManager.toggleFamilyCollapse('${p.id}')"><svg class="project-family-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg><span>${childrenCount} sous-projet${childrenCount > 1 ? 's' : ''}</span></button>`
       : '';
-    const promoteBtnHtml = level > 0
+    const promoteBtnHtml = (!isArchived && level > 0)
       ? `<button class="btn-icon btn-action-promote" title="Remonter d'un niveau" onclick="event.stopPropagation(); ProjectsManager.unNestProject('${p.id}', false)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>`
       : '';
-    const addSubBtnHtml = `<button class="btn-icon btn-action-add" title="Ajouter un sous-projet" onclick="event.stopPropagation(); ProjectsManager.openProjectModal(null, '${p.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`;
+    const addSubBtnHtml = !isArchived
+      ? `<button class="btn-icon btn-action-add" title="Ajouter un sous-projet" onclick="event.stopPropagation(); ProjectsManager.openProjectModal(null, '${p.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`
+      : '';
+    const archiveActionBtnHtml = isArchived
+      ? `<button class="btn-icon" title="Désarchiver le projet" onclick="event.stopPropagation(); ProjectsManager.unarchiveProject('${p.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>`
+      : `<button class="btn-icon" title="Archiver le projet" onclick="event.stopPropagation(); ProjectsManager.archiveProject('${p.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>`;
     const parentRibbonHtml = (level > 0 && parentProject)
       ? `<div class="project-parent-ribbon" style="background-color: ${parentColor};" title="Rattaché à ${this.escapeHtml(parentProject.title)}"></div>`
       : '';
@@ -620,16 +814,14 @@ const ProjectsManager = {
     const deleteBtnHtml = `<button class="btn-icon" title="Supprimer" onclick="event.stopPropagation(); ProjectsManager.deleteProject('${p.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`;
 
     if (isList) {
-      card.className = `project-card project-row draggable-item ${level > 0 ? 'is-subproject' : ''}`;
+      card.className = `project-card project-row draggable-item ${level > 0 ? 'is-subproject' : ''} ${isArchived ? 'is-archived' : ''}`;
       card.dataset.dropAxis = 'y';
-      if (level > 0) {
-        card.style.marginLeft = `${Math.min(level, 4) * 28}px`;
-      }
       card.innerHTML = `
         <div class="project-drag-handle" title="Glisser sur le centre d'un projet pour imbriquer, ou sur les bords pour réordonner">⠿</div>
         <div class="project-color-bar" style="background-color: ${p.color};"></div>
         <div class="project-row-main">
           <span class="project-title">${this.escapeHtml(p.title)}</span>
+          ${archivedBadgeHtml}
           ${subBadgeHtml}
           ${childrenBadgeHtml}
           <span class="project-desc">${this.escapeHtml(p.description || 'Aucune description')}</span>
@@ -648,13 +840,14 @@ const ProjectsManager = {
           <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); ProjectsManager.openProjectDetailModal('${p.id}');">Consulter ↗</button>
           ${addSubBtnHtml}
           ${promoteBtnHtml}
+          ${archiveActionBtnHtml}
           ${editBtnHtml}
           ${deleteBtnHtml}
         </div>
       `;
     } else {
-      const badgesHtml = `${subBadgeHtml}${familyToggleBtnHtml}`;
-      card.className = `project-card draggable-item${isFamilyParent ? ' is-family-parent' : ''}${level > 0 ? ' is-subproject' : ''}`;
+      const badgesHtml = `${archivedBadgeHtml}${subBadgeHtml}${familyToggleBtnHtml}`;
+      card.className = `project-card draggable-item${isFamilyParent ? ' is-family-parent' : ''}${level > 0 ? ' is-subproject' : ''}${isArchived ? ' is-archived' : ''}`;
       card.dataset.dropAxis = (isFamilyParent && !isCollapsedFamily) ? 'y' : 'x';
       card.innerHTML = `
         ${parentRibbonHtml}
@@ -667,6 +860,7 @@ const ProjectsManager = {
           <div style="display: flex; gap: 2px; flex-shrink: 0;">
             ${addSubBtnHtml}
             ${promoteBtnHtml}
+            ${archiveActionBtnHtml}
             ${editBtnHtml}
             ${deleteBtnHtml}
           </div>
@@ -842,19 +1036,50 @@ const ProjectsManager = {
 
     container.classList.toggle('view-list', this.viewMode === 'list');
 
-    const projects = this.getAll();
+    const allProjects = this.getAll();
+    const activeProjects = allProjects.filter(p => !p.archived);
+    const archivedProjects = allProjects.filter(p => Boolean(p.archived));
+    const isArchivedFilter = this.currentFilter === 'archived';
+
+    const btnFilterActive = document.getElementById('btn-projects-filter-active');
+    const btnFilterArchived = document.getElementById('btn-projects-filter-archived');
+    if (btnFilterActive) {
+      btnFilterActive.textContent = `Actifs (${activeProjects.length})`;
+      btnFilterActive.classList.toggle('active', !isArchivedFilter);
+    }
+    if (btnFilterArchived) {
+      btnFilterArchived.textContent = `Archivés (${archivedProjects.length})`;
+      btnFilterArchived.classList.toggle('active', isArchivedFilter);
+    }
+
+    // Synchroniser le bouton unique Tout replier / Tout déplier
+    this.updateToggleCollapseButton();
+
+    const projects = isArchivedFilter ? archivedProjects : activeProjects;
     if (projects.length === 0) {
       container.classList.remove('has-expanded-families');
-      container.innerHTML = `
-        <div class="antigravite-empty-state projects-empty-state" style="grid-column: 1 / -1;">
-          <div class="empty-state-illustration">
-            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      if (isArchivedFilter) {
+        container.innerHTML = `
+          <div class="antigravite-empty-state projects-empty-state" style="grid-column: 1 / -1;">
+            <div class="empty-state-illustration">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            </div>
+            <h3 class="empty-state-title">Aucun projet archivé</h3>
+            <p class="empty-state-text">Vos projets terminés ou mis de côté apparaîtront ici sans encombrer votre vue active.</p>
           </div>
-          <h3 class="empty-state-title">Nouveaux horizons</h3>
-          <p class="empty-state-text">Regroupez vos tâches et notes en grands dossiers personnels pour suivre votre progression.</p>
-          <button class="btn btn-primary btn-sm" style="margin-top: 14px;" onclick="ProjectsManager.openProjectModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span>Créer un premier projet</span></button>
-        </div>
-      `;
+        `;
+      } else {
+        container.innerHTML = `
+          <div class="antigravite-empty-state projects-empty-state" style="grid-column: 1 / -1;">
+            <div class="empty-state-illustration">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <h3 class="empty-state-title">Nouveaux horizons</h3>
+            <p class="empty-state-text">Regroupez vos tâches et notes en grands dossiers personnels pour suivre votre progression.</p>
+            <button class="btn btn-primary btn-sm" style="margin-top: 14px;" onclick="ProjectsManager.openProjectModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span>Créer un premier projet</span></button>
+          </div>
+        `;
+      }
       return;
     }
 
@@ -863,13 +1088,40 @@ const ProjectsManager = {
 
     if (this.viewMode === 'list') {
       container.classList.remove('has-expanded-families');
-      const entries = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
-        ? StorageManager.getProjectsHierarchy(projects)
-        : projects.map(p => ({ project: p, level: 0, parentProject: null, childrenCount: 0, children: [] }));
-      entries.forEach(entry => {
-        const card = this._createProjectCardElement(entry, allStats, projects, { isList: true });
-        fragment.appendChild(card);
-      });
+      const { roots } = this.getProjectTree(projects);
+
+      const renderListTree = (nodeList, parentEl, level = 0) => {
+        nodeList.forEach((node) => {
+          const hasChildren = node.children && node.children.length > 0;
+          const isCollapsed = this.isFamilyCollapsed(node.project.id);
+          const isRoot = (level === 0);
+
+          const treeNode = document.createElement('div');
+          treeNode.className = `project-tree-node level-${Math.min(level, 6)} ${isRoot ? 'is-root' : 'is-child'}`;
+          treeNode.dataset.projectId = node.project.id;
+          treeNode.dataset.level = String(level);
+
+          const card = this._createProjectCardElement(node, allStats, projects, {
+            isList: true,
+            isFamilyParent: hasChildren,
+            isCollapsedFamily: isCollapsed
+          });
+          treeNode.appendChild(card);
+
+          if (hasChildren) {
+            const subContainer = document.createElement('div');
+            subContainer.className = `subprojects-container ${isCollapsed ? 'collapsed' : ''}`;
+            treeNode.appendChild(subContainer);
+            if (!isCollapsed) {
+              renderListTree(node.children, subContainer, level + 1);
+            }
+          }
+
+          parentEl.appendChild(treeNode);
+        });
+      };
+
+      renderListTree(roots, fragment, 0);
     } else {
       const { roots } = this.getProjectTree(projects);
       // Regrouper visuellement les tuiles unitaires puis les familles dépliées pleine largeur pour éviter les trous au milieu de la grille
@@ -889,43 +1141,45 @@ const ProjectsManager = {
       expandedRoots.forEach(node => this._renderGridNode(node, allStats, projects, fragment));
     }
 
-    // Carte "+" pour créer un nouveau projet dans la continuité de la vue
-    const addCard = document.createElement('div');
-    addCard.className = (this.viewMode === 'list')
-      ? 'project-card project-card-add project-row'
-      : 'project-card project-card-add';
-    addCard.id = 'btn-add-project-card';
-    addCard.title = 'Créer un nouveau projet';
-    addCard.onclick = () => ProjectsManager.openProjectModal();
-    addCard.innerHTML = `
-      <div class="project-add-content">
-        <span class="project-add-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
-        <span class="project-add-title">Nouveau projet</span>
-        <span class="project-add-hint">Créer un nouveau dossier de travail</span>
-      </div>
-    `;
-    fragment.appendChild(addCard);
+    // Carte "+" pour créer un nouveau projet dans la continuité de la vue (uniquement en vue active)
+    if (!isArchivedFilter) {
+      const addCard = document.createElement('div');
+      addCard.className = (this.viewMode === 'list')
+        ? 'project-card project-card-add project-row'
+        : 'project-card project-card-add';
+      addCard.id = 'btn-add-project-card';
+      addCard.title = 'Créer un nouveau projet';
+      addCard.onclick = () => ProjectsManager.openProjectModal();
+      addCard.innerHTML = `
+        <div class="project-add-content">
+          <span class="project-add-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+          <span class="project-add-title">Nouveau projet</span>
+          <span class="project-add-hint">Créer un nouveau dossier de travail</span>
+        </div>
+      `;
+      fragment.appendChild(addCard);
 
-    // Zone de dépôt au bas pour sortir un sous-projet vers la racine
-    const rootDropZone = document.createElement('div');
-    rootDropZone.id = 'projects-root-dropzone';
-    rootDropZone.className = 'projects-root-dropzone';
-    rootDropZone.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Glisser ici pour placer au niveau principal (racine)</span>`;
-    rootDropZone.addEventListener('dragover', (e) => {
-      if (!this.draggedProjectId) return;
-      e.preventDefault();
-      rootDropZone.classList.add('drag-over');
-    });
-    rootDropZone.addEventListener('dragleave', () => {
-      rootDropZone.classList.remove('drag-over');
-    });
-    rootDropZone.addEventListener('drop', (e) => {
-      if (!this.draggedProjectId) return;
-      e.preventDefault();
-      rootDropZone.classList.remove('drag-over');
-      this.unNestProject(this.draggedProjectId, true);
-    });
-    fragment.appendChild(rootDropZone);
+      // Zone de dépôt au bas pour sortir un sous-projet vers la racine
+      const rootDropZone = document.createElement('div');
+      rootDropZone.id = 'projects-root-dropzone';
+      rootDropZone.className = 'projects-root-dropzone';
+      rootDropZone.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Glisser ici pour placer au niveau principal (racine)</span>`;
+      rootDropZone.addEventListener('dragover', (e) => {
+        if (!this.draggedProjectId) return;
+        e.preventDefault();
+        rootDropZone.classList.add('drag-over');
+      });
+      rootDropZone.addEventListener('dragleave', () => {
+        rootDropZone.classList.remove('drag-over');
+      });
+      rootDropZone.addEventListener('drop', (e) => {
+        if (!this.draggedProjectId) return;
+        e.preventDefault();
+        rootDropZone.classList.remove('drag-over');
+        this.unNestProject(this.draggedProjectId, true);
+      });
+      fragment.appendChild(rootDropZone);
+    }
 
     if (fragment !== container) {
       container.innerHTML = '';
@@ -960,7 +1214,12 @@ const ProjectsManager = {
     const btnEdit = document.getElementById('btn-project-detail-edit');
 
     if (dotEl) dotEl.style.backgroundColor = p.color || '#3b82f6';
-    if (titleEl) titleEl.textContent = p.title;
+    if (titleEl) {
+      titleEl.textContent = p.title;
+      if (p.archived) {
+        titleEl.innerHTML = `${this.escapeHtml(p.title)} <span class="badge" style="font-size: 0.72rem; vertical-align: middle; background: rgba(148,163,184,0.25); color: var(--text-dim); margin-left: 8px;">Archivé</span>`;
+      }
+    }
     if (descEl) descEl.textContent = p.description || 'Aucune description détaillée.';
 
     // Fil d'Ariane si c'est un sous-projet
@@ -1141,6 +1400,22 @@ const ProjectsManager = {
       };
     }
 
+    const btnArchive = document.getElementById('btn-project-detail-archive');
+    const btnArchiveText = document.getElementById('btn-project-detail-archive-text');
+    if (btnArchive) {
+      if (btnArchiveText) {
+        btnArchiveText.textContent = p.archived ? "Désarchiver" : "Archiver";
+      }
+      btnArchive.onclick = () => {
+        this.closeProjectDetailModal();
+        if (p.archived) {
+          this.unarchiveProject(p.id);
+        } else {
+          this.archiveProject(p.id);
+        }
+      };
+    }
+
     modal.classList.add('active');
   },
 
@@ -1191,6 +1466,35 @@ const ProjectsManager = {
     const inputParent = document.getElementById('project-input-parent');
     const inputColor = document.getElementById('project-input-color');
     const btnSave = document.getElementById('project-modal-save');
+    const btnColorPicker = document.getElementById('btn-project-color-picker');
+    const badgeColor = document.getElementById('project-color-badge');
+    const labelColor = document.getElementById('project-color-label');
+
+    const syncColorUI = (hex) => {
+      const cleanHex = (hex || '#3b82f6').toUpperCase();
+      if (inputColor) inputColor.value = cleanHex;
+      if (badgeColor) badgeColor.style.background = cleanHex;
+      if (labelColor) labelColor.textContent = cleanHex;
+    };
+
+    if (btnColorPicker) {
+      btnColorPicker.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof App !== 'undefined' && typeof App.openColorPicker === 'function') {
+          App.openColorPicker({
+            targetElement: btnColorPicker,
+            initialColor: inputColor ? inputColor.value : '#3b82f6',
+            title: 'Couleur du projet',
+            applyLabel: 'Appliquer',
+            showNameInput: false,
+            onColorChange: (val) => syncColorUI(val),
+            onApply: (val) => syncColorUI(val),
+            onCancel: (val) => syncColorUI(val)
+          });
+        }
+      };
+    }
 
     const allProjects = this.getAll();
     const forbidden = id ? new Set([id, ...this.getDescendantIds(id, allProjects)]) : new Set();
@@ -1216,7 +1520,7 @@ const ProjectsManager = {
       inputTitle.value = p.title;
       inputDesc.value = p.description || '';
       if (inputParent) inputParent.value = p.parentProjectId || '';
-      inputColor.value = p.color || '#3b82f6';
+      syncColorUI(p.color || '#3b82f6');
 
       btnSave.onclick = () => {
         if (!inputTitle.value.trim()) return alert("Le nom du projet est requis.");
@@ -1234,7 +1538,7 @@ const ProjectsManager = {
       inputTitle.value = '';
       inputDesc.value = '';
       if (inputParent) inputParent.value = parentProj ? parentProj.id : '';
-      inputColor.value = (parentProj && parentProj.color) ? parentProj.color : '#3b82f6';
+      syncColorUI((parentProj && parentProj.color) ? parentProj.color : '#3b82f6');
 
       btnSave.onclick = () => {
         if (!inputTitle.value.trim()) return alert("Le nom du projet est requis.");
@@ -1255,6 +1559,9 @@ const ProjectsManager = {
   closeProjectModal() {
     const modal = document.getElementById('project-modal');
     if (modal) modal.classList.remove('active');
+    if (typeof App !== 'undefined' && typeof App.closeColorPicker === 'function') {
+      App.closeColorPicker(true);
+    }
   },
 
   escapeHtml(str) {

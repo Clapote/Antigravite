@@ -132,13 +132,16 @@ it("3. styles.css contient les règles de micro-animations de transition et les 
 });
 
 // -----------------------------------------------------------------------------
-// Test 4 : index.html intègre les boutons d'expansion et de repliage
+// Test 4 : index.html intègre le bouton bascule 'Tout replier / Tout déplier'
 // -----------------------------------------------------------------------------
-it("4. index.html intègre les boutons 'Tout déplier' et 'Tout replier'", () => {
+it("4. index.html intègre le bouton bascule 'Tout replier / Tout déplier'", () => {
   const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf-8');
 
-  assert.ok(html.includes('id="btn-tasks-expand-all"'), "Bouton btn-tasks-expand-all présent");
-  assert.ok(html.includes('id="btn-tasks-collapse-all"'), "Bouton btn-tasks-collapse-all présent");
+  assert.ok(
+    html.includes('id="btn-tasks-toggle-collapse"') ||
+    (html.includes('id="btn-tasks-expand-all"') && html.includes('id="btn-tasks-collapse-all"')),
+    "Bouton bascule btn-tasks-toggle-collapse présent"
+  );
 });
 
 // -----------------------------------------------------------------------------

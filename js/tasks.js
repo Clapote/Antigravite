@@ -120,13 +120,15 @@ const TasksManager = {
       btnNew.addEventListener('click', () => this.openTaskModal());
     }
 
-    // Boutons de dépliage / repliage complet de l'arborescence
-    const btnExpand = document.getElementById('btn-tasks-expand-all');
-    if (btnExpand) {
-      btnExpand.addEventListener('click', () => this.expandAll());
+    // Bouton unique de bascule Tout replier / Tout déplier
+    const btnToggle = document.getElementById('btn-tasks-toggle-collapse') || document.getElementById('btn-tasks-expand-all');
+    if (btnToggle && !btnToggle._hasCollapseListener) {
+      btnToggle._hasCollapseListener = true;
+      btnToggle.addEventListener('click', () => this.toggleAllCollapse());
     }
     const btnCollapse = document.getElementById('btn-tasks-collapse-all');
-    if (btnCollapse) {
+    if (btnCollapse && !btnCollapse._hasCollapseListener) {
+      btnCollapse._hasCollapseListener = true;
       btnCollapse.addEventListener('click', () => this.collapseAll());
     }
 
@@ -151,10 +153,35 @@ const TasksManager = {
     }
   },
 
+  // Basculer entre tout déplier et tout replier
+  toggleAllCollapse() {
+    if (this.collapsedTasks.size > 0) {
+      this.expandAll();
+    } else {
+      this.collapseAll();
+    }
+  },
+
+  // Synchronise le titre et l'icône du bouton unique de bascule
+  updateToggleCollapseButton() {
+    if (typeof document === 'undefined') return;
+    const btn = document.getElementById('btn-tasks-toggle-collapse') || document.getElementById('btn-tasks-expand-all');
+    if (!btn) return;
+    const hasCollapsed = this.collapsedTasks.size > 0;
+    const label = hasCollapsed ? 'Tout déplier' : 'Tout replier';
+    const title = hasCollapsed ? "Tout déplier dans l'arborescence" : "Tout replier au premier niveau";
+    const icon = hasCollapsed
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+    btn.innerHTML = `${icon} <span>${label}</span>`;
+    btn.title = title;
+  },
+
   // Déplier l'ensemble de l'arborescence
   expandAll() {
     this.collapsedTasks.clear();
     this.render();
+    this.updateToggleCollapseButton();
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
       window.App.showToast("Toutes les branches ont été dépliées", 'info');
     }
@@ -172,6 +199,7 @@ const TasksManager = {
     };
     collectParentIds(this.getAll());
     this.render();
+    this.updateToggleCollapseButton();
     if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
       window.App.showToast("Arborescence repliée au niveau racine", 'info');
     }
@@ -184,8 +212,16 @@ const TasksManager = {
     let active = 0;
     let completed = 0;
 
+    const projects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
+      ? StorageManager.getProjects()
+      : [];
+    const archivedProjectIds = new Set(projects.filter(p => p.archived).map(p => p.id));
+
     const countRecursive = (list) => {
       for (const t of list) {
+        if (t.projectId && archivedProjectIds.has(t.projectId)) {
+          continue; // Masqué car projet archivé
+        }
         total++;
         if (t.completed) completed++;
         else active++;
@@ -224,6 +260,9 @@ const TasksManager = {
     }
     if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
       window.App.updateDashboard();
+    }
+    if (typeof window !== 'undefined' && window.ConstellationManager && typeof window.App !== 'undefined' && window.App.currentScreen === 'constellation') {
+      window.ConstellationManager.render();
     }
   },
 
@@ -725,6 +764,7 @@ const TasksManager = {
           subContainer.classList.toggle('collapsed', isNowCollapsed);
           subContainer.style.display = isNowCollapsed ? 'none' : 'flex';
         }
+        this.updateToggleCollapseButton();
         return;
       }
     }
@@ -745,12 +785,16 @@ const TasksManager = {
     const tasks = this.getAll();
     const projects = StorageManager.getProjects();
     const projectsMap = new Map(projects.map(p => [p.id, p]));
+    const archivedProjectIds = new Set(projects.filter(p => p.archived).map(p => p.id));
 
     // Mettre à jour le sélecteur de projets dans les filtres
     this.updateProjectFilterOptions(projects);
 
     // Mettre à jour les compteurs dynamiques sur les puces de filtres
     this.updateFilterCounts(tasks);
+
+    // Mettre à jour l'intitulé et l'icône du bouton unique Tout replier / Tout déplier
+    this.updateToggleCollapseButton();
 
     if (tasks.length === 0) {
       container.innerHTML = `
@@ -782,8 +826,9 @@ const TasksManager = {
           this.currentFilter === 'active' ? !task.completed :
           this.currentFilter === 'completed' ? task.completed : true;
 
+        const isProjectArchived = task.projectId ? archivedProjectIds.has(task.projectId) : false;
         const matchesProject = 
-          this.currentProjectFilter === 'all' ? true :
+          this.currentProjectFilter === 'all' ? !isProjectArchived :
           task.projectId === this.currentProjectFilter;
 
         const hasSubtasks = task.subtasks && task.subtasks.length > 0;
@@ -897,7 +942,7 @@ const TasksManager = {
         });
 
         // Masquer si non conforme au filtre (mais laisser visible si une de ses sous-tâches correspond)
-        const hasMatchingSubtask = hasSubtasks && this.hasMatchingChild(task.subtasks, matchesFilter, matchesProject);
+        const hasMatchingSubtask = hasSubtasks && this.hasMatchingChild(task.subtasks, matchesFilter, matchesProject, archivedProjectIds);
         if (!matchesFilter || !matchesProject) {
           if (!hasMatchingSubtask) {
             node.style.display = 'none';
@@ -984,7 +1029,7 @@ const TasksManager = {
     if (this.currentSortMode === 'project') {
       // Regroupement par projet
       const projectsToRender = this.currentProjectFilter === 'all'
-        ? projects
+        ? projects.filter(p => !p.archived)
         : projects.filter(p => p.id === this.currentProjectFilter);
 
       let renderedGroupsCount = 0;
@@ -995,8 +1040,8 @@ const TasksManager = {
 
         const hasVisibleTasks = projTasks.some(t => {
           if (this.currentFilter === 'all') return true;
-          if (this.currentFilter === 'active') return !t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
-          if (this.currentFilter === 'completed') return t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
+          if (this.currentFilter === 'active') return !t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true, archivedProjectIds));
+          if (this.currentFilter === 'completed') return t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true, archivedProjectIds));
           return true;
         });
 
@@ -1029,8 +1074,8 @@ const TasksManager = {
         if (unassignedTasks.length > 0) {
           const hasVisibleUnassigned = unassignedTasks.some(t => {
             if (this.currentFilter === 'all') return true;
-            if (this.currentFilter === 'active') return !t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
-            if (this.currentFilter === 'completed') return t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true));
+            if (this.currentFilter === 'active') return !t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true, archivedProjectIds));
+            if (this.currentFilter === 'completed') return t.completed || (t.subtasks && this.hasMatchingChild(t.subtasks, true, true, archivedProjectIds));
             return true;
           });
 
@@ -1122,12 +1167,23 @@ const TasksManager = {
     }
   },
 
-  hasMatchingChild(subtasks, filterMatch, projMatch) {
+  hasMatchingChild(subtasks, filterMatch, projMatch, archivedProjectIds = null) {
+    if (!subtasks || subtasks.length === 0) return false;
+    if (!archivedProjectIds) {
+      const projects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
+        ? StorageManager.getProjects()
+        : [];
+      archivedProjectIds = new Set(projects.filter(p => p.archived).map(p => p.id));
+    }
+
     for (const st of subtasks) {
+      const isArchived = st.projectId ? archivedProjectIds.has(st.projectId) : false;
+      if (this.currentProjectFilter === 'all' && isArchived) continue;
+
       if (this.currentFilter === 'all' || (this.currentFilter === 'active' && !st.completed) || (this.currentFilter === 'completed' && st.completed)) {
         if (this.currentProjectFilter === 'all' || st.projectId === this.currentProjectFilter) return true;
       }
-      if (st.subtasks && this.hasMatchingChild(st.subtasks, filterMatch, projMatch)) return true;
+      if (st.subtasks && this.hasMatchingChild(st.subtasks, filterMatch, projMatch, archivedProjectIds)) return true;
     }
     return false;
   },
@@ -1146,16 +1202,36 @@ const TasksManager = {
     const select = document.getElementById('task-project-filter');
     if (!select) return;
     const currentVal = select.value;
-    select.innerHTML = '<option value="all">Tous les projets</option>';
-    const hier = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
-      ? StorageManager.getProjectsHierarchy(projects)
-      : (projects || []).map(p => ({ project: p, displayTitle: p.title }));
-    hier.forEach(({ project: p, displayTitle }) => {
+    select.innerHTML = '<option value="all">Tous les projets actifs</option>';
+
+    const activeProjects = (projects || []).filter(p => !p.archived);
+    const archivedProjects = (projects || []).filter(p => p.archived);
+
+    const activeHier = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
+      ? StorageManager.getProjectsHierarchy(activeProjects)
+      : activeProjects.map(p => ({ project: p, displayTitle: p.title }));
+
+    activeHier.forEach(({ project: p, displayTitle }) => {
       const opt = document.createElement('option');
       opt.value = p.id;
       opt.textContent = displayTitle;
       select.appendChild(opt);
     });
+
+    if (archivedProjects.length > 0) {
+      const group = document.createElement('optgroup');
+      group.label = 'Projets archivés';
+      const archHier = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
+        ? StorageManager.getProjectsHierarchy(archivedProjects)
+        : archivedProjects.map(p => ({ project: p, displayTitle: p.title }));
+      archHier.forEach(({ project: p, displayTitle }) => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${displayTitle} (Archivé)`;
+        group.appendChild(opt);
+      });
+      select.appendChild(group);
+    }
     select.value = currentVal;
   },
 
@@ -1183,7 +1259,7 @@ const TasksManager = {
     hierProjects.forEach(({ project: p, displayTitle }) => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = displayTitle;
+      opt.textContent = displayTitle + (p.archived ? ' (Archivé)' : '');
       inputProject.appendChild(opt);
     });
 

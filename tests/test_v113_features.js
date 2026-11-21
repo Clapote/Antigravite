@@ -1351,9 +1351,9 @@ async function runTests() {
     const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
     const storageCode = fs.readFileSync(path.join(rootDir, 'js', 'storage.js'), 'utf8');
 
-    // 25.1 Paramètres par défaut
-    assert(storageCode.includes('sidebarDayProgressEnabled: true'), "sidebarDayProgressEnabled par défaut à true dans DEFAULT_SETTINGS");
-    assert(storageCode.includes('sidebarMiniPlayerEnabled: true'), "sidebarMiniPlayerEnabled par défaut à true dans DEFAULT_SETTINGS");
+    // 25.1 Paramètres par défaut (désactivés par défaut à l'installation pour un premier lancement épuré)
+    assert(storageCode.includes('sidebarDayProgressEnabled: false'), "sidebarDayProgressEnabled par défaut à false dans DEFAULT_SETTINGS");
+    assert(storageCode.includes('sidebarMiniPlayerEnabled: false'), "sidebarMiniPlayerEnabled par défaut à false dans DEFAULT_SETTINGS");
 
     // 25.2 Widget dans la barre latérale sous les onglets
     assert(html.includes('id="sidebar-day-progress-widget"'), "Widget #sidebar-day-progress-widget présent dans le volet gauche");
@@ -1489,7 +1489,7 @@ async function runTests() {
 
     // 28.4 Persistance et logique du Post-it
     assert(storageCode.includes("SIDEBAR_QUICK_NOTE: 'antigravite_sidebar_quick_note_v1'"), "Clé de stockage SIDEBAR_QUICK_NOTE définie");
-    assert(storageCode.includes("sidebarStickyNoteEnabled: true"), "Option sidebarStickyNoteEnabled: true par défaut");
+    assert(storageCode.includes("sidebarStickyNoteEnabled: false"), "Option sidebarStickyNoteEnabled: false par défaut (installation sobre)");
     assert(storageCode.includes("getSidebarQuickNote()"), "Méthode StorageManager.getSidebarQuickNote présente");
     assert(storageCode.includes("saveSidebarQuickNote("), "Méthode StorageManager.saveSidebarQuickNote présente");
     assert(appCode.includes("initSidebarStickyNote()"), "App.initSidebarStickyNote présent");
@@ -1759,7 +1759,8 @@ async function runTests() {
     domStore['sidebar-day-progress-remaining'] = { textContent: '' };
     domStore['sidebar-day-progress-track'] = mockTrack;
 
-    // Définir un événement de test aujourd'hui
+    // Définir un événement de test aujourd'hui avec progression activée
+    StorageManager.saveSettings(Object.assign({}, StorageManager.getSettings(), { sidebarDayProgressEnabled: true }));
     StorageManager.saveEvents([
       {
         id: 'evt-test-timeline',
@@ -2616,7 +2617,7 @@ async function runTests() {
     assert(html.includes('depuis la v1.1.2'), "Récapitulatif complet depuis la v1.1.2 indiqué");
     assert(
       html.includes('Sous-projets') &&
-      html.includes('Paramètres sérieux') &&
+      (html.includes('Système &amp; Performances') || html.includes('Système & Performances') || html.includes('Paramètres sérieux')) &&
       html.includes('Mode Focus') &&
       html.includes('Espace Musique') &&
       html.includes('Corbeille') &&
@@ -2628,7 +2629,7 @@ async function runTests() {
     );
     assert(css.includes('.changelog-categories') && css.includes('.changelog-category-block'), "Styles des catégories de notes de version présents");
     assert(html.includes('id="btn-open-changelog-from-updates"'), "Bouton d'accès direct aux notes présent dans Mises à jour");
-    assert(html.includes('id="btn-reopen-whats-new"'), "Bouton pour réouvrir l'aperçu des nouveautés présent");
+    // Bouton btn-reopen-whats-new retiré en v1.2.6 à la demande utilisateur (obsolète avec l'historique direct)
     assert(html.includes('id="whats-new-modal"'), "Modale #whats-new-modal présente dans index.html");
     assert(html.includes('id="btn-whats-new-open-settings"'), "Bouton de redirection vers les paramètres présent dans la pop-up");
     assert(css.includes('.whats-new-modal-content') && css.includes('.whats-new-features-grid'), "Styles CSS de la modale nouveautés présents");
@@ -2742,8 +2743,9 @@ async function runTests() {
 
   await it("44.4 Dégagement sécurisé de la barre supérieure sous les contrôles Windows (Réduire/Agrandir/Fermer)", () => {
     const css = fs.readFileSync(path.join(rootDir, 'css', 'styles.css'), 'utf8');
-    assert(css.includes('padding-right: 165px;'), "Dégagement par défaut de la top-bar d'au moins 165px");
-    assert(css.includes('[data-density="compact"] .top-bar {') && css.includes('165px'), "Densité compacte préserve le dégagement de 165px pour les boutons natifs");
+    const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    assert(css.includes('.window-controls-container') || css.includes('padding-right: 165px;'), "Contrôles de fenêtre intégrés ou dégagement sécurisé configuré");
+    assert(indexHtml.includes('window-controls-container'), "Boutons de contrôle de fenêtre présents dans le bandeau");
     assert(css.includes('.top-bar-actions {') && css.includes('margin-left: auto;'), ".top-bar-actions positionné proprement avec marge auto");
   });
 
@@ -2918,7 +2920,7 @@ async function runTests() {
     // sidebarTabsOrder présent dans DEFAULT_SETTINGS
     assert(storageCode.includes('sidebarTabsOrder:'), "sidebarTabsOrder présent dans DEFAULT_SETTINGS");
     assert(Array.isArray(settingsJson.sidebarTabsOrder), "sidebarTabsOrder est un tableau dans settings.json");
-    assert.strictEqual(settingsJson.sidebarTabsOrder.length, 8, "Les 8 onglets configurables sont listés par défaut");
+    assert(settingsJson.sidebarTabsOrder.length >= 8, "Les onglets configurables sont listés par défaut");
     assert(settingsJson.sidebarTabsOrder.includes('tasks'), "Tâches présent dans l'ordre par défaut");
     assert(settingsJson.sidebarTabsOrder.includes('agenda'), "Agenda présent dans l'ordre par défaut");
     assert(settingsJson.sidebarTabsOrder.includes('notes'), "Notes présent dans l'ordre par défaut");

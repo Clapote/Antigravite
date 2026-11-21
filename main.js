@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, Notification, session, globalShortcut, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, Notification, session, globalShortcut, dialog, shell, nativeTheme } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
@@ -26,23 +26,54 @@ if (process.argv.includes('--isolated') || process.env.ANTIGRAVITE_ISOLATED) {
   app.setPath('userData', isolatedDir);
 }
 
+// Protection globale contre les interruptions inattendues du processus principal
+process.on('uncaughtException', (err) => {
+  console.error('[Main] Exception non interceptée :', err && (err.stack || err.message || err));
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Main] Rejet de promesse non intercepté :', reason && (reason.stack || reason.message || reason));
+});
+
 // Instance unique (Single Instance Lock)
 // Évite les doublons de processus et réaffiche la fenêtre existante si l'utilisateur
 // relance Antigravité depuis le menu Démarrer ou un raccourci de bureau.
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
+function handleSecondInstance(commandLine) {
+  restoreAndFocusWindow();
+  if (commandLine && Array.isArray(commandLine) && commandLine.some(arg => typeof arg === 'string' && arg.includes('--mock-update-available'))) {
+    if (updateService) {
+      updateService.isMockMode = true;
+    }
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send('antigravite:trigger-mock-update');
+    }
+  }
+}
+
+let gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
-  app.quit();
-} else {
-  app.on('second-instance', (_event, commandLine) => {
-    restoreAndFocusWindow();
-    if (commandLine && Array.isArray(commandLine) && commandLine.some(arg => typeof arg === 'string' && arg.includes('--mock-update-available'))) {
-      if (updateService) {
-        updateService.isMockMode = true;
-      }
-      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
-        mainWindow.webContents.send('antigravite:trigger-mock-update');
+  // En cas de mise à jour automatique récente, l'ancien processus peut mettre quelques
+  // centaines de millisecondes à se terminer complètement. Une brève re-tentative évite
+  // que l'utilisateur ne voie l'application se fermer immédiatement.
+  setTimeout(() => {
+    const retryLock = app.requestSingleInstanceLock();
+    if (!retryLock) {
+      app.quit();
+    } else {
+      gotSingleInstanceLock = true;
+      app.on('second-instance', (_event, commandLine) => {
+        handleSecondInstance(commandLine);
+      });
+      if (app.isReady()) {
+        bootApplication();
+      } else {
+        app.whenReady().then(bootApplication);
       }
     }
+  }, 650);
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    handleSecondInstance(commandLine);
   });
 }
 
@@ -133,23 +164,100 @@ async function listBackupFilesInDir(backupDirectory) {
   return backups.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+function getWindowsStartupShortcutPath() {
+  if (process.platform !== 'win32') return null;
+  try {
+    const startupDir = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+    return path.join(startupDir, 'Antigravite.lnk');
+  } catch (_) {
+    return null;
+  }
+}
+
 function applyWindowsLoginItem(enabled) {
   if (process.platform !== 'win32') {
     return { supported: false, enabled: false, isPackaged: app.isPackaged };
   }
-  const settings = {
-    openAtLogin: !!enabled,
-    path: process.execPath,
-    args: app.isPackaged ? [] : [app.getAppPath()]
-  };
-  app.setLoginItemSettings(settings);
-  const actual = app.getLoginItemSettings({
-    path: process.execPath,
-    args: app.isPackaged ? [] : [app.getAppPath()]
-  });
+
+  const shortcutPath = getWindowsStartupShortcutPath();
+  let shortcutSuccess = false;
+
+  // 1. Raccourci natif dans le dossier Démarrage Windows (shell:startup)
+  // Méthode la plus robuste sur Windows 10 & 11 (insensible aux blocages UAC/SmartScreen sur la base de registre)
+  if (shortcutPath) {
+    try {
+      if (enabled) {
+        let targetExe = process.execPath;
+        let targetArgs = '';
+        let targetCwd = path.dirname(process.execPath);
+
+        // Si exécution en dev mais que l'application officielle est installée, pointer vers l'installateur officiel
+        if (!app.isPackaged) {
+          const installedExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Antigravite', 'Antigravite.exe');
+          if (fsSync.existsSync(installedExe)) {
+            targetExe = installedExe;
+            targetCwd = path.dirname(installedExe);
+          } else {
+            targetArgs = `"${app.getAppPath()}"`;
+            targetCwd = app.getAppPath();
+          }
+        }
+
+        const appIconPath = getAppIconPath();
+        const details = {
+          target: targetExe,
+          cwd: targetCwd,
+          description: 'Antigravité - Application personnelle de gestion locale',
+          appUserModelId: 'fr.antigravite.app'
+        };
+        if (targetArgs) {
+          details.args = targetArgs;
+        }
+        if (appIconPath && fsSync.existsSync(appIconPath)) {
+          details.icon = appIconPath;
+          details.iconIndex = 0;
+        }
+
+        const dir = path.dirname(shortcutPath);
+        if (!fsSync.existsSync(dir)) {
+          fsSync.mkdirSync(dir, { recursive: true });
+        }
+        shortcutSuccess = shell.writeShortcutLink(shortcutPath, 'create', details);
+      } else {
+        if (fsSync.existsSync(shortcutPath)) {
+          fsSync.unlinkSync(shortcutPath);
+        }
+        shortcutSuccess = true;
+      }
+    } catch (err) {
+      console.warn('[Startup] Erreur raccourci dossier Démarrage Windows:', err.message);
+    }
+  }
+
+  // 2. Double sécurité : synchronisation avec l'API Electron native (Registre HKCU\Run)
+  let registrySuccess = false;
+  try {
+    const settings = {
+      openAtLogin: !!enabled,
+      path: process.execPath,
+      name: 'Antigravite',
+      args: app.isPackaged ? [] : [app.getAppPath()]
+    };
+    app.setLoginItemSettings(settings);
+    const actual = app.getLoginItemSettings({
+      path: process.execPath,
+      args: app.isPackaged ? [] : [app.getAppPath()]
+    });
+    registrySuccess = !!actual.openAtLogin;
+  } catch (err) {
+    console.warn('[Startup] Erreur app.setLoginItemSettings:', err.message);
+  }
+
+  const isNowActive = enabled ? (shortcutSuccess || registrySuccess) : false;
+
   return {
     supported: true,
-    enabled: !!actual.openAtLogin,
+    enabled: isNowActive,
     isPackaged: app.isPackaged
   };
 }
@@ -159,6 +267,10 @@ function applyWindowsLoginItem(enabled) {
  * préservant ainsi l'intégralité de son état (navigation, saisies, formulaires).
  */
 function restoreAndFocusWindow() {
+  if (!app.isReady()) {
+    app.whenReady().then(() => restoreAndFocusWindow());
+    return;
+  }
   if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
     return;
@@ -241,11 +353,47 @@ function createTray() {
   }
 }
 
+function getInitialAppearance() {
+  try {
+    const fsSync = require('node:fs');
+    const settingsPath = path.join(__dirname, 'data', 'settings.json');
+    if (fsSync.existsSync(settingsPath)) {
+      const parsed = JSON.parse(fsSync.readFileSync(settingsPath, 'utf8'));
+      if (parsed && typeof parsed === 'object') {
+        const theme = parsed.theme || 'dark';
+        const density = parsed.density || 'comfortable';
+        const isLight = theme === 'light';
+        const isOled = theme === 'oled';
+        const isCompact = density === 'compact';
+        const topBarColor = isLight ? '#ffffff' : (isOled ? '#08080c' : '#131926');
+        const symbolColor = isLight ? '#334155' : '#94a3b8';
+        const height = isCompact ? 50 : 60;
+        return { theme, density, topBarColor, symbolColor, height, isLight };
+      }
+    }
+  } catch (err) {
+    console.warn('[Main] Erreur lecture apparence initiale:', err.message);
+  }
+  return {
+    theme: 'dark',
+    density: 'comfortable',
+    topBarColor: '#131926',
+    symbolColor: '#94a3b8',
+    height: 60,
+    isLight: false
+  };
+}
+
 function createWindow() {
   // Supprimer définitivement la barre de menus par défaut (File, Edit, View...)
   Menu.setApplicationMenu(null);
 
   const appIconPath = getAppIconPath();
+  const appearance = getInitialAppearance();
+
+  if (nativeTheme) {
+    nativeTheme.themeSource = appearance.isLight ? 'light' : 'dark';
+  }
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -255,14 +403,9 @@ function createWindow() {
     show: false, // Optimisation : affichage fluide sans flash blanc
     title: 'Antigravité',
     icon: appIconPath,
-    backgroundColor: '#0b0f17',
+    backgroundColor: appearance.topBarColor,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#131926',
-      symbolColor: '#94a3b8',
-      height: 48
-    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -308,6 +451,18 @@ function createWindow() {
   }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  mainWindow.on('maximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send('antigravite:window-maximize-changed', true);
+    }
+  });
+
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send('antigravite:window-maximize-changed', false);
+    }
+  });
 
   // Menu contextuel natif pour la correction orthographique des notes et les actions d'édition
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -880,14 +1035,60 @@ ipcMain.handle('antigravite:list-local-music', async () => {
 });
 
 ipcMain.handle('antigravite:set-title-bar-overlay', async (_event, options) => {
-  if (mainWindow && typeof mainWindow.setTitleBarOverlay === 'function') {
+  if (mainWindow && !mainWindow.isDestroyed()) {
     try {
-      mainWindow.setTitleBarOverlay(options);
+      if (options && typeof options === 'object') {
+        if (options.theme && nativeTheme) {
+          nativeTheme.themeSource = options.theme === 'light' ? 'light' : 'dark';
+        }
+        if (options.backgroundColor && typeof mainWindow.setBackgroundColor === 'function') {
+          mainWindow.setBackgroundColor(options.backgroundColor);
+        }
+        if (typeof mainWindow.setTitleBarOverlay === 'function') {
+          const overlayOpts = {};
+          if (options.color) overlayOpts.color = options.color;
+          if (options.symbolColor) overlayOpts.symbolColor = options.symbolColor;
+          if (typeof options.height === 'number') overlayOpts.height = options.height;
+          mainWindow.setTitleBarOverlay(overlayOpts);
+        }
+      }
       return true;
     } catch (e) {
       console.warn("Échec setTitleBarOverlay:", e.message);
       return false;
     }
+  }
+  return false;
+});
+
+ipcMain.handle('antigravite:window-minimize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.minimize();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('antigravite:window-maximize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+    return mainWindow.isMaximized();
+  }
+  return false;
+});
+
+ipcMain.handle('antigravite:window-is-maximized', () => {
+  return !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized());
+});
+
+ipcMain.handle('antigravite:window-close', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
+    return true;
   }
   return false;
 });
@@ -938,11 +1139,13 @@ ipcMain.handle('antigravite:get-desktop-prefs', () => {
   const startupSupported = (process.platform === 'win32');
   if (startupSupported) {
     try {
+      const shortcutPath = getWindowsStartupShortcutPath();
+      const shortcutExists = shortcutPath && fsSync.existsSync(shortcutPath);
       const loginInfo = app.getLoginItemSettings({
         path: process.execPath,
         args: app.isPackaged ? [] : [app.getAppPath()]
       });
-      actualLogin = !!loginInfo.openAtLogin;
+      actualLogin = !!(shortcutExists || loginInfo.openAtLogin || desktopPrefs.launchOnStartup);
     } catch (_) {}
   }
   const activeDir = getActiveBackupDirectory();
@@ -1107,9 +1310,18 @@ app.on('before-quit', () => {
   }
 });
 
-app.whenReady().then(async () => {
+async function bootApplication() {
   if (!gotSingleInstanceLock) return;
   loadDesktopPrefsSync();
+
+  // Si le lancement au démarrage est activé dans les préférences, synchroniser le raccourci et le registre
+  if (process.platform === 'win32' && desktopPrefs.launchOnStartup) {
+    try {
+      applyWindowsLoginItem(true);
+    } catch (err) {
+      console.warn('[Startup] Erreur synchronisation démarrage Windows au lancement:', err.message);
+    }
+  }
 
   // Configuration du correcteur orthographique pour les saisies (Français uniquement)
   try {
@@ -1137,6 +1349,10 @@ app.whenReady().then(async () => {
         if (tray && !tray.isDestroyed()) {
           try { tray.destroy(); } catch (_) {}
           tray = null;
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          try { mainWindow.destroy(); } catch (_) {}
+          mainWindow = null;
         }
       }
     });
@@ -1170,7 +1386,9 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     restoreAndFocusWindow();
   });
-});
+}
+
+app.whenReady().then(bootApplication);
 
 app.on('will-quit', () => {
   try {

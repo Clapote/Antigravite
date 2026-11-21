@@ -185,7 +185,7 @@ async function it(desc, fn) {
       getTrash: () => [],
       getEvents: () => [{ id: 'e1', title: 'Créneau Créatif', start: `${todayKey}T10:00:00`, end: `${todayKey}T11:00:00`, isAllDay: false, projectId: 'p1' }],
       getNotes: () => [{ id: 'n1', title: 'Note du jour', content: 'Contenu créatif', folder: 'Général', createdAt: `${todayKey}T11:00:00` }],
-      getSettings: () => ({ debriefEnabled: true, debriefHour: '17:00' })
+      getSettings: () => ({ debriefEnabled: true, debriefHour: '17:00', debriefWeekendRange: 'mon-sun' })
     };
 
     global.document = {

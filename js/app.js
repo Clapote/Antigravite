@@ -4,7 +4,7 @@
 
 const App = {
   currentScreen: 'home',
-  APP_VERSION: '1.2.5',
+  APP_VERSION: '1.3.0',
   dashboardAgendaView: 'grid',
   WHATS_NEW_STORAGE_KEY: 'antigravite_last_seen_version',
   _activeWhatsNewVersion: null,
@@ -811,6 +811,7 @@ const App = {
       projects: 'Gestion des projets',
       agenda: 'Agenda hebdomadaire',
       notes: 'Notes personnelles',
+      constellation: 'Constellation & Mind Map',
       focus: 'Mode Focus & Pomodoro',
       music: 'Espace Musique & Ambiance',
       debrief: 'Bilan & Débriefing',
@@ -855,6 +856,7 @@ const App = {
       this.updateSidebarDayProgress();
     }
     if (screenId === 'notes') NotesManager.render();
+    if (screenId === 'constellation' && typeof ConstellationManager !== 'undefined') ConstellationManager.render();
     if (screenId === 'focus' && typeof FocusManager !== 'undefined') FocusManager.render();
     if (screenId === 'music' && typeof MusicManager !== 'undefined') MusicManager.render();
     if (screenId === 'debrief' && typeof DebriefManager !== 'undefined') DebriefManager.render();
@@ -874,14 +876,30 @@ const App = {
     const root = document.documentElement;
     const perfMode = settings.performanceMode || 'normal';
 
+    const isHexAccent = typeof settings.accentColor === 'string' && settings.accentColor.startsWith('#');
     root.setAttribute('data-theme', settings.theme || 'dark');
-    root.setAttribute('data-accent', settings.accentColor || 'blue');
+    root.setAttribute('data-accent', isHexAccent ? 'custom' : (settings.accentColor || 'blue'));
     root.setAttribute('data-density', settings.density || 'comfortable');
     root.setAttribute('data-font-size', settings.fontSize || 'normal');
     root.setAttribute('data-font-family', settings.fontFamily || 'system');
     root.setAttribute('data-radius', settings.borderRadius || 'modern');
     root.setAttribute('data-glass', settings.glassStyle || 'balanced');
     root.setAttribute('data-perf-mode', perfMode);
+
+    if (isHexAccent) {
+      const rgb = this.hexToRgb(settings.accentColor);
+      if (root.style && typeof root.style.setProperty === 'function') {
+        root.style.setProperty('--accent', settings.accentColor);
+        root.style.setProperty('--accent-hover', this.adjustColorBrightness(settings.accentColor, -10));
+        root.style.setProperty('--accent-light', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`);
+        root.style.setProperty('--accent-glow', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.35)`);
+      }
+    } else if (root.style && typeof root.style.removeProperty === 'function') {
+      root.style.removeProperty('--accent');
+      root.style.removeProperty('--accent-hover');
+      root.style.removeProperty('--accent-light');
+      root.style.removeProperty('--accent-glow');
+    }
 
     const toggleRootFlag = (attr, enabled) => {
       if (enabled) root.setAttribute(attr, 'true');
@@ -900,43 +918,66 @@ const App = {
     this.applySidebarTabsVisibility(settings);
 
     // Fond d'écran (Image derrière les panneaux — désactivé en Mode PC de merde pour épargner le GPU)
-    const PRESET_WALLPAPERS = this.PRESET_WALLPAPERS;
+    const PRESET_WALLPAPERS = this.PRESET_WALLPAPERS || {};
 
-    let wallpaperLayer = document.getElementById('app-wallpaper-layer');
-    if (!wallpaperLayer) {
+    let wallpaperLayer = (typeof document !== 'undefined') ? document.getElementById('app-wallpaper-layer') : null;
+    if (!wallpaperLayer && typeof document !== 'undefined' && document.body) {
       wallpaperLayer = document.createElement('div');
       wallpaperLayer.id = 'app-wallpaper-layer';
       wallpaperLayer.className = 'app-wallpaper-layer';
       document.body.prepend(wallpaperLayer);
     }
 
-    if (perfMode !== 'potato' && settings.backgroundImage && settings.backgroundImage !== 'none') {
-      const bgVal = PRESET_WALLPAPERS[settings.backgroundImage] || `url("${settings.backgroundImage}")`;
-      wallpaperLayer.style.background = bgVal;
-      wallpaperLayer.style.backgroundSize = 'cover';
-      wallpaperLayer.style.backgroundPosition = 'center';
-      wallpaperLayer.style.backgroundRepeat = 'no-repeat';
-      const opacity = (settings.backgroundOpacity !== undefined ? settings.backgroundOpacity : 25) / 100;
-      wallpaperLayer.style.opacity = opacity;
-      const blurPx = settings.backgroundBlur || 0;
-      wallpaperLayer.style.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
-      wallpaperLayer.style.display = 'block';
-      document.body.classList.add('has-custom-wallpaper');
-    } else {
-      wallpaperLayer.style.display = 'none';
-      document.body.classList.remove('has-custom-wallpaper');
+    if (wallpaperLayer) {
+      let customWallpaper = null;
+      if (Array.isArray(settings.customWallpapers)) {
+        customWallpaper = settings.customWallpapers.find(w => w.id === settings.backgroundImage);
+      }
+
+      if (perfMode !== 'potato' && settings.backgroundImage && settings.backgroundImage !== 'none') {
+        if (customWallpaper) {
+          wallpaperLayer.style.background = customWallpaper.css;
+          wallpaperLayer.style.backgroundSize = customWallpaper.patternSize || 'cover';
+          wallpaperLayer.style.backgroundPosition = 'center';
+          wallpaperLayer.style.backgroundRepeat = customWallpaper.patternRepeat || 'no-repeat';
+        } else {
+          const bgVal = PRESET_WALLPAPERS[settings.backgroundImage] || `url("${settings.backgroundImage}")`;
+          wallpaperLayer.style.background = bgVal;
+          wallpaperLayer.style.backgroundSize = 'cover';
+          wallpaperLayer.style.backgroundPosition = 'center';
+          wallpaperLayer.style.backgroundRepeat = 'no-repeat';
+        }
+        const opacity = (settings.backgroundOpacity !== undefined ? settings.backgroundOpacity : 25) / 100;
+        wallpaperLayer.style.opacity = opacity;
+        const blurPx = settings.backgroundBlur || 0;
+        wallpaperLayer.style.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
+        wallpaperLayer.style.display = 'block';
+        if (typeof document !== 'undefined' && document.body && document.body.classList) {
+          document.body.classList.add('has-custom-wallpaper');
+        }
+      } else {
+        wallpaperLayer.style.display = 'none';
+        if (typeof document !== 'undefined' && document.body && document.body.classList) {
+          document.body.classList.remove('has-custom-wallpaper');
+        }
+      }
     }
 
-    // Mettre à jour la couleur du bandeau de fenêtre intégré (Boutons Réduire, Agrandir, Fermer)
-    if (window.AntigraviteAPI && typeof window.AntigraviteAPI.setTitleBarOverlay === 'function') {
+    // Mettre à jour la couleur et la géométrie du bandeau de fenêtre intégré (Boutons Réduire, Agrandir, Fermer)
+    if (typeof window !== 'undefined' && window.AntigraviteAPI && typeof window.AntigraviteAPI.setTitleBarOverlay === 'function') {
       const isLight = settings.theme === 'light';
       const isOled = settings.theme === 'oled';
-      const overlayColor = isLight ? '#ffffff' : (isOled ? '#09090b' : '#131926');
-      const symbolColor = isLight ? '#475569' : '#94a3b8';
+      const isCompact = settings.density === 'compact';
+      // Couleur de fond exacte du liseré / bandeau supérieur (--bg-secondary)
+      const topBarColor = isLight ? '#ffffff' : (isOled ? '#08080c' : '#131926');
+      const symbolColor = isLight ? '#334155' : '#94a3b8';
+      const overlayHeight = isCompact ? 50 : 60;
       window.AntigraviteAPI.setTitleBarOverlay({
-        color: overlayColor,
+        color: topBarColor,
         symbolColor: symbolColor,
-        height: 48
+        height: overlayHeight,
+        theme: isLight ? 'light' : 'dark',
+        backgroundColor: topBarColor
       }).catch(() => {});
     }
 
@@ -968,7 +1009,17 @@ const App = {
 
     const debriefItem = navMenu.querySelector('.nav-item[data-screen="debrief"]');
 
-    order.forEach(screenId => {
+    let effectiveOrder = [...order];
+    if (!effectiveOrder.includes('constellation')) {
+      const notesIdx = effectiveOrder.indexOf('notes');
+      if (notesIdx !== -1) {
+        effectiveOrder.splice(notesIdx + 1, 0, 'constellation');
+      } else {
+        effectiveOrder.push('constellation');
+      }
+    }
+
+    effectiveOrder.forEach(screenId => {
       const item = navMenu.querySelector(`.nav-item[data-screen="${screenId}"]`);
       if (item) {
         navMenu.insertBefore(item, settingsItem);
@@ -993,14 +1044,15 @@ const App = {
 
     const visibleScreens = settings.sidebarVisibleScreens || {};
     const defaultVisible = {
+      agenda: true,
       tasks: true,
       projects: true,
-      agenda: true,
       notes: true,
-      focus: true,
-      music: true,
       trash: true,
-      backups: true
+      constellation: false,
+      focus: false,
+      music: false,
+      backups: false
     };
 
     if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
@@ -1604,6 +1656,8 @@ const App = {
       btnToggleSidebar.addEventListener('click', () => this.toggleSidebar());
     }
 
+    this.initWindowControls();
+
     this._bindWhatsNewModalButtons();
 
     // Raccourcis clavier globaux (Échap, Entrée, Ctrl+F, Ctrl+B, Ctrl+Shift+A, F1)
@@ -1756,6 +1810,68 @@ const App = {
         navigator.vibrate(12);
       }
     } catch (_) {}
+  },
+
+  // Initialisation des boutons Réduire, Agrandir/Restaurer, Fermer intégrés dans le bandeau supérieur
+  initWindowControls() {
+    if (typeof document === 'undefined') return;
+
+    const btnMin = document.getElementById('btn-win-minimize');
+    const btnMax = document.getElementById('btn-win-maximize');
+    const btnClose = document.getElementById('btn-win-close');
+    const iconMax = document.getElementById('icon-win-maximize');
+    const iconRestore = document.getElementById('icon-win-restore');
+
+    const updateMaxIcon = (isMaximized) => {
+      if (iconMax && iconRestore) {
+        iconMax.style.display = isMaximized ? 'none' : 'block';
+        iconRestore.style.display = isMaximized ? 'block' : 'none';
+      }
+      if (btnMax) {
+        btnMax.title = isMaximized ? 'Restaurer' : 'Agrandir';
+        btnMax.setAttribute('aria-label', isMaximized ? 'Restaurer' : 'Agrandir');
+      }
+    };
+
+    if (btnMin) {
+      btnMin.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window !== 'undefined' && window.AntigraviteAPI && window.AntigraviteAPI.windowControls) {
+          window.AntigraviteAPI.windowControls.minimize();
+        }
+      });
+    }
+
+    if (btnMax) {
+      btnMax.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window !== 'undefined' && window.AntigraviteAPI && window.AntigraviteAPI.windowControls) {
+          const isMax = await window.AntigraviteAPI.windowControls.maximize();
+          updateMaxIcon(isMax);
+        }
+      });
+    }
+
+    if (btnClose) {
+      btnClose.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window !== 'undefined' && window.AntigraviteAPI && window.AntigraviteAPI.windowControls) {
+          window.AntigraviteAPI.windowControls.close();
+        }
+      });
+    }
+
+    if (typeof window !== 'undefined' && window.AntigraviteAPI && window.AntigraviteAPI.windowControls) {
+      if (typeof window.AntigraviteAPI.windowControls.onMaximizeChanged === 'function') {
+        window.AntigraviteAPI.windowControls.onMaximizeChanged(updateMaxIcon);
+      }
+      if (typeof window.AntigraviteAPI.windowControls.isMaximized === 'function') {
+        window.AntigraviteAPI.windowControls.isMaximized().then(updateMaxIcon).catch(() => {});
+      }
+    }
   },
 
   // Modale unifiée de confirmation selon la charte graphique
@@ -1991,6 +2107,369 @@ const App = {
         if (typeof inputEl.focus === 'function') inputEl.focus();
         if (typeof inputEl.select === 'function') inputEl.select();
       }, 50);
+    });
+  },
+
+  /* ==========================================================================
+     Sélecteur Chromatique Universel Intégré (v1.3.0)
+     Ouverture juste à côté à droite de l'élément cliqué
+     ========================================================================== */
+  hexToRgb(hex) {
+    let c = (hex || '#38BDF8').replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const num = parseInt(c, 16);
+    return {
+      r: (num >> 16) & 255,
+      g: (num >> 8) & 255,
+      b: num & 255
+    };
+  },
+
+  adjustColorBrightness(hex, percent) {
+    const rgb = this.hexToRgb(hex);
+    const factor = (percent / 100);
+    const r = Math.min(255, Math.max(0, Math.round(rgb.r + (percent > 0 ? (255 - rgb.r) * factor : rgb.r * factor))));
+    const g = Math.min(255, Math.max(0, Math.round(rgb.g + (percent > 0 ? (255 - rgb.g) * factor : rgb.g * factor))));
+    const b = Math.min(255, Math.max(0, Math.round(rgb.b + (percent > 0 ? (255 - rgb.b) * factor : rgb.b * factor))));
+    const toHex = (n) => n.toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+  },
+
+  hslToHex(h, s, l) {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return (`#${f(0)}${f(8)}${f(4)}`).toUpperCase();
+  },
+
+  hexToHsl(hex) {
+    let c = (hex || '#38BDF8').replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const r = parseInt(c.substring(0, 2), 16) / 255;
+    const g = parseInt(c.substring(2, 4), 16) / 255;
+    const b = parseInt(c.substring(4, 6), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return {
+      h: Math.round(h * 360),
+      s: Math.round(s * 100),
+      l: Math.round(l * 100)
+    };
+  },
+
+  openColorPicker(options = {}) {
+    if (typeof document === 'undefined') return;
+    const popover = document.getElementById('custom-accent-color-popover');
+    if (!popover) return;
+
+    this.initColorPickerEvents();
+
+    const targetElement = options.targetElement;
+    const initialColor = (options.initialColor || '#38BDF8').toUpperCase();
+    const showNameInput = !!options.showNameInput;
+    const initialName = options.initialName || '';
+    const title = options.title || 'Palette chromatique';
+    const applyLabel = options.applyLabel || 'Appliquer';
+
+    this._activeColorPicker = {
+      initialColor: initialColor,
+      currentColor: initialColor,
+      targetElement: targetElement,
+      showNameInput: showNameInput,
+      onColorChange: typeof options.onColorChange === 'function' ? options.onColorChange : null,
+      onApply: typeof options.onApply === 'function' ? options.onApply : null,
+      onCancel: typeof options.onCancel === 'function' ? options.onCancel : null
+    };
+
+    const titleEl = document.getElementById('popover-color-title');
+    const applyBtn = document.getElementById('btn-apply-accent-popover');
+    const nameGroup = document.getElementById('popover-name-group');
+    const nameInput = document.getElementById('popover-input-name');
+
+    if (titleEl) titleEl.textContent = title;
+    if (applyBtn) applyBtn.textContent = applyLabel;
+    if (nameGroup) nameGroup.style.display = showNameInput ? 'flex' : 'none';
+    if (nameInput) {
+      nameInput.value = initialName;
+      if (options.namePlaceholder) nameInput.placeholder = options.namePlaceholder;
+    }
+
+    // Nuancier des favoris personnalisés de l'utilisateur
+    const customSwatchesContainer = document.getElementById('popover-custom-swatches');
+    if (customSwatchesContainer) {
+      let customColors = [];
+      try {
+        const settings = (typeof StorageManager !== 'undefined' && StorageManager.getSettings) ? StorageManager.getSettings() : {};
+        customColors = Array.isArray(settings.customAccentColors) ? settings.customAccentColors : [];
+      } catch (_) {}
+
+      if (customColors.length > 0) {
+        customSwatchesContainer.style.display = 'flex';
+        customSwatchesContainer.innerHTML = `
+          <div class="popover-section-label">Couleurs favorites</div>
+          <div class="popover-custom-grid">
+            ${customColors.map(c => `
+              <button type="button" class="popover-swatch" data-hex="${c.hex}" style="background: ${c.hex};" title="${this.escapeHtml(c.name || c.hex)}"></button>
+            `).join('')}
+          </div>
+        `;
+      } else {
+        customSwatchesContainer.style.display = 'none';
+        customSwatchesContainer.innerHTML = '';
+      }
+    }
+
+    // Initialisation des curseurs et badges sans déclencher onColorChange ('init')
+    this.updateColorPickerValues(initialColor, 'init');
+
+    // Rendre mesurable dans le flux sans afficher prématurément
+    popover.style.display = 'block';
+    popover.style.visibility = 'hidden';
+
+    const winW = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 1200;
+    const winH = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 800;
+    const margin = 14;
+
+    // Mesure réelle des dimensions rendues du popover
+    const popoverRect = (typeof popover.getBoundingClientRect === 'function') ? popover.getBoundingClientRect() : null;
+    const popoverWidth = Math.max(275, Math.ceil((popoverRect && popoverRect.width) || 275));
+    const popoverHeight = Math.max(340, Math.ceil((popoverRect && popoverRect.height) || 385));
+
+    let rect = null;
+    if (targetElement && typeof targetElement.getBoundingClientRect === 'function') {
+      const r = targetElement.getBoundingClientRect();
+      if ((r.width > 0 || r.height > 0) && (r.top !== 0 || r.left !== 0 || r.bottom !== 0 || r.right !== 0)) {
+        rect = r;
+      }
+    }
+
+    let left = 0;
+    let top = 0;
+
+    if (rect) {
+      // 1. Placement horizontal : priorité juste à côté à droite (+10px)
+      left = rect.right + 10;
+
+      // Si débordement sur la droite de l'écran, basculer à gauche du bouton cible
+      if (left + popoverWidth > winW - margin) {
+        const leftCandidate = rect.left - popoverWidth - 10;
+        if (leftCandidate >= margin) {
+          left = leftCandidate;
+        } else {
+          // Si ni droite ni gauche n'a 100% de place, caler dans la marge de droite
+          left = Math.max(margin, winW - popoverWidth - margin);
+        }
+      }
+
+      // 2. Placement vertical : centré ou aligné sur le haut du bouton
+      top = rect.top + (rect.height / 2) - 40;
+
+      // Ajustement vertical strict : tout le nuancier (notamment les boutons en bas) reste visible
+      if (top + popoverHeight > winH - margin) {
+        top = winH - popoverHeight - margin;
+      }
+      if (top < margin) {
+        top = margin;
+      }
+    } else {
+      // Fallback si pas de bouton ou bouton non positionné : centrage parfait dans la fenêtre
+      left = Math.max(margin, Math.round((winW - popoverWidth) / 2));
+      top = Math.max(margin, Math.round((winH - popoverHeight) / 2));
+    }
+
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+    popover.style.visibility = 'visible';
+  },
+
+  closeColorPicker(revert = false) {
+    if (typeof document === 'undefined') return;
+    const popover = document.getElementById('custom-accent-color-popover');
+    if (popover) popover.style.display = 'none';
+
+    if (this._activeColorPicker) {
+      if (revert && typeof this._activeColorPicker.onCancel === 'function') {
+        this._activeColorPicker.onCancel(this._activeColorPicker.initialColor);
+      }
+      this._activeColorPicker = null;
+    }
+  },
+
+  updateColorPickerValues(hex, source = null) {
+    if (typeof document === 'undefined') return;
+    const cleanHex = (hex || '#38BDF8').toUpperCase();
+    const hsl = this.hexToHsl(cleanHex);
+
+    if (this._activeColorPicker) {
+      this._activeColorPicker.currentColor = cleanHex;
+      if (source !== 'init' && typeof this._activeColorPicker.onColorChange === 'function') {
+        this._activeColorPicker.onColorChange(cleanHex);
+      }
+    }
+
+    const popover = document.getElementById('custom-accent-color-popover');
+    const badge = document.getElementById('popover-color-preview-badge') || document.getElementById('popover-color-swatch-badge');
+    const hexSub = document.getElementById('popover-color-hex-sub');
+    const hexInput = document.getElementById('popover-input-hex');
+    const hueSlider = document.getElementById('popover-hue-slider');
+    const hueVal = document.getElementById('popover-hue-val');
+    const lightnessSlider = document.getElementById('popover-lightness-slider');
+    const lightnessVal = document.getElementById('popover-lightness-val');
+
+    if (source !== 'slider') {
+      if (hueSlider) hueSlider.value = hsl.h;
+      if (lightnessSlider) lightnessSlider.value = Math.max(20, Math.min(80, hsl.l));
+    }
+    if (hueVal) hueVal.textContent = `${hsl.h}°`;
+    if (lightnessVal) lightnessVal.textContent = `${hsl.l}%`;
+
+    if (source !== 'hexInput' && hexInput) {
+      hexInput.value = cleanHex;
+    }
+    if (badge) badge.style.backgroundColor = cleanHex;
+    if (hexSub) hexSub.textContent = cleanHex;
+
+    if (popover && popover.style && typeof popover.style.setProperty === 'function') {
+      popover.style.setProperty('--popover-cur-hue', `hsl(${hsl.h}, 100%, 50%)`);
+      if (typeof popover.querySelectorAll === 'function') {
+        popover.querySelectorAll('.popover-swatch').forEach(sw => {
+          const swHex = (sw.dataset.hex || '').toUpperCase();
+          if (sw.classList && typeof sw.classList.toggle === 'function') {
+            sw.classList.toggle('active', swHex === cleanHex);
+          }
+        });
+      }
+    }
+  },
+
+  initColorPickerEvents() {
+    if (this._colorPickerEventsBound || typeof document === 'undefined') return;
+    this._colorPickerEventsBound = true;
+
+    const popover = document.getElementById('custom-accent-color-popover');
+    if (!popover) return;
+
+    const btnClose = document.getElementById('btn-close-accent-popover');
+    const btnCancel = document.getElementById('btn-cancel-accent-popover');
+    const btnApply = document.getElementById('btn-apply-accent-popover');
+
+    if (btnClose) {
+      btnClose.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.closeColorPicker(true);
+      });
+    }
+    if (btnCancel) {
+      btnCancel.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.closeColorPicker(true);
+      });
+    }
+
+    const handleApply = () => {
+      const hexInput = document.getElementById('popover-input-hex');
+      const nameInput = document.getElementById('popover-input-name');
+      let hex = hexInput ? hexInput.value.trim().toUpperCase() : '';
+      if (!hex.startsWith('#') && hex.length > 0) hex = '#' + hex;
+      if (!/^#[0-9A-F]{6}$/i.test(hex)) {
+        if (typeof this.showToast === 'function') {
+          this.showToast("Format de couleur invalide (ex: #38BDF8)", "warning");
+        }
+        return;
+      }
+      const name = (nameInput && nameInput.value.trim()) || ('Teinte ' + hex);
+      const active = this._activeColorPicker;
+      this.closeColorPicker(false);
+      if (active && typeof active.onApply === 'function') {
+        active.onApply(hex, name);
+      }
+    };
+
+    if (btnApply) {
+      btnApply.addEventListener('click', (e) => {
+        e.preventDefault();
+        handleApply();
+      });
+    }
+
+    if (popover && typeof popover.addEventListener === 'function') {
+      popover.addEventListener('click', (e) => {
+        const swatch = e.target.closest ? e.target.closest('.popover-swatch') : null;
+        if (swatch && swatch.dataset && swatch.dataset.hex) {
+          e.preventDefault();
+          this.updateColorPickerValues(swatch.dataset.hex, 'swatch');
+        }
+      });
+    }
+
+    const hueSlider = document.getElementById('popover-hue-slider');
+    const lightnessSlider = document.getElementById('popover-lightness-slider');
+
+    const handleSlidersChange = () => {
+      const h = hueSlider ? parseInt(hueSlider.value, 10) : 200;
+      const l = lightnessSlider ? parseInt(lightnessSlider.value, 10) : 60;
+      const hex = this.hslToHex(h, 92, l);
+      this.updateColorPickerValues(hex, 'slider');
+    };
+
+    if (hueSlider) hueSlider.addEventListener('input', handleSlidersChange);
+    if (lightnessSlider) lightnessSlider.addEventListener('input', handleSlidersChange);
+
+    const hexInput = document.getElementById('popover-input-hex');
+    if (hexInput) {
+      hexInput.addEventListener('input', () => {
+        let val = hexInput.value.trim().toUpperCase();
+        if (!val.startsWith('#') && val.length > 0) val = '#' + val;
+        if (/^#[0-9A-F]{6}$/i.test(val)) {
+          this.updateColorPickerValues(val, 'hexInput');
+        }
+      });
+      hexInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleApply();
+        }
+      });
+    }
+
+    const nameInput = document.getElementById('popover-input-name');
+    if (nameInput) {
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleApply();
+        }
+      });
+    }
+
+    document.addEventListener('pointerdown', (e) => {
+      if (popover.style.display !== 'none' &&
+          !popover.contains(e.target) &&
+          (!this._activeColorPicker || !this._activeColorPicker.targetElement || !this._activeColorPicker.targetElement.contains(e.target))) {
+        this.closeColorPicker(true);
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && popover.style.display !== 'none') {
+        this.closeColorPicker(true);
+      }
     });
   },
 
@@ -2775,6 +3254,7 @@ const App = {
     const events = StorageManager.getEvents();
     const notes = StorageManager.getNotes();
     const projectById = new Map((projects || []).map(p => [p.id, p]));
+    const archivedProjectIds = new Set((projects || []).filter(p => p.archived).map(p => p.id));
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const now = new Date();
@@ -2788,16 +3268,19 @@ const App = {
     const traverseTasks = (list) => {
       list.forEach(t => {
         if (!t.completed) {
-          if (t.plannedDate === todayStr) {
-            plannedTodayCount++;
-            plannedTodayList.push(t);
-          }
-          if (t.deadline) {
-            const d = new Date(t.deadline);
-            const diffHours = (d - now) / 3600000;
-            if (diffHours >= 0 && diffHours <= 72) { // Dans les 3 prochains jours
-              upcomingDeadlinesCount++;
-              upcomingDeadlinesList.push(t);
+          const isArchived = t.projectId ? archivedProjectIds.has(t.projectId) : false;
+          if (!isArchived) {
+            if (t.plannedDate === todayStr) {
+              plannedTodayCount++;
+              plannedTodayList.push(t);
+            }
+            if (t.deadline) {
+              const d = new Date(t.deadline);
+              const diffHours = (d - now) / 3600000;
+              if (diffHours >= 0 && diffHours <= 72) { // Dans les 3 prochains jours
+                upcomingDeadlinesCount++;
+                upcomingDeadlinesList.push(t);
+              }
             }
           }
         }
@@ -2823,7 +3306,7 @@ const App = {
     if (elPlanned) elPlanned.textContent = plannedTodayCount;
     if (elDeadlines) elDeadlines.textContent = upcomingDeadlinesCount;
     if (elEvents) elEvents.textContent = todayEvents.length;
-    if (elProjects) elProjects.textContent = projects.length;
+    if (elProjects) elProjects.textContent = (projects || []).filter(p => !p.archived).length;
 
     // 4. Remplir le panneau "Tâches prévues aujourd'hui"
     const panelPlanned = document.getElementById('dashboard-planned-tasks');

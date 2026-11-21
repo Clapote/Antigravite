@@ -494,6 +494,9 @@ const AgendaManager = {
         window.App.updateSidebarDayProgress(this.activeDateStr || null);
       }
     }
+    if (typeof window !== 'undefined' && window.ConstellationManager && typeof window.App !== 'undefined' && window.App.currentScreen === 'constellation') {
+      window.ConstellationManager.render();
+    }
     if (window.AgendaNotificationManager && typeof window.AgendaNotificationManager.checkUpcomingEvents === 'function') {
       window.AgendaNotificationManager.checkUpcomingEvents();
     }
@@ -1095,9 +1098,7 @@ const AgendaManager = {
         alldayEl.style.display = 'grid';
 
         let alldayHtml = `
-          <div class="calendar-allday-gutter">
-            <span class="calendar-allday-gutter-badge" title="Événements se déroulant sur toute la journée">Journée</span>
-          </div>
+          <div class="calendar-allday-gutter"></div>
         `;
 
         days.forEach(d => {
@@ -1681,6 +1682,34 @@ const AgendaManager = {
         updateActiveSwatch(sw.dataset.color);
       };
     });
+
+    if (customSwatch) {
+      customSwatch.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof App !== 'undefined' && typeof App.openColorPicker === 'function') {
+          App.openColorPicker({
+            targetElement: customSwatch,
+            initialColor: (inputColor && inputColor.value) || '#8b5cf6',
+            title: "Couleur de l'événement",
+            applyLabel: 'Appliquer',
+            showNameInput: false,
+            onColorChange: (val) => {
+              if (inputColor) inputColor.value = val;
+              updateActiveSwatch(val);
+            },
+            onApply: (val) => {
+              if (inputColor) inputColor.value = val;
+              updateActiveSwatch(val);
+            },
+            onCancel: (initialVal) => {
+              if (inputColor) inputColor.value = initialVal;
+              updateActiveSwatch(initialVal);
+            }
+          });
+        }
+      };
+    }
 
     if (inputColor) {
       inputColor.oninput = () => updateActiveSwatch(inputColor.value);
@@ -3377,6 +3406,9 @@ const AgendaManager = {
     const inputEnd = document.getElementById('event-input-end');
     if (inputStart) inputStart.type = 'datetime-local';
     if (inputEnd) inputEnd.type = 'datetime-local';
+    if (typeof App !== 'undefined' && typeof App.closeColorPicker === 'function') {
+      App.closeColorPicker(true);
+    }
   },
 
   escapeHtml(str) {
