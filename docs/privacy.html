@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Politique de confidentialité / Privacy Policy — Antigravité</title>
+  <meta name="description" content="Politique de confidentialité d'Antigravité et conformité Google API Services User Data Policy.">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="index.html" class="brand">
+        <img src="icon.png" alt="Logo Antigravité">
+        <span>Antigravité</span>
+      </a>
+      <nav class="nav-links" aria-label="Navigation">
+        <a href="index.html">Accueil</a>
+        <a href="privacy.html" class="active">Confidentialité</a>
+        <a href="https://github.com/Clapote/Antigravite" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="mailto:Antigravite@proton.me">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <article class="doc-article">
+      <h1>Politique de confidentialité / Privacy Policy</h1>
+      <p class="doc-meta">
+        Application : <strong>Antigravité</strong> (éditeur : Lucas Peutot) · Dernière mise à jour : 27 novembre 2026 · Contact :
+        <a href="mailto:Antigravite@proton.me">Antigravite@proton.me</a>
+      </p>
+
+      <h2>1. Philosophie 100 % locale</h2>
+      <p>
+        <strong>Antigravité</strong> est un logiciel de bureau pour Windows fonctionnant localement sur votre ordinateur.
+        L'application ne comporte ni compte utilisateur propriétaire, ni publicité, ni traceur analytique, ni télémétrie,
+        et n'exploite aucun serveur distant tiers pour collecter ou héberger vos tâches, projets, notes ou événements.
+      </p>
+
+      <h2>2. Données Google accédées et finalités exactes</h2>
+      <p>
+        Si vous choisissez volontairement de connecter votre compte Google Agenda depuis
+        <em>Paramètres &gt; Connexion Google &amp; Mises à jour</em>, Antigravité demande uniquement les autorisations (scopes OAuth 2.0) suivantes :
+      </p>
+
+      <table class="scope-table">
+        <thead>
+          <tr>
+            <th>Scope Google OAuth 2.0</th>
+            <th>Utilisation exacte dans Antigravité</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>https://www.googleapis.com/auth/userinfo.email</code><br><code>https://www.googleapis.com/auth/userinfo.profile</code></td>
+            <td>Afficher votre nom et votre adresse e-mail dans l'écran Paramètres afin d'identifier le compte connecté.</td>
+          </tr>
+          <tr>
+            <td><code>https://www.googleapis.com/auth/calendar.readonly</code></td>
+            <td>Lister vos calendriers Google pour vous permettre de choisir celui à synchroniser, et lire les événements à afficher dans l'Agenda Antigravité.</td>
+          </tr>
+          <tr>
+            <td><code>https://www.googleapis.com/auth/calendar.events</code></td>
+            <td>Créer, modifier ou supprimer un événement dans le calendrier Google sélectionné lorsque vous effectuez une action dans l'Agenda Antigravité.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>3. Stockage, sécurité et absence de partage</h2>
+      <ul>
+        <li><strong>Stockage exclusivement local :</strong> Vos événements synchronisés, tâches, notes et jetons OAuth restent enregistrés uniquement sur votre ordinateur.</li>
+        <li><strong>Chiffrement des jetons :</strong> Les jetons OAuth Google sont chiffrés localement à l'aide de l'API système Windows DPAPI (via Electron <code>safeStorage</code>) et conservés dans le dossier privé de l'application (<code>userData/google_auth/auth_data.enc</code>).</li>
+        <li><strong>Aucun partage ni transfert tiers :</strong> Vos données Google ne sont jamais vendues, louées, transférées à des tiers, ni utilisées à des fins publicitaires ou d'entraînement d'IA.</li>
+      </ul>
+
+      <h2>4. Conservation et suppression des données</h2>
+      <ul>
+        <li>Vous pouvez déconnecter votre compte Google à tout moment depuis <em>Paramètres &gt; Connexion Google &amp; Mises à jour</em> : cela supprime immédiatement les jetons OAuth locaux et les événements importés depuis Google.</li>
+        <li>Vous pouvez également révoquer l'accès d'Antigravité à tout moment depuis votre compte Google :
+          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>.
+        </li>
+      </ul>
+
+      <h2>5. Conformité Google API Services (Limited Use Disclosure — English)</h2>
+      <p>
+        Antigravité's use and transfer to any other app of information received from Google APIs will adhere to the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>,
+        including the Limited Use requirements.
+      </p>
+      <ul>
+        <li><strong>Data Accessed:</strong> Google Account email/name (for connection status display), Google Calendar list, and calendar events in the user-selected calendar.</li>
+        <li><strong>Data Usage:</strong> Used strictly to display the user's schedule inside the local desktop Agenda view and synchronize user-initiated event creations, edits, or deletions back to their selected Google Calendar.</li>
+        <li><strong>Data Storage &amp; Protection:</strong> All data and OAuth credentials are stored solely on the user's local Windows machine. OAuth tokens are encrypted via Windows DPAPI (Electron <code>safeStorage</code>). No developer backend or external server receives user Google data.</li>
+        <li><strong>Data Sharing:</strong> None. Google user data is never sold or shared with any third parties.</li>
+        <li><strong>Data Deletion:</strong> Disconnecting inside the app clears local OAuth tokens and synced Google event caches immediately; access can also be revoked via Google Account security settings.</li>
+      </ul>
+
+      <h2>6. Contact</h2>
+      <p>
+        Pour toute question relative à la confidentialité ou à vos données, contactez Lucas Peutot à l'adresse :
+        <a href="mailto:Antigravite@proton.me">Antigravite@proton.me</a>.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <span>Antigravité — Lucas Peutot</span>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <a href="index.html">Retour à l'accueil</a>
+        <a href="mailto:Antigravite@proton.me">Antigravite@proton.me</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

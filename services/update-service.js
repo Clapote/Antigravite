@@ -20,6 +20,7 @@ class UpdateService extends EventEmitter {
     this.app = options.app || null;
     this.autoUpdater = options.autoUpdater || null;
     this.currentVersionOverride = options.currentVersion || null;
+    this._explicitMockVersion = options.mockVersion || null;
     this.mockVersion = options.mockVersion || '1.2.3';
     this.feedConfig = Object.assign({
       provider: 'github',
@@ -43,15 +44,28 @@ class UpdateService extends EventEmitter {
    */
   isNewerVersion(remoteVer, currentVer) {
     if (!remoteVer || !currentVer) return false;
-    const clean = (v) => String(v).trim().replace(/^v/i, '');
-    const rParts = clean(remoteVer).split('.').map(n => parseInt(n, 10) || 0);
-    const cParts = clean(currentVer).split('.').map(n => parseInt(n, 10) || 0);
-    const len = Math.max(rParts.length, cParts.length);
+    const parseVer = (v) => {
+      const cleaned = String(v).trim().replace(/^v/i, '').split('+')[0];
+      const dashIdx = cleaned.indexOf('-');
+      const coreStr = dashIdx === -1 ? cleaned : cleaned.slice(0, dashIdx);
+      const preStr = dashIdx === -1 ? '' : cleaned.slice(dashIdx + 1);
+      const core = coreStr.split('.').map(n => parseInt(n, 10) || 0);
+      return { core, pre: preStr };
+    };
+    const rParsed = parseVer(remoteVer);
+    const cParsed = parseVer(currentVer);
+    const len = Math.max(rParsed.core.length, cParsed.core.length);
     for (let i = 0; i < len; i++) {
-      const r = rParts[i] || 0;
-      const c = cParts[i] || 0;
+      const r = rParsed.core[i] || 0;
+      const c = cParsed.core[i] || 0;
       if (r > c) return true;
       if (r < c) return false;
+    }
+    // Même cœur X.Y.Z : une préversion (ex: 1.4.0-beta.1) est toujours antérieure à la finale (1.4.0)
+    if (rParsed.pre && !cParsed.pre) return false;
+    if (!rParsed.pre && cParsed.pre) return true;
+    if (rParsed.pre && cParsed.pre && rParsed.pre !== cParsed.pre) {
+      return rParsed.pre.localeCompare(cParsed.pre, undefined, { numeric: true }) > 0;
     }
     return false;
   }
@@ -207,16 +221,30 @@ class UpdateService extends EventEmitter {
    * En mode développement (non empaqueté), la requête réseau est ignorée par sécurité
    * sauf si force = true.
    */
+  _resolveMockVersion() {
+    if (this._explicitMockVersion) {
+      return this._explicitMockVersion;
+    }
+    const cur = this._getCurrentVersion();
+    if (this.isNewerVersion('1.2.3', cur)) {
+      return this.mockVersion || '1.2.3';
+    }
+    const clean = String(cur).trim().replace(/^v/i, '').split('-')[0];
+    const parts = clean.split('.').map(n => parseInt(n, 10) || 0);
+    return `${parts[0] || 1}.${parts[1] || 0}.${(parts[2] || 0) + 1}`;
+  }
+
   async checkForUpdates(force = false) {
     if (this.isMockMode) {
       this._setStatus('checking');
       await new Promise(r => setTimeout(r, 400));
       const currentVer = this._getCurrentVersion();
+      const targetMockVer = this._resolveMockVersion();
       const mockInfo = {
-        version: this.mockVersion || '1.2.4',
+        version: targetMockVer,
         releaseDate: new Date().toISOString(),
         releaseNotes: "Améliorations de la fluidité, téléchargement transparent et installation sans fenêtre d'assistant.",
-        files: [{ url: `Antigravite.Setup.${this.mockVersion || '1.2.4'}.exe`, size: 84500000 }]
+        files: [{ url: `Antigravite.Setup.${targetMockVer}.exe`, size: 84500000 }]
       };
       const isNewer = this.isNewerVersion(mockInfo.version, currentVer);
       if (!isNewer) {
@@ -246,6 +274,12 @@ class UpdateService extends EventEmitter {
       throw new Error("electron-updater n'est pas disponible.");
     }
 
+    if (!isPackaged && force) {
+      updater.forceDevUpdateConfig = true;
+    }
+
+    const wasDownloaded = this.status === 'downloaded';
+    const prevUpdateInfo = this.updateInfo;
     this._setStatus('checking');
     try {
       const result = await updater.checkForUpdates();
@@ -272,7 +306,12 @@ class UpdateService extends EventEmitter {
       };
     } catch (err) {
       this.lastError = err;
-      this._setStatus('error', { error: err ? err.message : 'Erreur inconnue' });
+      if (wasDownloaded && prevUpdateInfo) {
+        this.updateInfo = prevUpdateInfo;
+        this._setStatus('downloaded', { updateInfo: prevUpdateInfo, error: err ? err.message : 'Erreur inconnue' });
+      } else {
+        this._setStatus('error', { error: err ? err.message : 'Erreur inconnue' });
+      }
       throw err;
     }
   }
@@ -308,7 +347,7 @@ class UpdateService extends EventEmitter {
       throw new Error("electron-updater n'est pas disponible.");
     }
 
-    if (this.status !== 'available' && this.status !== 'error') {
+    if ((this.status !== 'available' && this.status !== 'error') || (this.status === 'error' && (!this.updateInfo || !this.updateInfo.version))) {
       throw new Error(`Téléchargement impossible dans l'état actuel : ${this.status}`);
     }
 

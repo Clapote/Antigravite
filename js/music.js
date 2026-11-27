@@ -41,18 +41,24 @@ const MusicManager = {
   initialized: false,
   shuffledIndices: [],
   shuffledPointer: 0,
+  _playRequestId: 0,
+  _loadedTrackKey: null,
 
-  init() {
+  init(options = {}) {
     if (this.initialized) {
-      this.render();
-      return;
+      if (!options || !options.deferRender) this.render();
+      return this._initPromise || Promise.resolve();
     }
     this.initialized = true;
+    const deferRender = !!(options && options.deferRender);
 
     // 1. Restaurer les préférences utilisateur
     if (typeof localStorage !== 'undefined') {
       const savedVol = localStorage.getItem('antigravite_music_volume');
-      if (savedVol !== null) this.volume = Math.max(0, Math.min(1, parseFloat(savedVol) || 0.8));
+      if (savedVol !== null) {
+        const parsedVol = parseFloat(savedVol);
+        this.volume = Number.isFinite(parsedVol) ? Math.max(0, Math.min(1, parsedVol)) : 0.8;
+      }
 
       const savedShuffle = localStorage.getItem('antigravite_music_shuffle');
       if (savedShuffle !== null) this.isShuffle = (savedShuffle === 'true');
@@ -75,11 +81,36 @@ const MusicManager = {
     // 2. Initialiser l'élément Audio HTML5
     this.initAudio();
 
-    // 3. Charger les morceaux du logiciel (dossier music/)
-    this.loadTracks().then(() => {
-      this.render();
+    if (!this._unloadCleanupBound && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      this._unloadCleanupBound = true;
+      window.addEventListener('beforeunload', () => {
+        this.revokeCustomBlobUrls();
+      });
+    }
+
+    // 3. Charger les morceaux du logiciel en asynchrone (cache RAM dans main.js)
+    this._initPromise = this.loadTracks().then(() => {
+      if (!deferRender) {
+        this.render();
+      } else {
+        this.updateVolumeUI();
+        this.updateShuffleUI();
+        this.updateRepeatUI();
+        this.updateSidebarMiniPlayer();
+      }
       this.bindEvents();
+      return this.tracks;
     });
+    return this._initPromise;
+  },
+
+  async warmUpCatalog() {
+    if (this._initPromise) {
+      await this._initPromise;
+    } else if (!this.tracks || this.tracks.length === 0) {
+      await this.loadTracks();
+    }
+    return this.tracks;
   },
 
   initAudio() {
@@ -191,12 +222,57 @@ const MusicManager = {
     }
   },
 
+  _getTrackKey(track) {
+    if (!track) return '';
+    return String(track.id || track.filename || track.fileUrl || track.src || track.title || '');
+  },
+
+  getActivePlaybackIndices() {
+    if (!Array.isArray(this.tracks) || this.tracks.length === 0) return [];
+    const activePl = (Array.isArray(this.playlists))
+      ? this.playlists.find(p => p && p.id === this.activePlaylistId)
+      : null;
+
+    if (activePl) {
+      const idSet = new Set(Array.isArray(activePl.trackIds) ? activePl.trackIds : []);
+      const indices = [];
+      for (let i = 0; i < this.tracks.length; i++) {
+        const t = this.tracks[i];
+        if ((t.id && idSet.has(t.id)) || (t.filename && idSet.has(t.filename))) {
+          indices.push(i);
+        }
+      }
+      return indices;
+    }
+
+    const folderCat = (this.activePlaylistId && this.activePlaylistId.startsWith('preset:'))
+      ? this.activePlaylistId.replace('preset:', '')
+      : this.selectedFolder;
+
+    if (folderCat && folderCat !== 'all') {
+      const indices = [];
+      for (let i = 0; i < this.tracks.length; i++) {
+        const tFolder = this.tracks[i].folder || 'Focus, Rituals & Daily Routines';
+        if (tFolder === folderCat) indices.push(i);
+      }
+      return indices;
+    }
+
+    return this.tracks.map((_, i) => i);
+  },
+
   rebuildShuffleOrder() {
-    const indices = this.tracks.map((_, i) => i);
+    const indices = this.getActivePlaybackIndices().slice();
     // Algorithme de mélange Fisher-Yates
     for (let i = indices.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    if (this.currentIndex >= 0) {
+      const curPos = indices.indexOf(this.currentIndex);
+      if (curPos > 0) {
+        [indices[0], indices[curPos]] = [indices[curPos], indices[0]];
+      }
     }
     this.shuffledIndices = indices;
     this.shuffledPointer = 0;
@@ -288,20 +364,23 @@ const MusicManager = {
         this.loadTrackSource(track);
       }
     } else if (this.currentIndex === -1 && this.tracks.length > 0) {
-      this.currentIndex = 0;
-      this.loadTrackSource(this.tracks[0]);
+      const activeIndices = this.getActivePlaybackIndices();
+      this.currentIndex = activeIndices.length > 0 ? activeIndices[0] : 0;
+      this.loadTrackSource(this.tracks[this.currentIndex]);
     }
 
     const current = this.getCurrentTrack();
     if (!current) return;
 
+    const reqId = ++this._playRequestId;
     this.hasStarted = true;
     this.isPlaying = true;
     this.updatePlayerUI();
     this.updateSidebarMiniPlayer();
 
     if (this.audio) {
-      if (!this.audio.src || !this.audio.src.includes(encodeURI(current.filename || ''))) {
+      const expectedKey = this._getTrackKey(current);
+      if (!this.audio.src || this._loadedTrackKey !== expectedKey) {
         this.loadTrackSource(current);
       }
       try {
@@ -311,6 +390,7 @@ const MusicManager = {
         const playPromise = this.audio.play();
         if (playPromise !== undefined && typeof playPromise.then === 'function') {
           playPromise.catch(err => {
+            if (reqId !== this._playRequestId) return;
             console.warn("[MusicManager] Lecture différée ou bloquée :", err);
             this._clearFadeTimer();
             this.isPlaying = false;
@@ -327,6 +407,7 @@ const MusicManager = {
   },
 
   pause(instant = false) {
+    this._playRequestId++;
     this.isPlaying = false;
     this.updatePlayerUI();
     this.updateSidebarMiniPlayer();
@@ -350,11 +431,9 @@ const MusicManager = {
   },
 
   stop(instant = false) {
+    this._playRequestId++;
     this.isPlaying = false;
     this.hasStarted = false;
-    this.onTimeUpdate();
-    this.updatePlayerUI();
-    this.updateSidebarMiniPlayer();
 
     if (this.audio) {
       const normalVol = this.isMuted ? 0 : (this.volume !== undefined ? this.volume : 0.7);
@@ -363,17 +442,24 @@ const MusicManager = {
         this.audio.pause();
         this.audio.currentTime = 0;
         this.audio.volume = normalVol;
+        this.onTimeUpdate();
       } else {
         // Fondu sonore doux à l'arrêt
         this._fadeAudioTo(0, 300, false, () => {
-          if (this.audio) {
+          if (this.audio && !this.isPlaying) {
             this.audio.pause();
             this.audio.currentTime = 0;
             this.audio.volume = normalVol;
+            this.onTimeUpdate();
           }
         });
       }
+    } else {
+      this.onTimeUpdate();
     }
+
+    this.updatePlayerUI();
+    this.updateSidebarMiniPlayer();
 
     if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
       window.App.triggerHapticFeedback();
@@ -395,26 +481,43 @@ const MusicManager = {
   },
 
   next(userInitiated = true) {
-    if (this.tracks.length === 0) return;
+    const activeIndices = this.getActivePlaybackIndices();
+    if (activeIndices.length === 0) return;
 
     let nextIdx = this.currentIndex;
 
-    if (this.isShuffle && this.shuffledIndices.length === this.tracks.length) {
-      this.shuffledPointer++;
-      if (this.shuffledPointer >= this.shuffledIndices.length) {
+    if (this.isShuffle) {
+      const activeSet = new Set(activeIndices);
+      const validShuffle = Array.isArray(this.shuffledIndices) &&
+        this.shuffledIndices.length === activeIndices.length &&
+        this.shuffledIndices.every(i => activeSet.has(i));
+      if (!validShuffle) {
         this.rebuildShuffleOrder();
       }
-      nextIdx = this.shuffledIndices[this.shuffledPointer];
-    } else {
-      nextIdx = this.currentIndex + 1;
-      if (nextIdx >= this.tracks.length) {
-        if (this.repeatMode === 'all' || userInitiated) {
-          nextIdx = 0;
-        } else {
-          // Mode 'none' et fin de playlist atteinte
+      this.shuffledPointer++;
+      if (this.shuffledPointer >= this.shuffledIndices.length) {
+        if (this.repeatMode !== 'all' && !userInitiated) {
           this.stop();
           return;
         }
+        this.rebuildShuffleOrder();
+        if (this.shuffledIndices.length > 1 && this.shuffledIndices[0] === this.currentIndex) {
+          this.shuffledPointer = 1;
+        }
+      }
+      nextIdx = this.shuffledIndices[this.shuffledPointer];
+    } else {
+      const pos = activeIndices.indexOf(this.currentIndex);
+      if (pos === -1) {
+        nextIdx = activeIndices[0];
+      } else if (pos + 1 < activeIndices.length) {
+        nextIdx = activeIndices[pos + 1];
+      } else if (this.repeatMode === 'all' || userInitiated) {
+        nextIdx = activeIndices[0];
+      } else {
+        // Mode 'none' et fin de playlist atteinte
+        this.stop();
+        return;
       }
     }
 
@@ -425,7 +528,8 @@ const MusicManager = {
   },
 
   prev() {
-    if (this.tracks.length === 0) return;
+    const activeIndices = this.getActivePlaybackIndices();
+    if (activeIndices.length === 0) return;
 
     // Si plus de 3 secondes déjà écoutées, recommencer au début
     if (this.audio && this.audio.currentTime > 3) {
@@ -433,10 +537,8 @@ const MusicManager = {
       return;
     }
 
-    let prevIdx = this.currentIndex - 1;
-    if (prevIdx < 0) {
-      prevIdx = this.tracks.length - 1;
-    }
+    const pos = activeIndices.indexOf(this.currentIndex);
+    const prevIdx = (pos <= 0) ? activeIndices[activeIndices.length - 1] : activeIndices[pos - 1];
 
     this.play(prevIdx);
     if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
@@ -446,6 +548,7 @@ const MusicManager = {
 
   loadTrackSource(track) {
     if (!track) return;
+    this._loadedTrackKey = this._getTrackKey(track);
     if (this.audio) {
       this.audio.src = track.fileUrl || track.src;
       this.audio.load();
@@ -511,8 +614,9 @@ const MusicManager = {
 
       const fill = document.getElementById('music-progress-fill');
       const slider = document.getElementById('music-progress-slider');
-      if (fill && fill.style.width !== pctStr) fill.style.width = pctStr;
-      if (slider && !slider._dragging && this._lastSliderPct !== pctRounded) {
+      const isDragging = Boolean(slider && slider._dragging);
+      if (fill && !isDragging && fill.style.width !== pctStr) fill.style.width = pctStr;
+      if (slider && !isDragging && this._lastSliderPct !== pctRounded) {
         this._lastSliderPct = pctRounded;
         slider.value = pct;
       }
@@ -564,7 +668,7 @@ const MusicManager = {
       this.audio.volume = this.isMuted ? 0 : this.volume;
     }
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('antigravite_music_volume', this.volume);
+      try { localStorage.setItem('antigravite_music_volume', this.volume); } catch (_) {}
     }
     this.updateVolumeUI();
   },
@@ -587,7 +691,7 @@ const MusicManager = {
       this.rebuildShuffleOrder();
     }
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('antigravite_music_shuffle', this.isShuffle);
+      try { localStorage.setItem('antigravite_music_shuffle', this.isShuffle); } catch (_) {}
     }
     this.updateShuffleUI();
     if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
@@ -604,7 +708,7 @@ const MusicManager = {
     this.repeatMode = modes[nextIdx];
 
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('antigravite_music_repeat', this.repeatMode);
+      try { localStorage.setItem('antigravite_music_repeat', this.repeatMode); } catch (_) {}
     }
     this.updateRepeatUI();
     if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
@@ -772,6 +876,10 @@ const MusicManager = {
       try {
         if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
           blobUrl = URL.createObjectURL(file);
+          if (blobUrl && blobUrl.startsWith('blob:')) {
+            if (!this._createdBlobUrls) this._createdBlobUrls = new Set();
+            this._createdBlobUrls.add(blobUrl);
+          }
         }
       } catch (_e) {
         blobUrl = 'file://local/' + encodeURIComponent(file.name || 'track.mp3');
@@ -806,6 +914,16 @@ const MusicManager = {
       }
       // Règle absolue v1.2.0 : L'importation ne doit JAMAIS déclencher automatiquement la lecture
     }
+  },
+
+  revokeCustomBlobUrls() {
+    if (!this._createdBlobUrls || typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') return;
+    this._createdBlobUrls.forEach((url) => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (_) {}
+    });
+    this._createdBlobUrls.clear();
   },
 
   async openMusicFolder() {
@@ -880,11 +998,13 @@ const MusicManager = {
   setFolder(folder) {
     this.selectedFolder = folder || 'all';
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('antigravite_music_folder', this.selectedFolder);
+      try { localStorage.setItem('antigravite_music_folder', this.selectedFolder); } catch (_) {}
     }
-    const filterSelect = document.getElementById('music-folder-filter');
-    if (filterSelect && filterSelect.value !== this.selectedFolder) {
-      filterSelect.value = this.selectedFolder;
+    if (typeof document !== 'undefined') {
+      const filterSelect = document.getElementById('music-folder-filter');
+      if (filterSelect && filterSelect.value !== this.selectedFolder) {
+        filterSelect.value = this.selectedFolder;
+      }
     }
     this.renderPlaylist();
     if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
@@ -895,11 +1015,13 @@ const MusicManager = {
   setSort(sortBy) {
     this.sortBy = sortBy || 'folder';
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('antigravite_music_sort', this.sortBy);
+      try { localStorage.setItem('antigravite_music_sort', this.sortBy); } catch (_) {}
     }
-    const sortSelect = document.getElementById('music-sort-select');
-    if (sortSelect && sortSelect.value !== this.sortBy) {
-      sortSelect.value = this.sortBy;
+    if (typeof document !== 'undefined') {
+      const sortSelect = document.getElementById('music-sort-select');
+      if (sortSelect && sortSelect.value !== this.sortBy) {
+        sortSelect.value = this.sortBy;
+      }
     }
     this.renderPlaylist();
     if (typeof window !== 'undefined' && window.App && typeof window.App.triggerHapticFeedback === 'function') {
@@ -959,7 +1081,13 @@ const MusicManager = {
       const saved = localStorage.getItem('antigravite_custom_playlists');
       if (saved) {
         try {
-          this.playlists = JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          this.playlists = Array.isArray(parsed)
+            ? parsed.filter(pl => pl && typeof pl === 'object').map(pl => ({
+                ...pl,
+                trackIds: Array.isArray(pl.trackIds) ? pl.trackIds : []
+              }))
+            : [];
         } catch (_e) {
           this.playlists = [];
         }
@@ -973,8 +1101,10 @@ const MusicManager = {
 
   savePlaylists() {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('antigravite_custom_playlists', JSON.stringify(this.playlists));
-      localStorage.setItem('antigravite_active_playlist_id', this.activePlaylistId);
+      try {
+        localStorage.setItem('antigravite_custom_playlists', JSON.stringify(this.playlists));
+        localStorage.setItem('antigravite_active_playlist_id', this.activePlaylistId);
+      } catch (_) {}
     }
     this.renderPlaylistsPanel();
   },
@@ -1028,6 +1158,7 @@ const MusicManager = {
       if (folderSelect) folderSelect.value = cat;
     }
 
+    this.rebuildShuffleOrder();
     this.renderPlaylist();
     this.renderPlaylistsPanel();
 
@@ -1506,8 +1637,28 @@ const MusicManager = {
     }
   },
 
+  _getRenderSig() {
+    const tCount = Array.isArray(this.tracks) ? this.tracks.length : 0;
+    const pCount = Array.isArray(this.playlists) ? this.playlists.length : 0;
+    return `${tCount}:${pCount}:${this.currentIndex}:${this.selectedFolder}:${this.activePlaylistId}:${this.sortBy}:${this.searchQuery}`;
+  },
+
+  renderIfNeeded() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('music-playlist-list');
+    if (!container) return;
+    const sig = this._getRenderSig();
+    if (this._lastRenderedSig === sig && container.childElementCount > 0) {
+      this.updatePlayerUI();
+      this.updateSidebarMiniPlayer();
+      return;
+    }
+    this.render();
+  },
+
   render() {
     if (typeof document === 'undefined') return;
+    this._lastRenderedSig = this._getRenderSig();
     this.updateFolderFilterCounts();
     this.renderPlaylistsPanel();
     this.renderPlaylist();
@@ -1516,6 +1667,9 @@ const MusicManager = {
     this.updateShuffleUI();
     this.updateRepeatUI();
     this.updateSidebarMiniPlayer();
+    if (this.audio && Number.isFinite(this.audio.duration) && this.audio.duration > 0) {
+      this.onTimeUpdate();
+    }
   },
 
   renderPlaylist() {
@@ -1694,6 +1848,9 @@ const MusicManager = {
     });
 
     this.updateSidebarMiniPlayer();
+    if (this.audio && Number.isFinite(this.audio.duration) && this.audio.duration > 0) {
+      this.onTimeUpdate();
+    }
   },
 
   updateVolumeUI() {
@@ -1852,8 +2009,14 @@ const MusicManager = {
     // 6. Barre de progression temporelle (Seek)
     const progSlider = document.getElementById('music-progress-slider');
     if (progSlider) {
+      const clearDragging = () => { progSlider._dragging = false; };
+      progSlider.addEventListener('pointerdown', () => { progSlider._dragging = true; });
       progSlider.addEventListener('mousedown', () => { progSlider._dragging = true; });
       progSlider.addEventListener('touchstart', () => { progSlider._dragging = true; }, { passive: true });
+      progSlider.addEventListener('pointerup', clearDragging);
+      progSlider.addEventListener('mouseup', clearDragging);
+      progSlider.addEventListener('touchend', clearDragging);
+      progSlider.addEventListener('blur', clearDragging);
       progSlider.addEventListener('input', (e) => {
         const fill = document.getElementById('music-progress-fill');
         if (fill) fill.style.width = `${e.target.value}%`;
@@ -1989,9 +2152,13 @@ const MusicManager = {
         if (e.code === 'Space') {
           if (typeof document !== 'undefined' && document.querySelector('.modal-overlay.active')) return;
           if (typeof window !== 'undefined' && window.App && window.App.currentScreen === 'focus') return;
-          const activeTag = (document.activeElement?.tagName || '').toLowerCase();
-          const isEditable = document.activeElement?.isContentEditable;
-          if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select' || isEditable) {
+          const activeEl = document.activeElement;
+          const activeTag = (activeEl?.tagName || '').toLowerCase();
+          const isEditable = activeEl?.isContentEditable;
+          if (['input', 'textarea', 'select', 'button', 'a'].includes(activeTag) || isEditable) {
+            return;
+          }
+          if (activeEl && typeof activeEl.closest === 'function' && activeEl.closest('button, a, [role="button"], .task-checkbox, [contenteditable]')) {
             return;
           }
           e.preventDefault();

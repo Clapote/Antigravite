@@ -111,6 +111,15 @@ const DebriefManager = {
         this.snooze();
       });
     }
+
+    const btnCreateNote = document.getElementById('btn-debrief-create-note');
+    if (btnCreateNote && typeof btnCreateNote.addEventListener === 'function' && !btnCreateNote._hasDebriefListener) {
+      btnCreateNote._hasDebriefListener = true;
+      btnCreateNote.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.createDebriefNote();
+      });
+    }
   },
 
   /**
@@ -160,6 +169,38 @@ const DebriefManager = {
     return status.available;
   },
 
+  STORAGE_KEY_SNOOZE: 'antigravite_debrief_snoozed_v1',
+
+  toLocalDateStr(input = new Date()) {
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+      if (!trimmed) return '';
+      const d = new Date(trimmed);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    const d = input instanceof Date ? input : new Date(input);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+
+  isSnoozedNow() {
+    const today = this.toLocalDateStr(new Date());
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(this.STORAGE_KEY_SNOOZE);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.date === today && typeof parsed.until === 'number') {
+            return Date.now() < parsed.until;
+          }
+        }
+      }
+    } catch (_) {}
+    return false;
+  },
+
   /**
    * Met à jour l'affichage de l'onglet Bilan dans le volet latéral.
    */
@@ -178,7 +219,8 @@ const DebriefManager = {
     const dot = document.getElementById('nav-debrief-dot');
     if (dot) {
       const hasSeen = this.hasSeenToday();
-      dot.style.display = (shouldShow && !hasSeen) ? 'inline-block' : 'none';
+      const isSnoozed = this.isSnoozedNow();
+      dot.style.display = (shouldShow && !hasSeen && !isSnoozed) ? 'inline-block' : 'none';
     }
   },
 
@@ -186,7 +228,7 @@ const DebriefManager = {
    * Marque le bilan comme terminé pour aujourd'hui.
    */
   markAsSeenToday() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = this.toLocalDateStr(new Date());
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(this.STORAGE_KEY_SEEN, JSON.stringify({
@@ -202,13 +244,13 @@ const DebriefManager = {
    * Vérifie si le bilan a été validé pour aujourd'hui.
    */
   hasSeenToday() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = this.toLocalDateStr(new Date());
     try {
       if (typeof localStorage !== 'undefined') {
         const raw = localStorage.getItem(this.STORAGE_KEY_SEEN);
         if (raw) {
           const parsed = JSON.parse(raw);
-          return parsed.date === today;
+          return !!(parsed && parsed.date === today);
         }
       }
     } catch (_) {}
@@ -234,6 +276,16 @@ const DebriefManager = {
    * Action : Reporter à plus tard.
    */
   snooze() {
+    const today = this.toLocalDateStr(new Date());
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(this.STORAGE_KEY_SNOOZE, JSON.stringify({
+          date: today,
+          until: Date.now() + 2 * 3600000
+        }));
+      }
+    } catch (_) {}
+    this.updateTabVisibility();
     if (typeof App !== 'undefined') {
       if (typeof App.showToast === 'function') {
         App.showToast("Bilan mis de côté pour ce soir. Bonne soirée !", "info", 3500);
@@ -245,11 +297,175 @@ const DebriefManager = {
   },
 
   /**
+   * Agrège les sessions et minutes Focus entre startIso et endIso (avec fallback localStorage).
+   */
+  _getFocusStats(startIso, endIso) {
+    if (typeof FocusManager !== 'undefined' && typeof FocusManager.getHistoryStats === 'function') {
+      return FocusManager.getHistoryStats(startIso, endIso);
+    }
+    let count = 0;
+    let minutes = 0;
+    const todayStr = this.toLocalDateStr(new Date());
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const rawHist = localStorage.getItem('antigravite_focus_history_v1');
+        let seenToday = false;
+        if (rawHist) {
+          const hist = JSON.parse(rawHist);
+          if (hist && typeof hist === 'object') {
+            Object.keys(hist).forEach(dateKey => {
+              if ((!startIso || dateKey >= startIso) && (!endIso || dateKey <= endIso)) {
+                const entry = hist[dateKey];
+                if (entry) {
+                  count += Number(entry.count) || 0;
+                  minutes += Number(entry.minutes) || 0;
+                  if (dateKey === todayStr) seenToday = true;
+                }
+              }
+            });
+          }
+        }
+        if (!seenToday && (!startIso || todayStr >= startIso) && (!endIso || todayStr <= endIso)) {
+          const rawDaily = localStorage.getItem('antigravite_focus_daily');
+          if (rawDaily) {
+            const parsed = JSON.parse(rawDaily);
+            if (parsed && parsed.date === todayStr) {
+              count += Number(parsed.count) || 0;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return { count, minutes };
+  },
+
+  /**
+   * Action bienveillante : clore directement une tâche depuis le Debrief.
+   */
+  markPendingTaskDone(taskId) {
+    if (!taskId) return false;
+    if (typeof TasksManager !== 'undefined' && typeof TasksManager.toggleCompleted === 'function') {
+      TasksManager.toggleCompleted(taskId);
+    } else if (typeof StorageManager !== 'undefined' && typeof StorageManager.getTasks === 'function' && typeof StorageManager.saveTasks === 'function') {
+      const tasks = StorageManager.getTasks();
+      const markRec = (list) => {
+        for (const t of list) {
+          if (t && t.id === taskId) {
+            t.completed = true;
+            t.completedAt = new Date().toISOString();
+            return true;
+          }
+          if (t && Array.isArray(t.subtasks) && markRec(t.subtasks)) return true;
+        }
+        return false;
+      };
+      if (markRec(tasks)) StorageManager.saveTasks(tasks);
+    }
+    this._lastRenderedSig = null;
+    this.render();
+    if (typeof App !== 'undefined' && typeof App.renderDashboard === 'function') {
+      App.renderDashboard();
+    }
+    return true;
+  },
+
+  /**
+   * Action bienveillante : glisser doucement une tâche vers demain.
+   */
+  postponeTaskToTomorrow(taskId) {
+    if (!taskId) return false;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = this.toLocalDateStr(tomorrow);
+    if (typeof TasksManager !== 'undefined' && typeof TasksManager.updateTask === 'function') {
+      TasksManager.updateTask(taskId, { plannedDate: tomorrowStr });
+    } else if (typeof StorageManager !== 'undefined' && typeof StorageManager.getTasks === 'function' && typeof StorageManager.saveTasks === 'function') {
+      const tasks = StorageManager.getTasks();
+      const updateRec = (list) => {
+        for (const t of list) {
+          if (t && t.id === taskId) {
+            t.plannedDate = tomorrowStr;
+            return true;
+          }
+          if (t && Array.isArray(t.subtasks) && updateRec(t.subtasks)) return true;
+        }
+        return false;
+      };
+      if (updateRec(tasks)) StorageManager.saveTasks(tasks);
+    }
+    this._lastRenderedSig = null;
+    this.render();
+    if (typeof App !== 'undefined') {
+      if (typeof App.showToast === 'function') {
+        App.showToast("Tâche glissée vers demain avec sérénité.", "success", 3000);
+      }
+      if (typeof App.renderDashboard === 'function') {
+        App.renderDashboard();
+      }
+    }
+    return true;
+  },
+
+  /**
+   * Exporte le bilan courant (jour ou semaine) en tant que note structurée dans Notes.
+   */
+  createDebriefNote() {
+    if (typeof NotesManager === 'undefined' || typeof NotesManager.createNote !== 'function') return null;
+    const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+      ? StorageManager.getSettings()
+      : {};
+    const status = this.isDebriefAvailable(settings);
+    const mode = (status.mode === 'weekly') ? 'weekly' : 'daily';
+    const data = (mode === 'weekly') ? this.getWeeklyAccomplishments(settings) : this.getDailyAccomplishments();
+
+    const title = (mode === 'weekly')
+      ? `Bilan de semaine (${data.startDate} au ${data.endDate})`
+      : `Bilan du ${data.date}`;
+
+    const sections = [`<h2>${this.escapeHtml(title)}</h2>`];
+    if (Array.isArray(data.completedTasks) && data.completedTasks.length > 0) {
+      sections.push(`<h3>Tâches accomplies (${data.completedTasks.length})</h3><ul>${data.completedTasks.map(t => `<li>${this.escapeHtml(t.title)}</li>`).join('')}</ul>`);
+    }
+    if (Array.isArray(data.events) && data.events.length > 0) {
+      sections.push(`<h3>Créneaux d'agenda (${data.events.length})</h3><ul>${data.events.map(e => `<li>${this.escapeHtml(e.timeLabel)} — ${this.escapeHtml(e.title)}</li>`).join('')}</ul>`);
+    }
+    if (data.focusCount > 0) {
+      const minSuffix = data.focusMinutes > 0 ? ` (${data.focusMinutes} min)` : '';
+      sections.push(`<h3>Sessions Focus</h3><p>${data.focusCount} session${data.focusCount > 1 ? 's' : ''} validée${data.focusCount > 1 ? 's' : ''}${minSuffix}</p>`);
+    }
+    if (Array.isArray(data.notes) && data.notes.length > 0) {
+      sections.push(`<h3>Notes enrichies (${data.notes.length})</h3><ul>${data.notes.map(n => `<li>[[${this.escapeHtml(n.title)}]]</li>`).join('')}</ul>`);
+    }
+    if (mode === 'daily' && Array.isArray(data.pendingTodayTasks) && data.pendingTodayTasks.length > 0) {
+      sections.push(`<h3>À poursuivre prochainement</h3><ul>${data.pendingTodayTasks.map(t => `<li>[ ] ${this.escapeHtml(t.title)}</li>`).join('')}</ul>`);
+    }
+
+    const created = NotesManager.createNote('Bilans');
+    if (!created) return null;
+    const allNotes = NotesManager.getAll();
+    const noteObj = allNotes.find(n => n.id === created.id);
+    if (noteObj) {
+      noteObj.title = title;
+      noteObj.content = sections.join('');
+      noteObj.tags = ['bilan'];
+      noteObj.updatedAt = new Date().toISOString();
+      NotesManager.saveAll(allNotes);
+      if (typeof NotesManager.renderFolderFilter === 'function') NotesManager.renderFolderFilter();
+      if (typeof NotesManager.renderNotesList === 'function') NotesManager.renderNotesList();
+      if (typeof NotesManager.selectNote === 'function') NotesManager.selectNote(noteObj.id);
+    }
+    if (typeof App !== 'undefined') {
+      if (typeof App.navigate === 'function') App.navigate('notes');
+      if (typeof App.showToast === 'function') App.showToast(`Note « ${title} » créée dans Bilans`, 'success');
+    }
+    return noteObj || created;
+  },
+
+  /**
    * Collecte les accomplissements réels du jour.
    */
   getDailyAccomplishments(dateStr = null) {
-    const now = new Date();
-    const todayStr = dateStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayStr = dateStr || this.toLocalDateStr(new Date());
 
     const tasks = (typeof StorageManager !== 'undefined' && typeof StorageManager.getTasks === 'function')
       ? StorageManager.getTasks()
@@ -259,15 +475,43 @@ const DebriefManager = {
     const trashItems = (typeof StorageManager !== 'undefined' && typeof StorageManager.getTrash === 'function')
       ? StorageManager.getTrash()
       : [];
-    const trashTaskIds = new Set(trashItems.filter(item => item && item.type === 'task').map(item => item.originalId || item.id));
+    const trashTaskIds = new Set(trashItems.filter(item => item && item.type === 'task').map(item => (item.data && item.data.id) || item.originalId || item.id));
+
+    const projects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
+      ? StorageManager.getProjects()
+      : [];
+    const projectMap = new Map();
+    const archivedProjectIds = new Set();
+    projects.forEach(p => {
+      if (p && p.id) {
+        projectMap.set(p.id, p);
+        if (p.archived) archivedProjectIds.add(p.id);
+      }
+    });
 
     const completedTasks = [];
+    const pendingTodayTasks = [];
+    const taskProjectMap = new Map();
+    const priorityWeight = { urgent: 4, high: 3, medium: 2, low: 1 };
     const walk = (t) => {
       if (!t) return;
-      if (t.completed && !trashTaskIds.has(t.id)) {
-        const compDate = t.completedAt ? t.completedAt.slice(0, 10) : (t.plannedDate || null);
-        if (compDate === todayStr) {
-          completedTasks.push(t);
+      if (t.id && t.projectId) taskProjectMap.set(t.id, t.projectId);
+      const isArchivedTask = !!(t.projectId && archivedProjectIds.has(t.projectId));
+      if (!trashTaskIds.has(t.id) && !isArchivedTask) {
+        if (t.completed) {
+          const compDate = t.completedAt ? this.toLocalDateStr(t.completedAt) : (t.plannedDate || null);
+          if (compDate === todayStr) {
+            completedTasks.push(t);
+          }
+        } else if (t.plannedDate && t.plannedDate <= todayStr) {
+          const proj = (t.projectId && projectMap.has(t.projectId)) ? projectMap.get(t.projectId) : null;
+          pendingTodayTasks.push({
+            id: t.id,
+            title: t.title || 'Tâche sans titre',
+            plannedDate: t.plannedDate,
+            priority: t.priority || 'medium',
+            project: proj
+          });
         }
       }
       if (Array.isArray(t.subtasks)) {
@@ -276,16 +520,16 @@ const DebriefManager = {
     };
     tasks.forEach(walk);
 
-    // Regrouper par projet
-    const projects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
-      ? StorageManager.getProjects()
-      : [];
-    const projectMap = new Map();
-    projects.forEach(p => { if (p && p.id) projectMap.set(p.id, p); });
+    pendingTodayTasks.sort((a, b) => {
+      if (a.plannedDate !== b.plannedDate) return a.plannedDate.localeCompare(b.plannedDate);
+      return (priorityWeight[b.priority] || 2) - (priorityWeight[a.priority] || 2);
+    });
+    const pendingPreview = pendingTodayTasks.slice(0, 6);
 
+    // Regrouper par projet (fusionner les références orphelines dans le groupe 'personal' unique)
     const byProject = new Map();
     completedTasks.forEach(t => {
-      const pId = t.projectId || 'personal';
+      const pId = (t.projectId && projectMap.has(t.projectId)) ? t.projectId : 'personal';
       if (!byProject.has(pId)) {
         const proj = projectMap.get(pId) || { id: 'personal', title: 'Tâches personnelles', color: '#8b5cf6' };
         byProject.set(pId, { project: proj, tasks: [] });
@@ -298,6 +542,9 @@ const DebriefManager = {
       ? StorageManager.getEvents()
       : [];
     const dayEvents = events.filter(e => {
+      if (!e) return false;
+      const resolvedProjId = e.projectId || (e.taskId ? taskProjectMap.get(e.taskId) : null);
+      if (resolvedProjId && archivedProjectIds.has(resolvedProjId)) return false;
       if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.isEventOnDate === 'function') {
         return AgendaManager.isEventOnDate(e, todayStr);
       }
@@ -312,7 +559,8 @@ const DebriefManager = {
     });
 
     const formattedEvents = dayEvents.map(e => {
-      const p = e.projectId ? projectMap.get(e.projectId) : null;
+      const resolvedProjId = e.projectId || (e.taskId ? taskProjectMap.get(e.taskId) : null);
+      const p = resolvedProjId ? projectMap.get(resolvedProjId) : null;
       let timeLabel = 'Journée entière';
       let durationStr = '24h';
       if (!e.isAllDay && e.start) {
@@ -351,26 +599,20 @@ const DebriefManager = {
     });
 
     // Sessions Focus
-    let focusCount = 0;
-    try {
-      if (typeof localStorage !== 'undefined') {
-        const rawFocus = localStorage.getItem('antigravite_focus_daily');
-        if (rawFocus) {
-          const parsed = JSON.parse(rawFocus);
-          if (parsed.date === todayStr) {
-            focusCount = parsed.count || 0;
-          }
-        }
-      }
-    } catch (_) {}
+    const focusStats = this._getFocusStats(todayStr, todayStr);
+    const focusCount = focusStats.count || 0;
+    const focusMinutes = focusStats.minutes || 0;
 
     // Notes créées ou mises à jour
     const notes = (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function')
       ? StorageManager.getNotes()
       : [];
     const dayNotes = notes.filter(n => {
-      const c = (n.createdAt && n.createdAt.slice(0, 10) === todayStr);
-      const u = (n.updatedAt && n.updatedAt.slice(0, 10) === todayStr);
+      if (!n) return false;
+      const nProjId = n.projectId || n.linkedProjectId || null;
+      if (nProjId && archivedProjectIds.has(nProjId)) return false;
+      const c = (n.createdAt && this.toLocalDateStr(n.createdAt) === todayStr);
+      const u = (n.updatedAt && this.toLocalDateStr(n.updatedAt) === todayStr);
       return c || u;
     });
 
@@ -382,10 +624,20 @@ const DebriefManager = {
     });
 
     const formattedNotes = dayNotes.map(n => {
-      const p = n.projectId ? projectMap.get(n.projectId) : null;
-      const cleanText = (n.content || '').replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+      const nProjId = n.projectId || n.linkedProjectId || null;
+      const p = nProjId ? projectMap.get(nProjId) : null;
+      const cleanText = (n.content || '')
+        .replace(/<[^>]*>?/gm, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#0*39;/gi, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
       const snippet = cleanText.length > 95 ? cleanText.slice(0, 95) + '...' : (cleanText || 'Note sans texte');
-      const wasCreatedToday = (n.createdAt && n.createdAt.slice(0, 10) === todayStr);
+      const wasCreatedToday = (n.createdAt && this.toLocalDateStr(n.createdAt) === todayStr);
       const timeStr = n.updatedAt ? n.updatedAt.slice(11, 16) : (n.createdAt ? n.createdAt.slice(11, 16) : '');
       return {
         id: n.id,
@@ -406,6 +658,8 @@ const DebriefManager = {
       events: formattedEvents,
       eventsCount: dayEvents.length,
       focusCount,
+      focusMinutes,
+      pendingTodayTasks: pendingPreview,
       notes: formattedNotes,
       notesCount: dayNotes.length
     };
@@ -435,8 +689,15 @@ const DebriefManager = {
     endDate.setDate(monday.getDate() + daysToAdd);
     endDate.setHours(23, 59, 59, 999);
 
-    const startDateStr = monday.toISOString().slice(0, 10);
-    const endDateStr = endDate.toISOString().slice(0, 10);
+    const startDateStr = this.toLocalDateStr(monday);
+    const endDateStr = this.toLocalDateStr(endDate);
+
+    const weekDates = [];
+    for (let i = 0; i <= daysToAdd; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      weekDates.push(this.toLocalDateStr(d));
+    }
 
     const tasks = (typeof StorageManager !== 'undefined' && typeof StorageManager.getTasks === 'function')
       ? StorageManager.getTasks()
@@ -445,13 +706,28 @@ const DebriefManager = {
     const trashItems = (typeof StorageManager !== 'undefined' && typeof StorageManager.getTrash === 'function')
       ? StorageManager.getTrash()
       : [];
-    const trashTaskIds = new Set(trashItems.filter(item => item && item.type === 'task').map(item => item.originalId || item.id));
+    const trashTaskIds = new Set(trashItems.filter(item => item && item.type === 'task').map(item => (item.data && item.data.id) || item.originalId || item.id));
+
+    const projects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
+      ? StorageManager.getProjects()
+      : [];
+    const projectMap = new Map();
+    const archivedProjectIds = new Set();
+    projects.forEach(p => {
+      if (p && p.id) {
+        projectMap.set(p.id, p);
+        if (p.archived) archivedProjectIds.add(p.id);
+      }
+    });
 
     const completedTasks = [];
+    const taskProjectMap = new Map();
     const walk = (t) => {
       if (!t) return;
-      if (t.completed && !trashTaskIds.has(t.id)) {
-        const compDate = t.completedAt ? t.completedAt.slice(0, 10) : (t.plannedDate || null);
+      if (t.id && t.projectId) taskProjectMap.set(t.id, t.projectId);
+      const isArchivedTask = !!(t.projectId && archivedProjectIds.has(t.projectId));
+      if (t.completed && !trashTaskIds.has(t.id) && !isArchivedTask) {
+        const compDate = t.completedAt ? this.toLocalDateStr(t.completedAt) : (t.plannedDate || null);
         if (compDate && compDate >= startDateStr && compDate <= endDateStr) {
           completedTasks.push(t);
         }
@@ -462,16 +738,10 @@ const DebriefManager = {
     };
     tasks.forEach(walk);
 
-    // Regrouper par projet
-    const projects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
-      ? StorageManager.getProjects()
-      : [];
-    const projectMap = new Map();
-    projects.forEach(p => { if (p && p.id) projectMap.set(p.id, p); });
-
+    // Regrouper par projet (fusionner les références orphelines dans 'personal')
     const byProject = new Map();
     completedTasks.forEach(t => {
-      const pId = t.projectId || 'personal';
+      const pId = (t.projectId && projectMap.has(t.projectId)) ? t.projectId : 'personal';
       if (!byProject.has(pId)) {
         const proj = projectMap.get(pId) || { id: 'personal', title: 'Tâches personnelles', color: '#8b5cf6' };
         byProject.set(pId, { project: proj, tasks: [] });
@@ -479,17 +749,27 @@ const DebriefManager = {
       byProject.get(pId).tasks.push(t);
     });
 
-    // Créneaux de la semaine
+    // Créneaux de la semaine (incluant récurrents et multi-jours)
     const allEvents = (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function')
       ? StorageManager.getEvents()
       : [];
     const weekEvents = allEvents.filter(e => {
+      if (!e) return false;
+      const resolvedProjId = e.projectId || (e.taskId ? taskProjectMap.get(e.taskId) : null);
+      if (resolvedProjId && archivedProjectIds.has(resolvedProjId)) return false;
+      if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.isEventOnDate === 'function') {
+        return weekDates.some(dStr => AgendaManager.isEventOnDate(e, dStr));
+      }
       const startD = e.start ? e.start.slice(0, 10) : '';
-      return (startD && startD >= startDateStr && startD <= endDateStr);
+      if (!startD) return false;
+      const endD = (e.end && e.end.length >= 10) ? e.end.slice(0, 10) : startD;
+      const effEndD = endD >= startD ? endD : startD;
+      return startD <= endDateStr && effEndD >= startDateStr;
     });
 
     const formattedWeekEvents = weekEvents.map(e => {
-      const p = e.projectId ? projectMap.get(e.projectId) : null;
+      const resolvedProjId = e.projectId || (e.taskId ? taskProjectMap.get(e.taskId) : null);
+      const p = resolvedProjId ? projectMap.get(resolvedProjId) : null;
       let timeLabel = e.isAllDay ? 'Journée entière' : (e.start && e.start.includes('T') ? e.start.split('T')[1].slice(0, 5) : 'Créneau');
       return {
         id: e.id,
@@ -502,19 +782,37 @@ const DebriefManager = {
       };
     });
 
+    // Sessions Focus de la semaine
+    const focusStats = this._getFocusStats(startDateStr, endDateStr);
+    const focusCount = focusStats.count || 0;
+    const focusMinutes = focusStats.minutes || 0;
+
     // Notes créées ou mises à jour
     const notes = (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function')
       ? StorageManager.getNotes()
       : [];
     const weekNotes = notes.filter(n => {
-      const c = n.createdAt && n.createdAt.slice(0, 10);
-      const u = n.updatedAt && n.updatedAt.slice(0, 10);
+      if (!n) return false;
+      const nProjId = n.projectId || n.linkedProjectId || null;
+      if (nProjId && archivedProjectIds.has(nProjId)) return false;
+      const c = n.createdAt && this.toLocalDateStr(n.createdAt);
+      const u = n.updatedAt && this.toLocalDateStr(n.updatedAt);
       return (c && c >= startDateStr && c <= endDateStr) || (u && u >= startDateStr && u <= endDateStr);
     });
 
     const formattedWeekNotes = weekNotes.map(n => {
-      const p = n.projectId ? projectMap.get(n.projectId) : null;
-      const cleanText = (n.content || '').replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+      const nProjId = n.projectId || n.linkedProjectId || null;
+      const p = nProjId ? projectMap.get(nProjId) : null;
+      const cleanText = (n.content || '')
+        .replace(/<[^>]*>?/gm, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#0*39;/gi, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
       const snippet = cleanText.length > 95 ? cleanText.slice(0, 95) + '...' : (cleanText || 'Note sans texte');
       return {
         id: n.id,
@@ -529,9 +827,15 @@ const DebriefManager = {
 
     // Consolidation des statistiques hebdomadaires
     const distinctActiveProjectIds = new Set();
-    completedTasks.forEach(t => { if (t.projectId) distinctActiveProjectIds.add(t.projectId); });
-    weekEvents.forEach(e => { if (e.projectId) distinctActiveProjectIds.add(e.projectId); });
-    weekNotes.forEach(n => { if (n.projectId) distinctActiveProjectIds.add(n.projectId); });
+    completedTasks.forEach(t => { if (t.projectId && !archivedProjectIds.has(t.projectId)) distinctActiveProjectIds.add(t.projectId); });
+    weekEvents.forEach(e => {
+      const ep = e.projectId || (e.taskId ? taskProjectMap.get(e.taskId) : null);
+      if (ep && !archivedProjectIds.has(ep)) distinctActiveProjectIds.add(ep);
+    });
+    weekNotes.forEach(n => {
+      const np = n.projectId || n.linkedProjectId;
+      if (np && !archivedProjectIds.has(np)) distinctActiveProjectIds.add(np);
+    });
 
     const effortByProject = Array.from(byProject.values()).map(group => {
       const p = group.project;
@@ -563,7 +867,8 @@ const DebriefManager = {
       byProject: Array.from(byProject.values()),
       events: formattedWeekEvents,
       eventsCount: weekEvents.length,
-      focusCount: 0,
+      focusCount,
+      focusMinutes,
       notes: formattedWeekNotes,
       notesCount: weekNotes.length
     };
@@ -595,6 +900,28 @@ const DebriefManager = {
       .replace(/'/g, '&#039;');
   },
 
+  _getRenderSig() {
+    const s = (typeof StorageManager !== 'undefined') ? StorageManager : null;
+    if (!s || typeof s.getRevision !== 'function') return null;
+    const today = this.toLocalDateStr(new Date());
+    let focusSig = '';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        focusSig = (localStorage.getItem('antigravite_focus_daily') || '') + '|' + (localStorage.getItem('antigravite_focus_history_v1') || '');
+      }
+    } catch (_) {}
+    return `${today}:${s.getRevision('tasks')}:${s.getRevision('events')}:${s.getRevision('notes')}:${s.getRevision('projects')}:${s.getRevision('settings')}:${focusSig}`;
+  },
+
+  renderIfNeeded() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('debrief-content-area');
+    if (!container) return;
+    const sig = this._getRenderSig();
+    if (sig !== null && this._lastRenderedSig === sig && container.childElementCount > 0) return;
+    this.render();
+  },
+
   /**
    * Rendu visuel principal de l'écran #screen-debrief.
    */
@@ -602,6 +929,7 @@ const DebriefManager = {
     if (typeof document === 'undefined') return;
     const container = document.getElementById('debrief-content-area');
     if (!container) return;
+    this._lastRenderedSig = this._getRenderSig();
 
     // S'assurer que les boutons sont attachés
     this.bindEvents();
@@ -836,7 +1164,7 @@ const DebriefManager = {
               <svg class="app-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
               <span>Sessions de travail profond Focus menées :</span>
             </div>
-            <strong style="color:var(--text-main);">${data.focusCount} session${data.focusCount > 1 ? 's' : ''} validée${data.focusCount > 1 ? 's' : ''}</strong>
+            <strong style="color:var(--text-main);">${data.focusCount} session${data.focusCount > 1 ? 's' : ''} validée${data.focusCount > 1 ? 's' : ''}${data.focusMinutes > 0 ? ` (${data.focusMinutes} min)` : ''}</strong>
           </div>
         `;
       }
@@ -861,13 +1189,21 @@ const DebriefManager = {
 
       if (notesList.length > 0) {
         notesList.forEach(note => {
+          const safeNoteIdJs = this.escapeHtml(String(note.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+          const projColor = (note.project && note.project.color && /^#[0-9a-fA-F]{3,8}$/.test(note.project.color)) ? note.project.color : '';
+          const projBadge = note.project
+            ? `<span class="badge debrief-note-project-badge" style="font-size:0.68rem; padding:1px 6px; border-radius:var(--radius-pill); border:1px solid ${projColor || '#6366f1'}50; color:${projColor || '#6366f1'}; background-color:${projColor || '#6366f1'}15; font-weight:600;"><span style="display:inline-block; width:5px; height:5px; border-radius:50%; background-color:${projColor || '#6366f1'}; margin-right:4px;"></span>${this.escapeHtml(note.project.title)}</span>`
+            : '';
           html += `
-            <div class="debrief-note-card" onclick="if(window.App &amp;&amp; window.NotesManager){ window.App.navigate('notes'); window.NotesManager.selectNote('${note.id}'); }" title="Cliquer pour ouvrir cette note dans l'éditeur">
+            <div class="debrief-note-card" ${projColor ? `style="border-top: 3px solid ${projColor};"` : ''} onclick="if(window.App &amp;&amp; window.NotesManager){ window.App.navigate('notes'); window.NotesManager.selectNote('${safeNoteIdJs}'); }" title="Cliquer pour ouvrir cette note dans l'éditeur">
               <div class="debrief-note-header">
-                <span class="debrief-note-folder-badge">
-                  <svg class="app-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                  <span>${this.escapeHtml(note.folder)}</span>
-                </span>
+                <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+                  <span class="debrief-note-folder-badge">
+                    <svg class="app-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    <span>${this.escapeHtml(note.folder)}</span>
+                  </span>
+                  ${projBadge}
+                </div>
                 <span style="font-size:0.72rem; color:var(--text-muted);">${note.timeStr || ''}</span>
               </div>
               <h4 class="debrief-note-title">${this.escapeHtml(note.title)}</h4>
@@ -901,6 +1237,44 @@ const DebriefManager = {
           </div>
           <h4 class="debrief-zen-title">Une respiration bienfaisante</h4>
           <p class="debrief-zen-text">Aucun créneau ni tâche programmée n'ont exigé votre énergie aujourd'hui. Ces temps de pause sont essentiels pour préserver votre clarté et préparer vos prochains élans en toute sérénité.</p>
+        </div>
+      `;
+    }
+
+    // 5. SECTION BIENVEILLANTE : À POURSUIVRE À VOTRE RYTHME (mode quotidien uniquement)
+    if (mode === 'daily' && Array.isArray(data.pendingTodayTasks) && data.pendingTodayTasks.length > 0) {
+      html += `
+        <div class="debrief-pending-section">
+          <div class="debrief-section-header" style="margin-top: 16px;">
+            <h3 class="debrief-section-title">
+              <svg class="app-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>À poursuivre à votre rythme</span>
+            </h3>
+            <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: var(--accent); border: 1px solid rgba(56, 189, 248, 0.3); font-weight:600;">${data.pendingTodayTasks.length} élément${data.pendingTodayTasks.length > 1 ? 's' : ''}</span>
+          </div>
+          <p class="debrief-pending-subtitle">Sans pression : vous pouvez clore, focaliser ou glisser doucement ces éléments vers demain.</p>
+          <div class="debrief-pending-list">
+            ${data.pendingTodayTasks.map(task => {
+              const safeTaskIdJs = this.escapeHtml(String(task.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+              const pColor = (task.project && task.project.color && /^#[0-9a-fA-F]{3,8}$/.test(task.project.color)) ? task.project.color : '';
+              const pBadge = task.project
+                ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:var(--radius-pill); border:1px solid ${pColor || '#6366f1'}50; color:${pColor || '#6366f1'}; background-color:${pColor || '#6366f1'}15;"><span style="display:inline-block; width:5px; height:5px; border-radius:50%; background-color:${pColor || '#6366f1'}; margin-right:4px;"></span>${this.escapeHtml(task.project.title)}</span>`
+                : '';
+              return `
+                <div class="debrief-pending-item" ${pColor ? `style="border-left: 3px solid ${pColor};"` : ''}>
+                  <div class="debrief-pending-main">
+                    <span class="debrief-pending-title" onclick="if(window.App &amp;&amp; window.TasksManager){ window.App.navigate('tasks'); window.TasksManager.openTaskModal('${safeTaskIdJs}'); }">${this.escapeHtml(task.title)}</span>
+                    ${pBadge}
+                  </div>
+                  <div class="debrief-pending-actions">
+                    <button type="button" class="btn btn-secondary btn-xs" onclick="DebriefManager.markPendingTaskDone('${safeTaskIdJs}')" title="Marquer comme accompli">✓ Fait</button>
+                    <button type="button" class="btn btn-secondary btn-xs" onclick="DebriefManager.postponeTaskToTomorrow('${safeTaskIdJs}')" title="Glisser à demain">📅 Glisser à demain</button>
+                    <button type="button" class="btn btn-secondary btn-xs" onclick="if(window.App) App.startFocusOn('task', '${safeTaskIdJs}')" title="Lancer une session Focus">🎯</button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
         </div>
       `;
     }

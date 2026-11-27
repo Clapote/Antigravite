@@ -103,9 +103,15 @@ const AgendaNotificationManager = {
     // Vérification toutes les 30 secondes
     if (this.checkIntervalId) clearInterval(this.checkIntervalId);
     this.checkIntervalId = setInterval(() => this.checkUpcomingEvents(), 30000);
+    if (this.checkIntervalId && typeof this.checkIntervalId.unref === 'function') {
+      this.checkIntervalId.unref();
+    }
 
     // Première vérification immédiate après un court délai d'initialisation
-    setTimeout(() => this.checkUpcomingEvents(), 2000);
+    const initialTimer = setTimeout(() => this.checkUpcomingEvents(), 2000);
+    if (initialTimer && typeof initialTimer.unref === 'function') {
+      initialTimer.unref();
+    }
   },
 
   loadHistory() {
@@ -136,6 +142,87 @@ const AgendaNotificationManager = {
     return list[idx].replace('{title}', cleanTitle);
   },
 
+  _formatLocalYMD(dateObj) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
+  },
+
+  _doesRecurringEventOccurOn(evt, dateStr) {
+    if (!evt || !evt.start || !evt.recurrence || evt.recurrence === 'none') return false;
+    if (typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.isEventOnDate === 'function') {
+      return window.AgendaManager.isEventOnDate(evt, dateStr);
+    }
+    const startDay = evt.start.slice(0, 10);
+    if (dateStr < startDay) return false;
+    if (evt.recurrenceEnd && dateStr > evt.recurrenceEnd.slice(0, 10)) return false;
+    const sDate = new Date(`${startDay}T00:00:00`);
+    const tDate = new Date(`${dateStr}T00:00:00`);
+    if (isNaN(sDate.getTime()) || isNaN(tDate.getTime())) return false;
+    const diffDays = Math.round((tDate - sDate) / 86400000);
+    switch (evt.recurrence) {
+      case 'daily': return true;
+      case 'weekdays': {
+        const wd = tDate.getDay();
+        return wd >= 1 && wd <= 5;
+      }
+      case 'weekly': return diffDays % 7 === 0;
+      case 'biweekly': return diffDays % 14 === 0;
+      case 'monthly': return tDate.getDate() === sDate.getDate();
+      case 'yearly': return tDate.getDate() === sDate.getDate() && tDate.getMonth() === sDate.getMonth();
+      default: return false;
+    }
+  },
+
+  _resolveEventOccurrencesNearNow(evt, nowMs) {
+    if (!evt || evt.isAllDay || !evt.start) return [];
+    const baseId = evt.id || `${evt.title}_${evt.start}`;
+    if (!evt.recurrence || evt.recurrence === 'none') {
+      const ts = new Date(evt.start).getTime();
+      return isNaN(ts) ? [] : [{ key: baseId, startMs: ts, startSig: evt.start }];
+    }
+
+    const timePart = evt.start.length >= 16 ? evt.start.slice(11, 16) : '09:00';
+    const todayDate = new Date(nowMs);
+    const tomorrowDate = new Date(nowMs);
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const candidates = [this._formatLocalYMD(todayDate), this._formatLocalYMD(tomorrowDate)];
+    const occurrences = [];
+
+    for (let i = 0; i < candidates.length; i++) {
+      const dStr = candidates[i];
+      if (!this._doesRecurringEventOccurOn(evt, dStr)) continue;
+      const startIso = `${dStr}T${timePart}`;
+      const ts = new Date(startIso).getTime();
+      if (!isNaN(ts)) {
+        occurrences.push({
+          key: `${baseId}::${dStr}`,
+          startMs: ts,
+          startSig: startIso
+        });
+      }
+    }
+    return occurrences;
+  },
+
+  resetEventNotifications(eventId) {
+    if (!eventId) return;
+    let changed = false;
+    if (Object.prototype.hasOwnProperty.call(this.sentHistory, eventId)) {
+      delete this.sentHistory[eventId];
+      changed = true;
+    }
+    const prefix = `${eventId}::`;
+    for (const k of Object.keys(this.sentHistory)) {
+      if (k.startsWith(prefix)) {
+        delete this.sentHistory[k];
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.saveHistory();
+    }
+  },
+
   checkUpcomingEvents() {
     if (!window.StorageManager || typeof window.StorageManager.getEvents !== 'function') return;
 
@@ -147,12 +234,15 @@ const AgendaNotificationManager = {
     // Si les notifications globales sont désactivées dans les paramètres
     if (settings && settings.notificationsEnabled === false) return;
 
+    this.checkDueTaskDeadlines(settings);
+    this.checkDebriefAvailabilityToast(settings);
+
     // Choix multiples des moments de notification (par défaut : 60m, 30m, now)
     const enabledStages = (settings && Array.isArray(settings.agendaNotificationStages))
       ? settings.agendaNotificationStages
       : ['60m', '30m', 'now'];
 
-    // Si aucun rappel n'est coché, ne rien envoyer
+    // Si aucun rappel d'agenda n'est coché, ne rien envoyer pour l'agenda
     if (!enabledStages || enabledStages.length === 0) return;
 
     const events = window.StorageManager.getEvents();
@@ -160,61 +250,206 @@ const AgendaNotificationManager = {
 
     const now = Date.now();
     let historyModified = false;
+    const check60 = enabledStages.includes('60m');
+    const check30 = enabledStages.includes('30m');
+    const checkNow = enabledStages.includes('now');
+    const hasExistingHistory = Object.keys(this.sentHistory).length > 0;
+    const activeEventIds = hasExistingHistory ? new Set() : null;
 
-    events.forEach(evt => {
-      // Ignorer les journées entières sans horaire précis ou événements sans date
-      if (evt.isAllDay || !evt.start) return;
+    for (let i = 0; i < events.length; i++) {
+      const evt = events[i];
+      if (!evt || evt.isAllDay || !evt.start) continue;
 
-      const eventStart = new Date(evt.start).getTime();
-      if (isNaN(eventStart)) return;
+      const occurrences = this._resolveEventOccurrencesNearNow(evt, now);
+      for (let j = 0; j < occurrences.length; j++) {
+        const occ = occurrences[j];
+        const diffMin = (occ.startMs - now) / 60000;
+        if (activeEventIds) activeEventIds.add(occ.key);
 
-      const diffMin = (eventStart - now) / 60000;
-      const eventId = evt.id || `${evt.title}_${evt.start}`;
+        // Nettoyer l'historique uniquement si l'occurrence était déjà tracée et terminée > 24h
+        if (diffMin < -1440) {
+          if (Object.prototype.hasOwnProperty.call(this.sentHistory, occ.key)) {
+            delete this.sentHistory[occ.key];
+            historyModified = true;
+          }
+          continue;
+        }
 
-      if (!this.sentHistory[eventId]) {
-        this.sentHistory[eventId] = [];
+        // Pré-filtrage O(1) : ignorer tout événement hors de la fenêtre active [-10 min .. +70 min]
+        if (diffMin > 70 || diffMin < -10) continue;
+
+        let entry = this.sentHistory[occ.key];
+        // Normalisation + réinitialisation automatique si l'horaire d'un événement replanifié a changé
+        if (Array.isArray(entry)) {
+          entry = { stages: entry, startSig: occ.startSig };
+          this.sentHistory[occ.key] = entry;
+        } else if (entry && entry.startSig && entry.startSig !== occ.startSig) {
+          delete this.sentHistory[occ.key];
+          entry = null;
+          historyModified = true;
+        }
+
+        const sent = entry ? entry.stages : null;
+        const ensureSentArray = () => {
+          if (!this.sentHistory[occ.key] || Array.isArray(this.sentHistory[occ.key])) {
+            this.sentHistory[occ.key] = { stages: [], startSig: occ.startSig };
+          }
+          return this.sentHistory[occ.key].stages;
+        };
+
+        // 1. Notification 1 heure avant (entre 45 et 61 min avant l'événement)
+        if (check60 && diffMin <= 61 && diffMin >= 45 && (!sent || !sent.includes('60m'))) {
+          ensureSentArray().push('60m');
+          historyModified = true;
+          this.notify('60m', evt);
+        }
+
+        // 2. Notification 30 minutes avant (entre 15 et 31 min avant l'événement)
+        if (check30 && diffMin <= 31 && diffMin >= 15 && (!sent || !sent.includes('30m'))) {
+          ensureSentArray().push('30m');
+          historyModified = true;
+          this.notify('30m', evt);
+        }
+
+        // 3. Notification au moment même (entre -5 min et +2 min)
+        if (checkNow && diffMin <= 2 && diffMin >= -5 && (!sent || !sent.includes('now'))) {
+          ensureSentArray().push('now');
+          historyModified = true;
+          this.notify('now', evt);
+        }
       }
-      const sent = this.sentHistory[eventId];
+    }
 
-      // 1. Notification 1 heure avant (entre 45 et 61 min avant l'événement)
-      if (enabledStages.includes('60m') && diffMin <= 61 && diffMin >= 45 && !sent.includes('60m')) {
-        sent.push('60m');
-        historyModified = true;
-        this.notify('60m', evt);
-      }
-
-      // 2. Notification 30 minutes avant (entre 15 et 31 min avant l'événement)
-      if (enabledStages.includes('30m') && diffMin <= 31 && diffMin >= 15 && !sent.includes('30m')) {
-        sent.push('30m');
-        historyModified = true;
-        this.notify('30m', evt);
-      }
-
-      // 3. Notification au moment même (entre -5 min et +2 min)
-      if (enabledStages.includes('now') && diffMin <= 2 && diffMin >= -5 && !sent.includes('now')) {
-        sent.push('now');
-        historyModified = true;
-        this.notify('now', evt);
-      }
-
-      // Nettoyer l'historique des événements terminés depuis plus de 24h
-      if (diffMin < -1440 && this.sentHistory[eventId]) {
-        delete this.sentHistory[eventId];
-        historyModified = true;
-      }
-    });
-
-    // Élagage mémoire : nettoyer les clés orphelines des événements supprimés du calendrier
-    const activeEventIds = new Set(events.map(e => e.id || `${e.title}_${e.start}`));
-    for (const id in this.sentHistory) {
-      if (!activeEventIds.has(id)) {
-        delete this.sentHistory[id];
-        historyModified = true;
+    // Élagage mémoire : nettoyer uniquement si l'historique n'est pas vide
+    if (activeEventIds) {
+      for (const id in this.sentHistory) {
+        if (!activeEventIds.has(id)) {
+          delete this.sentHistory[id];
+          historyModified = true;
+        }
       }
     }
 
     if (historyModified) {
       this.saveHistory();
+    }
+  },
+
+  checkDueTaskDeadlines(settings = {}) {
+    if (!window.StorageManager || typeof window.StorageManager.getTasks !== 'function') return;
+    if (settings && (settings.notificationsEnabled === false || settings.taskDeadlineNotificationsEnabled === false)) return;
+
+    const todayStr = this._formatLocalYMD(new Date());
+    const tRev = typeof window.StorageManager.getRevision === 'function' ? window.StorageManager.getRevision('tasks') : '0';
+    const pRev = typeof window.StorageManager.getRevision === 'function' ? window.StorageManager.getRevision('projects') : '0';
+    const sig = `${todayStr}:${tRev}:${pRev}`;
+    if (this._lastDeadlineCheckSig === sig) return;
+    this._lastDeadlineCheckSig = sig;
+
+    const storageKey = 'antigravite_notified_deadlines_v1';
+    let notifiedIds = new Set();
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.date === todayStr && Array.isArray(parsed.ids)) {
+            notifiedIds = new Set(parsed.ids);
+          }
+        }
+      }
+    } catch (_) {}
+
+    const projects = typeof window.StorageManager.getProjects === 'function' ? window.StorageManager.getProjects() : [];
+    const archivedProjectIds = new Set(projects.filter(p => p && p.archived).map(p => p.id));
+    const trashItems = typeof window.StorageManager.getTrash === 'function' ? window.StorageManager.getTrash() : [];
+    const trashTaskIds = new Set(trashItems.filter(i => i && i.type === 'task').map(i => (i.data && i.data.id) || i.originalId || i.id));
+
+    const dueTasks = [];
+    const walk = (list, inheritedProjId = null) => {
+      if (!Array.isArray(list)) return;
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i];
+        if (!t || !t.id) continue;
+        const projId = t.projectId || inheritedProjId;
+        if (!t.completed && !trashTaskIds.has(t.id) && !(projId && archivedProjectIds.has(projId))) {
+          if (t.deadline && typeof t.deadline === 'string' && t.deadline.slice(0, 10) <= todayStr) {
+            if (!notifiedIds.has(t.id)) {
+              dueTasks.push(t);
+            }
+          }
+        }
+        if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+          walk(t.subtasks, projId);
+        }
+      }
+    };
+    walk(window.StorageManager.getTasks());
+
+    if (dueTasks.length === 0) return;
+
+    dueTasks.forEach(t => notifiedIds.add(t.id));
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify({
+          date: todayStr,
+          ids: Array.from(notifiedIds)
+        }));
+      }
+    } catch (_) {}
+
+    const title = 'Antigravité • Échéance';
+    const body = dueTasks.length === 1
+      ? `📌 Échéance du jour : « ${(dueTasks[0].title || 'Tâche').trim()} »`
+      : `📌 ${dueTasks.length} tâches arrivent à échéance aujourd'hui (dont « ${(dueTasks[0].title || 'Tâche').trim()} »).`;
+    const action = dueTasks.length === 1
+      ? { type: 'open-task', taskId: dueTasks[0].id }
+      : { type: 'navigate', screen: 'tasks', statAction: 'deadlines-near' };
+
+    if (window.AntigraviteAPI && typeof window.AntigraviteAPI.showNotification === 'function') {
+      window.AntigraviteAPI.showNotification({ title, body, action }).catch(() => {});
+    }
+    if (window.App && typeof window.App.showToast === 'function') {
+      window.App.showToast(body, 'info', {
+        duration: 6000,
+        actionLabel: 'Voir',
+        onAction: () => {
+          if (typeof window.App.handleNotificationAction === 'function') {
+            window.App.handleNotificationAction(action);
+          }
+        }
+      });
+    }
+  },
+
+  checkDebriefAvailabilityToast(settings = {}) {
+    if (typeof DebriefManager === 'undefined' || typeof DebriefManager.isDebriefAvailable !== 'function') return;
+    if (settings && settings.debriefEnabled === false) return;
+    const todayStr = this._formatLocalYMD(new Date());
+    const promptKey = 'antigravite_debrief_prompted_v1';
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(promptKey) === todayStr) return;
+    } catch (_) {}
+
+    const avail = DebriefManager.isDebriefAvailable(settings);
+    if (!avail || !avail.available) return;
+    if (typeof DebriefManager.hasSeenToday === 'function' && DebriefManager.hasSeenToday()) return;
+    if (typeof DebriefManager.isSnoozedNow === 'function' && DebriefManager.isSnoozedNow()) return;
+    if (window.App && window.App.currentScreen === 'debrief') return;
+
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(promptKey, todayStr);
+    } catch (_) {}
+
+    const msg = avail.mode === 'weekly'
+      ? '🌤️ Votre bilan de semaine est disponible quand vous souhaitez faire le point.'
+      : '🌤️ Votre bilan de fin de journée est prêt quand vous le souhaiterez.';
+    if (window.App && typeof window.App.showToast === 'function') {
+      window.App.showToast(msg, 'info', {
+        duration: 6500,
+        actionLabel: 'Ouvrir',
+        onAction: () => window.App.navigate('debrief')
+      });
     }
   },
 
@@ -235,12 +470,15 @@ const AgendaNotificationManager = {
 
     const notificationTitle = titles[stage] || 'Antigravité - Agenda';
     const notificationBody = this.getRandomMessage(stage, event.title);
+    const hasValidEvent = !!(event && event.id && event.id !== 'demo-sample-event');
+    const action = hasValidEvent ? { type: 'open-event', eventId: event.id } : null;
 
     // 1. Notification native Windows via Electron
     if (window.AntigraviteAPI && typeof window.AntigraviteAPI.showNotification === 'function') {
       window.AntigraviteAPI.showNotification({
         title: notificationTitle,
-        body: notificationBody
+        body: notificationBody,
+        action
       }).catch(err => {
         console.warn("[AgendaNotificationManager] Échec notification native :", err);
       });
@@ -248,7 +486,19 @@ const AgendaNotificationManager = {
 
     // 2. Toast discret en bas de l'application si elle est ouverte
     if (window.App && typeof window.App.showToast === 'function') {
-      window.App.showToast(notificationBody, 'info');
+      if (action) {
+        window.App.showToast(notificationBody, 'info', {
+          duration: 6000,
+          actionLabel: 'Voir',
+          onAction: () => {
+            if (typeof window.App.handleNotificationAction === 'function') {
+              window.App.handleNotificationAction(action);
+            }
+          }
+        });
+      } else {
+        window.App.showToast(notificationBody, 'info');
+      }
     }
 
     // 3. Carillon sonore discret si activé dans les paramètres

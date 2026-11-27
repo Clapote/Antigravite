@@ -52,7 +52,7 @@ async function runTests() {
     assert(html.includes('id="constellation-nodes-container"'), "Le conteneur des cartes de nœuds doit exister");
     assert(html.includes('id="btn-constellation-mode-tree"'), "Le bouton pour le mode Arbre décisionnel doit exister");
     assert(html.includes('id="btn-constellation-mode-radial"'), "Le bouton pour le mode Constellation rayonnante doit exister");
-    assert(html.includes('<script src="./js/constellation.js"></script>'), "Le script js/constellation.js doit être chargé");
+    assert(/<script[^>]*\bsrc=["']\.\/js\/constellation\.js["'][^>]*><\/script>/.test(html), "Le script js/constellation.js doit être chargé");
   });
 
   // 2. Module ConstellationManager

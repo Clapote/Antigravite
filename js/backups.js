@@ -10,17 +10,36 @@
  */
 
 const BackupManager = {
-  init() {
+  _autoBackupPendingOnWake: false,
+
+  init(options = {}) {
     if (this.initialized) {
       this.render();
       return;
     }
     this.initialized = true;
-    this.render();
+    const deferStartupIO = !!(options && options.deferStartupIO);
+    if (!deferStartupIO) {
+      this.render();
+    }
     this.bindEvents();
-    this.migrateLegacyBackups();
-    this.checkAutoBackup();
+    if (!deferStartupIO) {
+      this.migrateLegacyBackups();
+      this.checkAutoBackup();
+    }
     this.setupAutoBackupScheduler();
+  },
+
+  async runStartupMaintenance() {
+    await this.migrateLegacyBackups();
+    await this.checkAutoBackup();
+  },
+
+  onAppResume() {
+    if (this._autoBackupPendingOnWake) {
+      this._autoBackupPendingOnWake = false;
+      this.checkAutoBackup();
+    }
   },
 
   getStorage() {
@@ -136,6 +155,9 @@ const BackupManager = {
       if (api && typeof api.saveBackup === 'function') {
         const result = await api.saveBackup(fullData);
         if (result && result.path) {
+          if (result.filename) {
+            backupRecord.filename = result.filename;
+          }
           backupRecord.diskPath = result.path;
           backupRecord.hasPhysicalBackup = true;
           physicalSaved = true;
@@ -191,7 +213,7 @@ const BackupManager = {
       if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
         if (physicalSaved) {
           window.App.showToast(
-            `Sauvegarde "${filename}" créée avec succès (${sizeKb} Ko)`,
+            `Sauvegarde "${backupRecord.filename}" créée avec succès (${sizeKb} Ko)`,
             "success"
           );
         } else {
@@ -204,6 +226,9 @@ const BackupManager = {
 
       return backupRecord;
     } catch (err) {
+      if (physicalSaved && backupRecord.diskPath && api && typeof api.deleteBackupFile === 'function') {
+        try { await api.deleteBackupFile(backupRecord.diskPath); } catch (_) {}
+      }
       if (btnQuick) {
         btnQuick.classList.remove('backup-saving');
       }
@@ -245,6 +270,9 @@ const BackupManager = {
 
     try {
       const payload = await this.getBackupPayload(backup);
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error("Le contenu de la sauvegarde est invalide ou corrompu.");
+      }
       const storage = this.getStorage();
       if (storage) storage.restoreFullExport(payload);
 
@@ -253,14 +281,24 @@ const BackupManager = {
         if (window.ProjectsManager) ProjectsManager.render();
         if (window.AgendaManager) AgendaManager.render();
         if (window.NotesManager) NotesManager.render();
+        if (window.TrashManager && typeof window.TrashManager.render === 'function') window.TrashManager.render();
+        if (window.SettingsManager && typeof window.SettingsManager.render === 'function') window.SettingsManager.render();
         if (window.App) {
+          if (typeof window.App.applyAppearanceSettings === 'function') window.App.applyAppearanceSettings();
+          if (typeof window.App.applySidebarTabsVisibility === 'function') window.App.applySidebarTabsVisibility();
           window.App.updateDashboard();
           window.App.showToast("Restauration réussie !", "success");
         }
+        this.render();
       }
     } catch (err) {
-      if (typeof alert === 'function') alert("Erreur lors de la restauration : " + err.message);
-      else console.error("Erreur lors de la restauration :", err.message);
+      if (typeof window !== 'undefined' && window.App && typeof window.App.alert === 'function') {
+        window.App.alert({ title: "Erreur de restauration", message: err.message, type: "error" });
+      } else if (typeof alert === 'function') {
+        alert("Erreur lors de la restauration : " + err.message);
+      } else {
+        console.error("Erreur lors de la restauration :", err.message);
+      }
     }
   },
 
@@ -349,27 +387,39 @@ const BackupManager = {
       await this.createManualBackup(`Avant import de ${file.name}`);
 
       // Étape 2 : importer les données seulement après la sauvegarde.
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error("Format de fichier JSON de sauvegarde invalide.");
+      }
       const storage = this.getStorage();
       if (storage) storage.restoreFullExport(parsed);
 
-      // Étape 3 : actualiser l'interface.
+      // Étape 3 : actualiser l'interface complète.
       if (typeof window !== 'undefined') {
         if (window.TasksManager) TasksManager.render();
         if (window.ProjectsManager) ProjectsManager.render();
         if (window.AgendaManager) AgendaManager.render();
         if (window.NotesManager) NotesManager.render();
+        if (window.TrashManager && typeof window.TrashManager.render === 'function') window.TrashManager.render();
+        if (window.SettingsManager && typeof window.SettingsManager.render === 'function') window.SettingsManager.render();
 
         if (window.App) {
+          if (typeof window.App.applyAppearanceSettings === 'function') window.App.applyAppearanceSettings();
+          if (typeof window.App.applySidebarTabsVisibility === 'function') window.App.applySidebarTabsVisibility();
           window.App.updateDashboard();
           window.App.showToast(
             "Import réussi ! L'état précédent a été sauvegardé sur le disque.",
             "success"
           );
         }
+        this.render();
       }
     } catch (err) {
       console.error("Erreur lors de l'import ou de la sauvegarde :", err);
-      if (typeof alert === 'function') alert("L'import ou la sauvegarde a échoué : " + err.message);
+      if (typeof window !== 'undefined' && window.App && typeof window.App.alert === 'function') {
+        window.App.alert({ title: "Échec de l'import", message: err.message, type: "error" });
+      } else if (typeof alert === 'function') {
+        alert("L'import ou la sauvegarde a échoué : " + err.message);
+      }
     } finally {
       if (event.target) event.target.value = '';
     }
@@ -457,12 +507,23 @@ const BackupManager = {
     const checkEveryMs = Math.max(15 * 60 * 1000, Math.min(60 * 60 * 1000, (freqHours * 3600 * 1000) / 2));
     this._autoBackupTimer = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden === true) {
-        // En arrière-plan, on vérifie quand même si l'échéance de sauvegarde est dépassée
-        this.checkAutoBackup();
-      } else {
-        this.checkAutoBackup();
+        // En veille / tray, différer la sérialisation JSON et les I/O disque au réveil
+        this._autoBackupPendingOnWake = true;
+        return;
       }
+      this.checkAutoBackup();
     }, checkEveryMs);
+    if (this._autoBackupTimer && typeof this._autoBackupTimer.unref === 'function') {
+      this._autoBackupTimer.unref();
+    }
+    if (!this._wakeListenerBound && typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      this._wakeListenerBound = true;
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          this.onAppResume();
+        }
+      });
+    }
   },
 
   // Migration douce et prudente des anciennes sauvegardes pour alléger localStorage
@@ -532,7 +593,8 @@ const BackupManager = {
         try {
           diskBackups = await api.listBackups();
         } catch (e) {
-          console.warn("[BackupManager] Erreur lors de la vérification des sauvegardes sur disque :", e);
+          console.warn("[BackupManager] Dossier de sauvegarde inaccessible, vérification ignorée :", e);
+          return;
         }
 
         if (!Array.isArray(diskBackups) || diskBackups.length === 0) {
@@ -562,11 +624,25 @@ const BackupManager = {
     }
   },
 
+  renderIfNeeded() {
+    if (typeof document === 'undefined') return;
+    const tbody = document.getElementById('backups-table-body');
+    if (!tbody) return;
+    const storage = this.getStorage();
+    const rev = storage && typeof storage.getRevision === 'function' ? storage.getRevision('backups') : -1;
+    if (rev !== -1 && this._lastRenderedRev === rev && tbody.childElementCount > 0) return;
+    this.render();
+  },
+
   render() {
     if (typeof document === 'undefined') return;
     const tbody = document.getElementById('backups-table-body');
     const lastBackupEl = document.getElementById('last-backup-info');
     if (!tbody) return;
+    const storage = this.getStorage();
+    if (storage && typeof storage.getRevision === 'function') {
+      this._lastRenderedRev = storage.getRevision('backups');
+    }
 
     const backups = this.getAll();
     if (lastBackupEl) {
@@ -583,20 +659,35 @@ const BackupManager = {
       return;
     }
 
+    if (!tbody._backupDelegated && typeof tbody.addEventListener === 'function') {
+      tbody._backupDelegated = true;
+      tbody.addEventListener('click', (e) => {
+        const btn = e.target && typeof e.target.closest === 'function' ? e.target.closest('[data-backup-action]') : null;
+        if (!btn) return;
+        const action = btn.dataset.backupAction;
+        const bId = btn.dataset.backupId;
+        if (!bId) return;
+        if (action === 'restore') this.restoreBackup(bId);
+        else if (action === 'download') this.downloadBackupFile(bId);
+        else if (action === 'delete') this.deleteBackup(bId);
+      });
+    }
+
     tbody.innerHTML = '';
     backups.forEach(b => {
       const tr = document.createElement('tr');
       const dateStr = new Date(b.createdAt).toLocaleString('fr-FR');
+      const safeId = this.escapeHtml(b.id);
       tr.innerHTML = `
-        <td><strong>${this.escapeHtml(b.label)}</strong><br><span style="font-size:0.75rem; color:var(--text-dim);">${b.filename}</span></td>
-        <td>${dateStr}</td>
+        <td><strong>${this.escapeHtml(b.label)}</strong><br><span style="font-size:0.75rem; color:var(--text-dim);">${this.escapeHtml(b.filename)}</span></td>
+        <td>${this.escapeHtml(dateStr)}</td>
         <td><span class="badge badge-priority-low">${b.counts ? `${b.counts.tasks} tâches, ${b.counts.events} créneaux` : 'Complet'}</span></td>
-        <td>${b.size}</td>
+        <td>${this.escapeHtml(b.size)}</td>
         <td>
           <div style="display:flex; gap:6px;">
-            <button class="btn btn-secondary btn-sm" onclick="BackupManager.restoreBackup('${b.id}')" title="Restaurer cette version"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span>Restaurer</span></button>
-            <button class="btn btn-secondary btn-sm" onclick="BackupManager.downloadBackupFile('${b.id}')" title="Télécharger le fichier"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Télécharger</span></button>
-            <button class="btn-icon" onclick="BackupManager.deleteBackup('${b.id}')" title="Supprimer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+            <button class="btn btn-secondary btn-sm" data-backup-action="restore" data-backup-id="${safeId}" title="Restaurer cette version"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span>Restaurer</span></button>
+            <button class="btn btn-secondary btn-sm" data-backup-action="download" data-backup-id="${safeId}" title="Télécharger le fichier"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Télécharger</span></button>
+            <button class="btn-icon" data-backup-action="delete" data-backup-id="${safeId}" title="Supprimer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
           </div>
         </td>
       `;

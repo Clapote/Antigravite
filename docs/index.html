@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravité — Organisation locale, tâches, agenda et notes</title>
+  <meta name="description" content="Antigravité est une application Windows locale, privée et open source réunissant tâches, projets, agenda, notes, focus et vue Constellation.">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="index.html" class="brand">
+        <img src="icon.png" alt="Logo Antigravité">
+        <span>Antigravité</span>
+      </a>
+      <nav class="nav-links" aria-label="Navigation principale">
+        <a href="#features">Fonctionnalités</a>
+        <a href="#google-sync">Google Agenda</a>
+        <a href="privacy.html">Confidentialité</a>
+        <a href="https://github.com/Clapote/Antigravite" target="_blank" rel="noopener noreferrer">Code source</a>
+        <a href="mailto:Antigravite@proton.me">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <span class="hero-badge">Open Source · 100 % local · Windows</span>
+      <h1>Organisez vos journées avec clarté et sérénité.</h1>
+      <p class="hero-subtitle">
+        <strong>Antigravité</strong> réunit vos tâches récursives, projets, agenda, notes enrichies,
+        sessions Focus et carte mentale Constellation dans une application de bureau rapide, privée et sans abonnement.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/Clapote/Antigravite-releases/releases" target="_blank" rel="noopener noreferrer">
+          Télécharger pour Windows
+        </a>
+        <a class="btn btn-secondary" href="privacy.html">
+          Politique de confidentialité
+        </a>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <h2 class="section-title">Tout votre espace relié au même endroit</h2>
+      <p class="section-lead">Conçu pour garder vos données sur votre ordinateur tout en reliant naturellement vos outils du quotidien.</p>
+      <div class="grid">
+        <article class="card">
+          <h3>Tâches &amp; Projets hiérarchiques</h3>
+          <p>Sous-tâches et sous-projets imbriqués sans limite, glisser-déposer manuel respecté, archivage propre et suivi visuel sans pression.</p>
+        </article>
+        <article class="card">
+          <h3>Agenda complet &amp; Google Agenda</h3>
+          <p>Vue semaine, jour et mois avec gestion des chevauchements, récurrences et synchronisation bidirectionnelle optionnelle avec Google Agenda.</p>
+        </article>
+        <article class="card">
+          <h3>Traitement de texte &amp; Constellation</h3>
+          <p>Éditeur de notes enrichi, dossiers personnalisés, liens inter-notes, vue Constellation (arbre ou orbite) et recherche universelle instantanée.</p>
+        </article>
+        <article class="card">
+          <h3>Focus, Musique &amp; Bilan bienveillant</h3>
+          <p>Minuteur Focus relié à vos tâches/projets/créneaux, ambiance musicale locale et bilan quotidien ou hebdomadaire positif.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="google-sync" class="section">
+      <div class="callout">
+        <h2 class="section-title" style="margin-top: 0;">Synchronisation Google Agenda privée et directe</h2>
+        <p style="margin-bottom: 10px; color: var(--text-muted);">
+          La connexion à Google Agenda est entièrement facultative. Lorsqu'elle est activée, l'application communique
+          <strong>directement depuis votre ordinateur vers les serveurs officiels de Google</strong> via OAuth 2.0 (RFC 8252 loopback).
+        </p>
+        <ul style="margin: 0; padding-left: 20px; color: var(--text-muted);">
+          <li>Aucun serveur intermédiaire ni base de données distante contrôlée par l'éditeur.</li>
+          <li>Jetons OAuth chiffrés localement sur votre PC via Windows DPAPI (Electron <code>safeStorage</code>).</li>
+          <li>Mode hors-ligne résilient et préservation absolue de vos tâches locales en cas de suppression d'un créneau Google.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="card">
+        <h3>Overview (English summary for Google API Verification)</h3>
+        <p style="margin-bottom: 8px;">
+          <strong>Antigravité</strong> (<code>fr.antigravite.app</code>) is a local-first open-source Windows desktop productivity application
+          for managing personal tasks, projects, rich-text notes, and schedules.
+        </p>
+        <p>
+          Users may optionally connect their Google Account to read their calendar list and perform two-way synchronization
+          of events with a calendar of their choice. All user data and OAuth tokens remain stored exclusively on the user's
+          local device. Full details are available in our <a href="privacy.html">Privacy Policy</a>.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <span>Antigravité — Créé par Lucas Peutot (Licence MIT)</span>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <a href="privacy.html">Politique de confidentialité / Privacy Policy</a>
+        <a href="mailto:Antigravite@proton.me">Antigravite@proton.me</a>
+        <a href="https://github.com/Clapote/Antigravite" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

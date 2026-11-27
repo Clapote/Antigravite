@@ -23,59 +23,102 @@ const GOOGLE_COLORS = {
 };
 
 class GoogleCalendarService {
+  _timeoutSignal(ms = 15000) {
+    return (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
+      ? AbortSignal.timeout(ms)
+      : undefined;
+  }
+
   /**
    * Récupère les événements du calendrier sélectionné (Lecture Seule)
+   * Gère la pagination nextPageToken, le conflit orderBy+syncToken (HTTP 400),
+   * et un rafraîchissement complet glissant tous les 7 jours sur 180 jours pour conserver les récurrences.
    */
   async fetchEvents(options = {}) {
+    const FULL_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
     const accessToken = await googleAuth.getValidAccessToken();
     const status = googleAuth.getStatus();
     const calendarId = options.calendarId || status.selectedCalendarId || 'primary';
 
-    const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
-    
-    // singleEvents=true éclate les séries récurrentes en créneaux individuels réels
-    url.searchParams.set('singleEvents', 'true');
-    url.searchParams.set('orderBy', 'startTime');
-    url.searchParams.set('maxResults', String(options.maxResults || 250));
+    const lastFullAt = googleAuth.authCache && googleAuth.authCache.lastFullRefreshAt
+      ? Date.parse(googleAuth.authCache.lastFullRefreshAt)
+      : NaN;
+    const needsRollingRefresh = !!(options.useSyncToken && (
+      !Number.isFinite(lastFullAt) || (Date.now() - lastFullAt >= FULL_REFRESH_INTERVAL_MS)
+    ));
+    const hasSyncToken = !!(options.useSyncToken && !needsRollingRefresh && googleAuth.authCache && googleAuth.authCache.syncToken);
+    const maxPages = Math.max(1, Math.min(25, Number(options.maxPages) || 20));
+    const maxResults = String(options.maxResults || 250);
+    const horizonDays = Math.max(90, Number(options.horizonDays) || 180);
 
-    // Si on demande la synchronisation incrémentale et qu'un syncToken existe
-    if (options.useSyncToken && googleAuth.authCache?.syncToken) {
-      url.searchParams.set('syncToken', googleAuth.authCache.syncToken);
-    } else {
-      // Fenêtre temporelle : par défaut, 30 jours avant et 90 jours après aujourd'hui
-      const now = new Date();
-      const defaultMin = new Date(now.getTime() - (30 * 24 * 3600 * 1000)).toISOString();
-      const defaultMax = new Date(now.getTime() + (90 * 24 * 3600 * 1000)).toISOString();
+    const buildRequestUrl = (pageToken = null) => {
+      const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
+      url.searchParams.set('singleEvents', 'true');
+      url.searchParams.set('maxResults', maxResults);
 
-      url.searchParams.set('timeMin', options.timeMin || defaultMin);
-      url.searchParams.set('timeMax', options.timeMax || defaultMax);
+      if (hasSyncToken) {
+        url.searchParams.set('syncToken', googleAuth.authCache.syncToken);
+      } else {
+        url.searchParams.set('orderBy', 'startTime');
+        const now = new Date();
+        const defaultMin = new Date(now.getTime() - (30 * 24 * 3600 * 1000)).toISOString();
+        const defaultMax = new Date(now.getTime() + (horizonDays * 24 * 3600 * 1000)).toISOString();
+        url.searchParams.set('timeMin', options.timeMin || defaultMin);
+        url.searchParams.set('timeMax', options.timeMax || defaultMax);
+      }
+
+      if (pageToken) {
+        url.searchParams.set('pageToken', pageToken);
+      }
+      return url.toString();
+    };
+
+    const items = [];
+    let pageToken = null;
+    let nextSyncToken = null;
+    let pageCount = 0;
+
+    do {
+      const res = await fetch(buildRequestUrl(pageToken), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: this._timeoutSignal()
+      });
+
+      // HTTP 410 (Gone) ou HTTP 400 avec syncToken (ex: orderBy incompatible) : reset et synchro complète
+      if (hasSyncToken && (res.status === 410 || res.status === 400) && !options._retriedFullSync) {
+        console.warn(`SyncToken invalide/expiré côté Google (${res.status}). Relance d'une synchronisation complète...`);
+        if (googleAuth.authCache) googleAuth.authCache.syncToken = null;
+        return this.fetchEvents({ ...options, useSyncToken: false, _retriedFullSync: true });
+      }
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Erreur récupération événements Google (${res.status}) : ${errText}`);
+      }
+
+      const json = await res.json();
+      if (Array.isArray(json.items)) {
+        items.push(...json.items);
+      }
+      if (json.nextSyncToken) {
+        nextSyncToken = json.nextSyncToken;
+      }
+      pageToken = json.nextPageToken || null;
+      pageCount++;
+    } while (pageToken && pageCount < maxPages);
+
+    // Ne persister syncToken / lastSyncAt / lastFullRefreshAt que lors d'une vraie synchronisation
+    if (options.persistSyncState !== false && googleAuth.authCache) {
+      if (nextSyncToken) {
+        googleAuth.authCache.syncToken = nextSyncToken;
+      }
+      const nowIso = new Date().toISOString();
+      googleAuth.authCache.lastSyncAt = nowIso;
+      if (!hasSyncToken) {
+        googleAuth.authCache.lastFullRefreshAt = nowIso;
+      }
+      await googleAuth.saveAuthData();
     }
-
-    let res = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-
-    // Erreur HTTP 410 (Gone) : le syncToken a expiré côté Google
-    if (res.status === 410 && options.useSyncToken) {
-      console.warn("SyncToken expiré côté Google. Relance d'une synchronisation complète...");
-      googleAuth.authCache.syncToken = null;
-      return this.fetchEvents({ ...options, useSyncToken: false });
-    }
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Erreur récupération événements Google (${res.status}) : ${errText}`);
-    }
-
-    const json = await res.json();
-    const items = json.items || [];
-
-    // Mémoriser le nouveau syncToken pour les prochaines requêtes incrémentales
-    if (json.nextSyncToken) {
-      googleAuth.authCache.syncToken = json.nextSyncToken;
-    }
-    googleAuth.authCache.lastSyncAt = new Date().toISOString();
-    await googleAuth.saveAuthData();
 
     // Convertir chaque événement Google vers le modèle unifié d'Antigravité
     const events = items.map(item => this.mapGoogleEventToAntigravite(item, calendarId));
@@ -84,8 +127,10 @@ class GoogleCalendarService {
       success: true,
       calendarId,
       totalCount: events.length,
-      nextSyncToken: json.nextSyncToken || null,
-      fetchedAt: googleAuth.authCache.lastSyncAt,
+      isIncremental: hasSyncToken,
+      isRollingRefresh: needsRollingRefresh,
+      nextSyncToken: nextSyncToken || null,
+      fetchedAt: googleAuth.authCache ? googleAuth.authCache.lastSyncAt : new Date().toISOString(),
       events
     };
   }
@@ -108,19 +153,23 @@ class GoogleCalendarService {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: this._timeoutSignal()
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Échec création Google Agenda (${res.status}) : ${errText}`);
+      const err = new Error(`Échec création Google Agenda (${res.status}) : ${errText}`);
+      err.status = res.status;
+      throw err;
     }
 
     const json = await res.json();
     const mapped = this.mapGoogleEventToAntigravite(json, calendarId);
-    // Conserver la liaison locale avec la tâche et la note si spécifiées
+    // Conserver la liaison locale avec la tâche, la note et le projet si spécifiés
     mapped.taskId = eventData.taskId || null;
     mapped.noteId = eventData.noteId || null;
+    if (eventData.projectId !== undefined) mapped.projectId = eventData.projectId || null;
     return mapped;
   }
 
@@ -152,24 +201,29 @@ class GoogleCalendarService {
     const res = await fetch(url, {
       method: 'PATCH',
       headers,
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: this._timeoutSignal()
     });
 
     if (res.status === 412) {
-      const conflictErr = new Error("Conflit de modification : l'événement a été modifié directement sur Google Agenda.");
+      const conflictErr = new Error("[CONFLICT] Conflit de modification : l'événement a été modifié directement sur Google Agenda.");
       conflictErr.code = 'CONFLICT';
+      conflictErr.status = 412;
       throw conflictErr;
     }
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Échec mise à jour Google Agenda (${res.status}) : ${errText}`);
+      const err = new Error(`Échec mise à jour Google Agenda (${res.status}) : ${errText}`);
+      err.status = res.status;
+      throw err;
     }
 
     const json = await res.json();
     const mapped = this.mapGoogleEventToAntigravite(json, targetCalendarId);
     mapped.taskId = updatedData.taskId !== undefined ? updatedData.taskId : (json.taskId || null);
     mapped.noteId = updatedData.noteId !== undefined ? updatedData.noteId : (json.noteId || null);
+    if (updatedData.projectId !== undefined) mapped.projectId = updatedData.projectId || null;
     return mapped;
   }
 
@@ -191,7 +245,8 @@ class GoogleCalendarService {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${accessToken}`
-      }
+      },
+      signal: this._timeoutSignal()
     });
 
     // 204 No Content = suppression confirmée par Google
@@ -205,7 +260,9 @@ class GoogleCalendarService {
     }
 
     const errText = await res.text();
-    throw new Error(`Échec suppression Google Agenda (${res.status}) : ${errText}`);
+    const err = new Error(`Échec suppression Google Agenda (${res.status}) : ${errText}`);
+    err.status = res.status;
+    throw err;
   }
 
   /**

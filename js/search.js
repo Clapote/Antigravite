@@ -180,9 +180,41 @@ const SearchManager = {
       return tokens.every(tok => lower.includes(tok));
     };
 
+    if (!this._noteTextCache) this._noteTextCache = new Map();
+    const stripHtmlText = (rawHtml, noteObj = null) => {
+      if (!rawHtml) return '';
+      const cacheKey = noteObj && noteObj.id ? String(noteObj.id) : null;
+      const sig = `${(noteObj && (noteObj.updatedAt || noteObj.createdAt)) || ''}:${rawHtml.length}`;
+      if (cacheKey) {
+        const hit = this._noteTextCache.get(cacheKey);
+        if (hit && hit.sig === sig) return hit.clean;
+      }
+      const clean = String(rawHtml)
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#0*39;/gi, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (cacheKey) {
+        if (this._noteTextCache.size > 2500) this._noteTextCache.clear();
+        this._noteTextCache.set(cacheKey, { sig, clean });
+      }
+      return clean;
+    };
+
     const projects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects() : [];
     const projectMap = new Map();
-    projects.forEach(p => projectMap.set(p.id, p));
+    const archivedProjectIds = new Set();
+    projects.forEach(p => {
+      if (p && p.id) {
+        projectMap.set(p.id, p);
+        if (p.archived) archivedProjectIds.add(p.id);
+      }
+    });
 
     const collectMatches = (list, limit, predicate) => {
       const res = [];
@@ -195,39 +227,104 @@ const SearchManager = {
       return res;
     };
 
-    // 1. Recherche dans les Tâches (arrêt anticipé dès 8 résultats)
+    // 1. Recherche dans les Tâches (prioriser les tâches actives non archivées avant l'historique terminé)
     const allTasks = this.getAllTasksFlat();
-    const taskMatches = collectMatches(allTasks, 8, (t) =>
-      matchesTokens(t.title) || matchesTokens(t.description) || matchesTokens(t.parentTitle)
-    );
+    const taskMatches = [];
+    const secondaryTaskMatches = [];
+    for (let i = 0; i < allTasks.length; i++) {
+      const t = allTasks[i];
+      if (!matchesTokens(`${t.title || ''} ${t.description || ''} ${t.parentTitle || ''}`)) continue;
+      const isSecondary = !!t.completed || (t.projectId && archivedProjectIds.has(t.projectId));
+      if (!isSecondary) {
+        taskMatches.push(t);
+        if (taskMatches.length >= 8) break;
+      } else if (secondaryTaskMatches.length < 8) {
+        secondaryTaskMatches.push(t);
+      }
+    }
+    if (taskMatches.length < 8 && secondaryTaskMatches.length > 0) {
+      for (let i = 0; i < secondaryTaskMatches.length && taskMatches.length < 8; i++) {
+        taskMatches.push(secondaryTaskMatches[i]);
+      }
+    }
 
-    // 2. Recherche dans les Projets (arrêt anticipé dès 4 résultats)
-    const projectMatches = collectMatches(projects, 4, (p) =>
-      matchesTokens(p.title) || matchesTokens(p.description)
-    );
+    const taskProjMap = new Map();
+    for (let i = 0; i < allTasks.length; i++) {
+      if (allTasks[i] && allTasks[i].id && allTasks[i].projectId) {
+        taskProjMap.set(allTasks[i].id, allTasks[i].projectId);
+      }
+    }
 
-    // 3. Recherche dans l'Agenda (arrêt anticipé dès 6 résultats)
+    // 2. Recherche dans les Projets (prioriser les projets actifs avant les projets archivés)
+    const activeProjectMatches = [];
+    const archivedProjectMatches = [];
+    for (let i = 0; i < projects.length; i++) {
+      const p = projects[i];
+      if (!p || !matchesTokens(`${p.title || ''} ${p.description || ''}`)) continue;
+      if (!p.archived) {
+        activeProjectMatches.push(p);
+        if (activeProjectMatches.length >= 4) break;
+      } else if (archivedProjectMatches.length < 4) {
+        archivedProjectMatches.push(p);
+      }
+    }
+    const projectMatches = activeProjectMatches.length >= 4
+      ? activeProjectMatches
+      : activeProjectMatches.concat(archivedProjectMatches).slice(0, 4);
+
+    // 3. Recherche dans l'Agenda (titre, description, lieu ; prioriser actifs)
     const events = (typeof StorageManager !== 'undefined') ? StorageManager.getEvents() : [];
-    const eventMatches = collectMatches(events, 6, (e) =>
-      matchesTokens(e.title) || matchesTokens(e.description)
-    );
+    const activeEventMatches = [];
+    const secondaryEventMatches = [];
+    for (let i = 0; i < events.length; i++) {
+      const e = events[i];
+      if (!e || !matchesTokens(`${e.title || ''} ${e.description || ''} ${e.location || ''}`)) continue;
+      const eProjId = e.projectId || (e.taskId ? taskProjMap.get(e.taskId) : null);
+      if (eProjId && archivedProjectIds.has(eProjId)) {
+        if (secondaryEventMatches.length < 6) secondaryEventMatches.push(e);
+      } else {
+        activeEventMatches.push(e);
+        if (activeEventMatches.length >= 6) break;
+      }
+    }
+    const eventMatches = activeEventMatches.length >= 6
+      ? activeEventMatches
+      : activeEventMatches.concat(secondaryEventMatches).slice(0, 6);
 
-    // 4. Recherche dans les Notes (titre testé avant le stripping HTML, arrêt anticipé dès 6 résultats)
+    // 4. Recherche dans les Notes (titre, dossier, tags #tag, contenu nettoyé ; prioriser actives)
     const notes = (typeof StorageManager !== 'undefined') ? StorageManager.getNotes() : [];
-    const noteMatches = collectMatches(notes, 6, (n) => {
-      if (matchesTokens(n.title)) return true;
-      if (!n.content) return false;
-      const stripped = n.content.replace(/<[^>]*>/g, ' ');
-      return matchesTokens(stripped);
-    });
+    const activeNoteMatches = [];
+    const secondaryNoteMatches = [];
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i];
+      if (!n) continue;
+      const tagsText = Array.isArray(n.tags) ? n.tags.map(tg => `#${tg} ${tg}`).join(' ') : '';
+      const metaText = `${n.title || ''} ${n.folder || ''} ${tagsText}`;
+      const matchedMeta = matchesTokens(metaText);
+      if (!matchedMeta) {
+        if (!n.content) continue;
+        const cleanBody = stripHtmlText(n.content, n);
+        if (!matchesTokens(`${metaText} ${cleanBody}`)) continue;
+      }
+      const nProjId = n.projectId || n.linkedProjectId || null;
+      if (nProjId && archivedProjectIds.has(nProjId)) {
+        if (secondaryNoteMatches.length < 6) secondaryNoteMatches.push(n);
+      } else {
+        activeNoteMatches.push(n);
+        if (activeNoteMatches.length >= 6) break;
+      }
+    }
+    const noteMatches = activeNoteMatches.length >= 6
+      ? activeNoteMatches
+      : activeNoteMatches.concat(secondaryNoteMatches).slice(0, 6);
 
     const flatList = [];
 
     taskMatches.forEach(t => {
-      const proj = projectMap.get(t.projectId);
+      const proj = t.projectId ? projectMap.get(t.projectId) : null;
       const statusText = t.completed ? 'Terminée' : 'À faire';
       const parentInfo = t.parentTitle ? ` (dans : ${t.parentTitle})` : '';
-      const projInfo = proj ? ` • ${proj.title}` : '';
+      const projInfo = proj ? ` • ${proj.title}${proj.archived ? ' (Archivé)' : ''}` : '';
       flatList.push({
         type: 'task',
         id: t.id,
@@ -236,16 +333,18 @@ const SearchManager = {
         icon: t.completed
           ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
           : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        color: proj ? proj.color : '',
         data: t
       });
     });
 
     projectMatches.forEach(p => {
+      const archTag = p.archived ? ' • Archivé' : '';
       flatList.push({
         type: 'project',
         id: p.id,
         title: p.title,
-        subtitle: p.description ? p.description : 'Projet',
+        subtitle: `${p.description ? p.description : 'Projet'}${archTag}`,
         icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
         color: p.color,
         data: p
@@ -253,28 +352,43 @@ const SearchManager = {
     });
 
     eventMatches.forEach(e => {
-      const timeStr = e.isAllDay ? 'Journée entière' : `${e.startTime || ''} - ${e.endTime || ''}`;
-      const dateStr = e.date ? `le ${e.date}` : '';
+      const eProjId = e.projectId || (e.taskId ? taskProjMap.get(e.taskId) : null);
+      const proj = eProjId ? projectMap.get(eProjId) : null;
+      const startDate = e.date || (typeof e.start === 'string' && e.start.length >= 10 ? e.start.slice(0, 10) : '');
+      const startTime = e.startTime || (typeof e.start === 'string' && e.start.length >= 16 ? e.start.slice(11, 16) : '');
+      const endTime = e.endTime || (typeof e.end === 'string' && e.end.length >= 16 ? e.end.slice(11, 16) : '');
+      const timeStr = e.isAllDay
+        ? 'Journée entière'
+        : ((startTime || endTime) ? `${startTime} - ${endTime}`.trim() : 'Horaire libre');
+      const dateStr = startDate ? `le ${startDate}` : '';
+      const locInfo = e.location ? ` • ${e.location}` : '';
+      const projInfo = proj ? ` • ${proj.title}` : '';
       flatList.push({
         type: 'event',
         id: e.id,
         title: e.title || '(Sans titre)',
-        subtitle: `${dateStr} • ${timeStr}`,
+        subtitle: `${dateStr ? `${dateStr} • ${timeStr}` : timeStr}${locInfo}${projInfo}`,
         icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+        color: (proj && proj.color) ? proj.color : (e.color || ''),
         data: e
       });
     });
 
     noteMatches.forEach(n => {
-      const stripped = (n.content || '').replace(/<[^>]*>/g, ' ').trim();
-      let snippet = stripped.substring(0, 80);
-      if (stripped.length > 80) snippet += '...';
+      const nProjId = n.projectId || n.linkedProjectId || null;
+      const proj = nProjId ? projectMap.get(nProjId) : null;
+      const stripped = stripHtmlText(n.content || '');
+      let snippet = stripped.substring(0, 75);
+      if (stripped.length > 75) snippet += '...';
+      const folderTag = n.folder && n.folder !== 'Général' ? `[${n.folder}] ` : '';
+      const projInfo = proj ? ` • ${proj.title}` : '';
       flatList.push({
         type: 'note',
         id: n.id,
         title: n.title || '(Sans titre)',
-        subtitle: snippet || 'Note personnelle',
+        subtitle: `${folderTag}${snippet || 'Note personnelle'}${projInfo}`,
         icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+        color: proj ? proj.color : '',
         data: n
       });
     });
@@ -300,16 +414,31 @@ const SearchManager = {
   renderResults(tokens) {
     if (!this.resultsEl) return;
 
+    const cleanTokens = Array.from(new Set((tokens || []).filter(Boolean)))
+      .sort((a, b) => b.length - a.length);
+    const escapedTokens = cleanTokens.map(tok => tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const highlightRe = escapedTokens.length > 0 ? new RegExp(`(${escapedTokens.join('|')})`, 'gi') : null;
+
     const highlight = (text) => {
-      if (!text) return '';
-      let safe = this.escapeHtml(text);
-      tokens.forEach(tok => {
-        if (!tok) return;
-        const escTok = tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`(${escTok})`, 'gi');
-        safe = safe.replace(re, '<mark class="search-highlight">$1</mark>');
-      });
-      return safe;
+      if (text === null || text === undefined) return '';
+      const raw = String(text);
+      if (!highlightRe) return this.escapeHtml(raw);
+      let out = '';
+      let lastIdx = 0;
+      highlightRe.lastIndex = 0;
+      let match;
+      while ((match = highlightRe.exec(raw)) !== null) {
+        if (match.index > lastIdx) {
+          out += this.escapeHtml(raw.slice(lastIdx, match.index));
+        }
+        out += `<mark class="search-highlight">${this.escapeHtml(match[0])}</mark>`;
+        lastIdx = highlightRe.lastIndex;
+        if (match[0].length === 0) break;
+      }
+      if (lastIdx < raw.length) {
+        out += this.escapeHtml(raw.slice(lastIdx));
+      }
+      return out;
     };
 
     // Grouper par catégorie pour un affichage soigné
@@ -330,9 +459,13 @@ const SearchManager = {
         html += `<div class="search-group-title">${cat.icon} <span>${cat.label}</span> (${items.length})</div>`;
         items.forEach(({ item, idx }) => {
           const isSelected = idx === this.selectedIndex;
-          const dotStyle = item.color ? `style="color: ${item.color};"` : '';
+          const safeColor = (typeof item.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(item.color.trim()))
+            ? item.color.trim()
+            : '';
+          const dotStyle = safeColor ? `style="color: ${safeColor};"` : '';
+          const itemAccentStyle = safeColor ? `style="border-left: 3px solid ${safeColor};"` : '';
           html += `
-            <div class="search-result-item ${isSelected ? 'selected' : ''}" data-index="${idx}">
+            <div class="search-result-item ${isSelected ? 'selected' : ''}" data-index="${idx}" ${itemAccentStyle}>
               <div class="search-result-main">
                 <span class="search-result-icon" ${dotStyle}>${item.icon}</span>
                 <div class="search-result-text">
@@ -425,8 +558,9 @@ const SearchManager = {
         navigateApp('agenda');
         if (typeof AgendaManager !== 'undefined') {
           setTimeout(() => {
-            if (item.data && item.data.date && typeof AgendaManager.zoomToDay === 'function') {
-              AgendaManager.zoomToDay(item.data.date);
+            const targetDate = item.data && (item.data.date || (typeof item.data.start === 'string' && item.data.start.length >= 10 ? item.data.start.slice(0, 10) : null));
+            if (targetDate && typeof AgendaManager.zoomToDay === 'function') {
+              AgendaManager.zoomToDay(targetDate);
             }
             if (item.id && typeof AgendaManager.openEventModal === 'function') {
               AgendaManager.openEventModal(item.id);
@@ -436,6 +570,31 @@ const SearchManager = {
         break;
 
       case 'note':
+        if (typeof NotesManager !== 'undefined' && item.data) {
+          let filterReset = false;
+          const noteFolder = item.data.folder || 'Général';
+          if (NotesManager.currentFolderFilter && NotesManager.currentFolderFilter !== 'all' && NotesManager.currentFolderFilter !== noteFolder) {
+            NotesManager.currentFolderFilter = 'all';
+            filterReset = true;
+          }
+          const noteProjId = item.data.projectId || item.data.linkedProjectId || null;
+          if (NotesManager.currentProjectFilter && NotesManager.currentProjectFilter !== 'all' && NotesManager.currentProjectFilter !== noteProjId) {
+            NotesManager.currentProjectFilter = 'all';
+            const projSel = typeof document !== 'undefined' ? document.getElementById('notes-filter-project') : null;
+            if (projSel) projSel.value = 'all';
+            filterReset = true;
+          }
+          if (NotesManager.searchQuery) {
+            NotesManager.searchQuery = '';
+            const nSearch = typeof document !== 'undefined' ? document.getElementById('notes-search-input') : null;
+            if (nSearch) nSearch.value = '';
+            filterReset = true;
+          }
+          if (filterReset) {
+            if (typeof NotesManager.renderFolderFilter === 'function') NotesManager.renderFolderFilter();
+            if (typeof NotesManager.renderNotesList === 'function') NotesManager.renderNotesList();
+          }
+        }
         navigateApp('notes');
         if (typeof NotesManager !== 'undefined' && typeof NotesManager.selectNote === 'function') {
           setTimeout(() => {
@@ -451,8 +610,8 @@ const SearchManager = {
   },
 
   escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 };
 

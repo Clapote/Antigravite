@@ -538,6 +538,30 @@ if (Test-Path $nodePath) {
 Assert-Test "UX v1.3.0 (Archivage cascade projets/tâches, bouton replier/déplier unique, orbite planétaire & bilan hebdo)" $uxArchivingPass
 
 # -----------------------------------------------------------------------------
+# TEST 38 : Nouveautés v1.3.1 Remplissage dynamique des glissières (Paramètres & Studio)
+# -----------------------------------------------------------------------------
+Write-Host "`n38. Vérification du remplissage dynamique des tirettes de réglage..." -ForegroundColor Yellow
+
+$v131Pass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_v131_features.js")
+    $v131Pass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Tirettes de réglage v1.3.1 (Remplissage dynamique de la piste --slider-percent dans Paramètres & Studio)" $v131Pass
+
+# -----------------------------------------------------------------------------
+# TEST 39 : Liens inter-onglets & Automatisations (Lot A + Lot B v1.3.1)
+# -----------------------------------------------------------------------------
+Write-Host "`n39. Vérification des liens inter-onglets et automatisations..." -ForegroundColor Yellow
+
+$crossLinksPass = $false
+if (Test-Path $nodePath) {
+    & $nodePath (Join-Path $baseDir "tests\test_cross_links_v131.js")
+    $crossLinksPass = ($LASTEXITCODE -eq 0)
+}
+Assert-Test "Liens inter-onglets & Automatisations v1.3.1 (Google Sync, Corbeille, Export, Notes<->Tâches, Focus<->Debrief, Notifications & Constellation)" $crossLinksPass
+
+# -----------------------------------------------------------------------------
 # BILAN
 # -----------------------------------------------------------------------------
 Write-Host "`n==========================================================" -ForegroundColor Cyan

@@ -1,10 +1,19 @@
 const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, Notification, session, globalShortcut, dialog, shell, nativeTheme } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
+const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 
-// Définir immédiatement le nom d'application pour que app.getPath('userData') soit garanti et immuable dès l'import des modules
+// Définir immédiatement le nom d'application et l'isolation éventuelle AVANT l'import des services qui lisent userData
 app.setName('Antigravite');
+
+// Mode isolé pour les tests de développement sans conflit avec l'application installée
+if (process.argv.includes('--isolated') || process.env.ANTIGRAVITE_ISOLATED) {
+  const isolatedDir = path.join(app.getPath('temp'), 'antigravite-test-profile');
+  app.setPath('userData', isolatedDir);
+}
 
 const googleAuth = require('./services/google-auth-service');
 const googleCalendar = require('./services/google-calendar-service');
@@ -15,16 +24,32 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('fr.antigravite.app');
 }
 
-// Optimisations matérielles GPU & moteur de rendu Chromium
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
-app.commandLine.appendSwitch('lang', 'fr-FR');
-
-// Mode isolé pour les tests de développement sans conflit avec l'application installée
-if (process.argv.includes('--isolated') || process.env.ANTIGRAVITE_ISOLATED) {
-  const isolatedDir = path.join(app.getPath('temp'), 'antigravite-test-profile');
-  app.setPath('userData', isolatedDir);
+// Optimisations matérielles GPU adaptatives selon le matériel et les préférences utilisateur
+function readEarlyDesktopGpuPrefs() {
+  try {
+    const prefsPath = path.join(app.getPath('userData'), 'desktop-preferences.json');
+    if (fsSync.existsSync(prefsPath)) {
+      const parsed = JSON.parse(fsSync.readFileSync(prefsPath, 'utf8'));
+      if (parsed && typeof parsed === 'object') {
+        return {
+          performanceMode: parsed.performanceMode || 'normal',
+          gpuCompatibilityMode: !!parsed.gpuCompatibilityMode
+        };
+      }
+    }
+  } catch (_) {}
+  return { performanceMode: 'normal', gpuCompatibilityMode: false };
 }
+
+const earlyGpuPrefs = readEarlyDesktopGpuPrefs();
+if (earlyGpuPrefs.performanceMode !== 'potato' && !earlyGpuPrefs.gpuCompatibilityMode) {
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('enable-zero-copy');
+} else if (earlyGpuPrefs.performanceMode !== 'potato') {
+  // Mode compatibilité GPU : évite enable-zero-copy sur certains chipsets Intel/AMD ou VM
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+}
+app.commandLine.appendSwitch('lang', 'fr-FR');
 
 // Protection globale contre les interruptions inattendues du processus principal
 process.on('uncaughtException', (err) => {
@@ -77,13 +102,16 @@ if (!gotSingleInstanceLock) {
   });
 }
 
+let hasBooted = false;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let desktopPrefs = {
   runInBackgroundOnClose: true,
   backupDirectory: null,
-  launchOnStartup: false
+  launchOnStartup: false,
+  performanceMode: 'normal',
+  gpuCompatibilityMode: false
 };
 
 function getDesktopPrefsPath() {
@@ -92,7 +120,6 @@ function getDesktopPrefsPath() {
 
 function loadDesktopPrefsSync() {
   try {
-    const fsSync = require('node:fs');
     const prefsPath = getDesktopPrefsPath();
     if (fsSync.existsSync(prefsPath)) {
       const parsed = JSON.parse(fsSync.readFileSync(prefsPath, 'utf8'));
@@ -100,7 +127,9 @@ function loadDesktopPrefsSync() {
         desktopPrefs = {
           runInBackgroundOnClose: parsed.runInBackgroundOnClose !== false,
           backupDirectory: (typeof parsed.backupDirectory === 'string' && parsed.backupDirectory.trim()) ? parsed.backupDirectory.trim() : null,
-          launchOnStartup: !!parsed.launchOnStartup
+          launchOnStartup: !!parsed.launchOnStartup,
+          performanceMode: parsed.performanceMode || 'normal',
+          gpuCompatibilityMode: !!parsed.gpuCompatibilityMode
         };
       }
     }
@@ -116,7 +145,9 @@ async function saveDesktopPrefs(patch = {}) {
     backupDirectory: patch.backupDirectory !== undefined
       ? ((typeof patch.backupDirectory === 'string' && patch.backupDirectory.trim()) ? patch.backupDirectory.trim() : null)
       : desktopPrefs.backupDirectory,
-    launchOnStartup: patch.launchOnStartup !== undefined ? !!patch.launchOnStartup : !!desktopPrefs.launchOnStartup
+    launchOnStartup: patch.launchOnStartup !== undefined ? !!patch.launchOnStartup : !!desktopPrefs.launchOnStartup,
+    performanceMode: patch.performanceMode !== undefined ? (patch.performanceMode || 'normal') : (desktopPrefs.performanceMode || 'normal'),
+    gpuCompatibilityMode: patch.gpuCompatibilityMode !== undefined ? !!patch.gpuCompatibilityMode : !!desktopPrefs.gpuCompatibilityMode
   };
   try {
     const prefsPath = getDesktopPrefsPath();
@@ -144,34 +175,160 @@ function isPathInsideDir(targetPath, rootDir) {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
+function parseBackupFilenameTimestamp(filename) {
+  if (typeof filename !== 'string') return NaN;
+  const match = filename.match(/antigravite_backup_(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?(Z)?/i);
+  if (!match) return NaN;
+  const isoStr = `${match[1]}T${match[2]}:${match[3]}:${match[4]}.${match[5] || '000'}${match[6] || 'Z'}`;
+  return new Date(isoStr).getTime();
+}
+
 async function listBackupFilesInDir(backupDirectory) {
   await fs.mkdir(backupDirectory, { recursive: true });
   const files = await fs.readdir(backupDirectory, { withFileTypes: true });
-  const backups = await Promise.all(
-    files
-      .filter(file => file.isFile() && /^antigravite_backup_.*\.json$/i.test(file.name))
-      .map(async file => {
-        const fullPath = path.join(backupDirectory, file.name);
-        const stats = await fs.stat(fullPath);
-        return {
-          filename: file.name,
-          path: fullPath,
-          size: stats.size,
-          createdAt: stats.mtime.toISOString()
-        };
-      })
+  const matching = files.filter(file => file.isFile() && /^antigravite_backup_.*\.json$/i.test(file.name));
+  const settled = await Promise.allSettled(
+    matching.map(async file => {
+      const fullPath = path.join(backupDirectory, file.name);
+      const stats = await fs.stat(fullPath);
+      const parsedMs = parseBackupFilenameTimestamp(file.name);
+      const createdAt = Number.isFinite(parsedMs)
+        ? new Date(parsedMs).toISOString()
+        : stats.mtime.toISOString();
+      return {
+        filename: file.name,
+        path: fullPath,
+        size: stats.size,
+        createdAt
+      };
+    })
   );
+  const backups = settled
+    .filter(r => r.status === 'fulfilled' && r.value)
+    .map(r => r.value);
   return backups.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
 function getWindowsStartupShortcutPath() {
   if (process.platform !== 'win32') return null;
   try {
-    const startupDir = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+    const appDataDir = app.getPath('appData') || process.env.APPDATA || '';
+    if (!appDataDir) return null;
+    const startupDir = path.join(appDataDir, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
     return path.join(startupDir, 'Antigravite.lnk');
   } catch (_) {
+    if (process.env.APPDATA) {
+      return path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Antigravite.lnk');
+    }
     return null;
   }
+}
+
+/**
+ * Résout l'exécutable cible, les arguments et le dossier de travail
+ * de manière strictement cohérente pour le raccourci Startup et le registre.
+ */
+function resolveWindowsStartupTarget() {
+  let targetExe = process.execPath;
+  let targetArgs = '';
+  let regArgs = [];
+  let targetCwd = path.dirname(process.execPath);
+
+  if (!app.isPackaged) {
+    const installedExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Antigravite', 'Antigravite.exe');
+    if (fsSync.existsSync(installedExe)) {
+      targetExe = installedExe;
+      targetCwd = path.dirname(installedExe);
+    } else {
+      const appPath = app.getAppPath();
+      targetArgs = `"${appPath}"`;
+      regArgs = [targetArgs];
+      targetCwd = appPath;
+    }
+  }
+
+  return { targetExe, targetArgs, regArgs, targetCwd };
+}
+
+/**
+ * Garantit l'inscription/suppression directe dans HKCU\Run et le déblocage
+ * StartupApproved (Gestionnaire des tâches Windows) pour le raccourci et le registre.
+ */
+function syncWindowsRegistryStartup(enabled, targetExe, targetArgs) {
+  const REG_RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+  const REG_APPROVED_RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run';
+  const REG_APPROVED_FOLDER_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\StartupFolder';
+  let regSuccess = false;
+
+  try {
+    if (enabled) {
+      const regValueData = targetArgs ? `"${targetExe}" ${targetArgs}` : `"${targetExe}"`;
+      execFileSync('reg.exe', ['add', REG_RUN_KEY, '/v', 'Antigravite', '/t', 'REG_SZ', '/d', regValueData, '/f'], {
+        windowsHide: true,
+        stdio: 'ignore',
+        timeout: 2500
+      });
+      // Nettoyer une éventuelle ancienne entrée sous AppUserModelId
+      try {
+        execFileSync('reg.exe', ['delete', REG_RUN_KEY, '/v', 'fr.antigravite.app', '/f'], {
+          windowsHide: true,
+          stdio: 'ignore',
+          timeout: 2000
+        });
+      } catch (_) {}
+      // Approuver explicitement dans Task Manager / Windows Settings (octet 02 = Activé)
+      try {
+        execFileSync('reg.exe', ['add', REG_APPROVED_RUN_KEY, '/v', 'Antigravite', '/t', 'REG_BINARY', '/d', '020000000000000000000000', '/f'], {
+          windowsHide: true,
+          stdio: 'ignore',
+          timeout: 2000
+        });
+      } catch (_) {}
+      try {
+        execFileSync('reg.exe', ['add', REG_APPROVED_FOLDER_KEY, '/v', 'Antigravite.lnk', '/t', 'REG_BINARY', '/d', '020000000000000000000000', '/f'], {
+          windowsHide: true,
+          stdio: 'ignore',
+          timeout: 2000
+        });
+      } catch (_) {}
+
+      const queryOut = execFileSync('reg.exe', ['query', REG_RUN_KEY, '/v', 'Antigravite'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 2000
+      });
+      regSuccess = Boolean(queryOut && queryOut.includes('Antigravite'));
+    } else {
+      for (const valueName of ['Antigravite', 'fr.antigravite.app']) {
+        try {
+          execFileSync('reg.exe', ['delete', REG_RUN_KEY, '/v', valueName, '/f'], {
+            windowsHide: true,
+            stdio: 'ignore',
+            timeout: 2000
+          });
+        } catch (_) {}
+        try {
+          execFileSync('reg.exe', ['delete', REG_APPROVED_RUN_KEY, '/v', valueName, '/f'], {
+            windowsHide: true,
+            stdio: 'ignore',
+            timeout: 2000
+          });
+        } catch (_) {}
+      }
+      try {
+        execFileSync('reg.exe', ['delete', REG_APPROVED_FOLDER_KEY, '/v', 'Antigravite.lnk', '/f'], {
+          windowsHide: true,
+          stdio: 'ignore',
+          timeout: 2000
+        });
+      } catch (_) {}
+      regSuccess = true;
+    }
+  } catch (err) {
+    console.warn('[Startup] Erreur synchronisation reg.exe HKCU\\Run:', err.message);
+  }
+
+  return regSuccess;
 }
 
 function applyWindowsLoginItem(enabled) {
@@ -179,6 +336,7 @@ function applyWindowsLoginItem(enabled) {
     return { supported: false, enabled: false, isPackaged: app.isPackaged };
   }
 
+  const { targetExe, targetArgs, regArgs, targetCwd } = resolveWindowsStartupTarget();
   const shortcutPath = getWindowsStartupShortcutPath();
   let shortcutSuccess = false;
 
@@ -187,22 +345,6 @@ function applyWindowsLoginItem(enabled) {
   if (shortcutPath) {
     try {
       if (enabled) {
-        let targetExe = process.execPath;
-        let targetArgs = '';
-        let targetCwd = path.dirname(process.execPath);
-
-        // Si exécution en dev mais que l'application officielle est installée, pointer vers l'installateur officiel
-        if (!app.isPackaged) {
-          const installedExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Antigravite', 'Antigravite.exe');
-          if (fsSync.existsSync(installedExe)) {
-            targetExe = installedExe;
-            targetCwd = path.dirname(installedExe);
-          } else {
-            targetArgs = `"${app.getAppPath()}"`;
-            targetCwd = app.getAppPath();
-          }
-        }
-
         const appIconPath = getAppIconPath();
         const details = {
           target: targetExe,
@@ -213,8 +355,12 @@ function applyWindowsLoginItem(enabled) {
         if (targetArgs) {
           details.args = targetArgs;
         }
-        if (appIconPath && fsSync.existsSync(appIconPath)) {
+        // Windows Explorer ne peut pas lire une icône empaquetée dans app.asar : privilégier un .ico hors asar ou l'exécutable .exe
+        if (appIconPath && !appIconPath.includes('.asar') && fsSync.existsSync(appIconPath)) {
           details.icon = appIconPath;
+          details.iconIndex = 0;
+        } else if (fsSync.existsSync(targetExe)) {
+          details.icon = targetExe;
           details.iconIndex = 0;
         }
 
@@ -222,35 +368,51 @@ function applyWindowsLoginItem(enabled) {
         if (!fsSync.existsSync(dir)) {
           fsSync.mkdirSync(dir, { recursive: true });
         }
-        shortcutSuccess = shell.writeShortcutLink(shortcutPath, 'create', details);
+        const written = shell.writeShortcutLink(shortcutPath, 'create', details);
+        shortcutSuccess = Boolean(written && fsSync.existsSync(shortcutPath));
       } else {
         if (fsSync.existsSync(shortcutPath)) {
           fsSync.unlinkSync(shortcutPath);
         }
-        shortcutSuccess = true;
+        shortcutSuccess = !fsSync.existsSync(shortcutPath);
       }
     } catch (err) {
       console.warn('[Startup] Erreur raccourci dossier Démarrage Windows:', err.message);
     }
   }
 
-  // 2. Double sécurité : synchronisation avec l'API Electron native (Registre HKCU\Run)
+  // 2. Double sécurité : synchronisation avec l'API Electron native et reg.exe (Registre HKCU\Run + StartupApproved)
   let registrySuccess = false;
   try {
     const settings = {
       openAtLogin: !!enabled,
-      path: process.execPath,
+      enabled: !!enabled,
+      path: targetExe,
       name: 'Antigravite',
-      args: app.isPackaged ? [] : [app.getAppPath()]
+      args: regArgs
     };
     app.setLoginItemSettings(settings);
+    if (!enabled) {
+      try {
+        app.setLoginItemSettings({
+          openAtLogin: false,
+          path: targetExe,
+          args: regArgs
+        });
+      } catch (_) {}
+    }
     const actual = app.getLoginItemSettings({
-      path: process.execPath,
-      args: app.isPackaged ? [] : [app.getAppPath()]
+      path: targetExe,
+      args: regArgs
     });
-    registrySuccess = !!actual.openAtLogin;
+    registrySuccess = !!(actual && (actual.openAtLogin || actual.executableWillLaunchAtLogin));
   } catch (err) {
     console.warn('[Startup] Erreur app.setLoginItemSettings:', err.message);
+  }
+
+  const directRegOk = syncWindowsRegistryStartup(!!enabled, targetExe, targetArgs);
+  if (enabled) {
+    registrySuccess = registrySuccess || directRegOk;
   }
 
   const isNowActive = enabled ? (shortcutSuccess || registrySuccess) : false;
@@ -258,6 +420,8 @@ function applyWindowsLoginItem(enabled) {
   return {
     supported: true,
     enabled: isNowActive,
+    shortcutActive: shortcutSuccess,
+    registryActive: registrySuccess,
     isPackaged: app.isPackaged
   };
 }
@@ -385,6 +549,9 @@ function getInitialAppearance() {
 }
 
 function createWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow;
+  }
   // Supprimer définitivement la barre de menus par défaut (File, Edit, View...)
   Menu.setApplicationMenu(null);
 
@@ -452,6 +619,15 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
+  if (mainWindow.webContents && typeof mainWindow.webContents.setWindowOpenHandler === 'function') {
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+        shell.openExternal(url).catch(() => {});
+      }
+      return { action: 'deny' };
+    });
+  }
+
   mainWindow.on('maximize', () => {
     if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
       mainWindow.webContents.send('antigravite:window-maximize-changed', true);
@@ -463,6 +639,28 @@ function createWindow() {
       mainWindow.webContents.send('antigravite:window-maximize-changed', false);
     }
   });
+
+  mainWindow.on('enter-full-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send('antigravite:window-maximize-changed', true);
+    }
+  });
+
+  mainWindow.on('leave-full-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send('antigravite:window-maximize-changed', mainWindow.isMaximized());
+    }
+  });
+
+  const emitWindowVisibility = (visible) => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send('antigravite:window-visibility', { visible: !!visible });
+    }
+  };
+  mainWindow.on('hide', () => emitWindowVisibility(false));
+  mainWindow.on('minimize', () => emitWindowVisibility(false));
+  mainWindow.on('show', () => emitWindowVisibility(true));
+  mainWindow.on('restore', () => emitWindowVisibility(true));
 
   // Menu contextuel natif pour la correction orthographique des notes et les actions d'édition
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -544,7 +742,8 @@ ipcMain.handle('antigravite:save-backup', async (_event, data) => {
   await fs.mkdir(backupDirectory, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = `antigravite_backup_${timestamp}.json`;
+  const uniqueSuffix = Math.random().toString(36).slice(2, 6);
+  const filename = `antigravite_backup_${timestamp}_${uniqueSuffix}.json`;
   const destination = path.join(backupDirectory, filename);
 
   await fs.writeFile(destination, JSON.stringify(data, null, 2), {
@@ -743,25 +942,74 @@ ipcMain.handle('antigravite:google-fetch-events', async (_event, options) => {
   return googleCalendar.fetchEvents(options || {});
 });
 
+async function invokeWithStructuredError(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    return {
+      __ipcError: true,
+      code: err && err.code ? err.code : null,
+      status: err && err.status ? err.status : null,
+      message: err && err.message ? err.message : String(err)
+    };
+  }
+}
+
 ipcMain.handle('antigravite:google-create-event', async (_event, eventData) => {
-  return googleCalendar.createEvent(eventData);
+  return invokeWithStructuredError(() => googleCalendar.createEvent(eventData));
 });
 
 ipcMain.handle('antigravite:google-update-event', async (_event, { googleId, eventData, calendarId, expectedEtag }) => {
-  return googleCalendar.updateEvent(googleId, eventData, calendarId, expectedEtag);
+  return invokeWithStructuredError(() => googleCalendar.updateEvent(googleId, eventData, calendarId, expectedEtag));
 });
 
 ipcMain.handle('antigravite:google-delete-event', async (_event, { googleId, calendarId }) => {
-  return googleCalendar.deleteEvent(googleId, calendarId);
+  return invokeWithStructuredError(() => googleCalendar.deleteEvent(googleId, calendarId));
 });
 
 ipcMain.handle('antigravite:open-external', async (_event, url) => {
-  if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
-    const { shell } = require('electron');
+  if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
     await shell.openExternal(url);
     return true;
   }
   return false;
+});
+
+function getCustomWallpaperFilePath() {
+  return path.join(app.getPath('userData'), 'custom-wallpaper.dat');
+}
+
+ipcMain.handle('antigravite:save-custom-wallpaper', async (_event, dataUrl) => {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/') || dataUrl.length > 10 * 1024 * 1024) {
+    throw new Error('Image de fond d\'écran invalide ou trop volumineuse.');
+  }
+  const target = getCustomWallpaperFilePath();
+  const tmp = `${target}.${Date.now()}.tmp`;
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(tmp, dataUrl, 'utf8');
+  await fs.rename(tmp, target);
+  return { ok: true, token: '__custom_wallpaper__' };
+});
+
+ipcMain.handle('antigravite:load-custom-wallpaper', async () => {
+  try {
+    const content = await fs.readFile(getCustomWallpaperFilePath(), 'utf8');
+    return (typeof content === 'string' && content.startsWith('data:image/')) ? content : null;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    return null;
+  }
+});
+
+ipcMain.handle('antigravite:clear-custom-wallpaper', async () => {
+  try {
+    await fs.unlink(getCustomWallpaperFilePath());
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') {
+      console.warn('[Wallpaper] Impossible de supprimer custom-wallpaper.dat:', err && err.message);
+    }
+  }
+  return { ok: true };
 });
 
 // =========================================================================
@@ -791,7 +1039,7 @@ function getPersonalMusicDir() {
  * 4. Prévention des copies partielles : copie dans un fichier temporaire puis renommage atomique avec vérification de taille.
  * 5. Seuls les formats audio autorisés sont traités.
  */
-function copyMusicFilesToPersonalFolder(filePaths) {
+async function copyMusicFilesToPersonalFolder(filePaths) {
   const fsSync = require('node:fs');
   const allowedExts = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac', '.opus', '.weba']);
   const personalDir = getPersonalMusicDir();
@@ -872,15 +1120,15 @@ function copyMusicFilesToPersonalFolder(filePaths) {
       const tempFilePath = path.join(personalDir, tempFileName);
 
       try {
-        fsSync.copyFileSync(srcPath, tempFilePath);
-        const tempStat = fsSync.statSync(tempFilePath);
+        await fs.copyFile(srcPath, tempFilePath);
+        const tempStat = await fs.stat(tempFilePath);
         if (tempStat.size !== srcStat.size) {
-          try { fsSync.unlinkSync(tempFilePath); } catch (_) {}
+          await fs.unlink(tempFilePath).catch(() => {});
           results.errors.push({ file: baseFileName, error: 'Copie incomplète : la taille sur disque ne correspond pas.' });
           continue;
         }
         // Renommage atomique vers le nom définitif
-        fsSync.renameSync(tempFilePath, finalTargetPath);
+        await fs.rename(tempFilePath, finalTargetPath);
 
         results.copied.push({
           filename: finalTargetName,
@@ -926,6 +1174,17 @@ ipcMain.handle('antigravite:get-personal-music-path', () => {
   return getPersonalMusicDir();
 });
 
+let _localMusicCatalogCache = null;
+
+async function _safeStatMtime(targetPath) {
+  try {
+    const st = await fs.stat(targetPath);
+    return `${Math.round(st.mtimeMs || 0)}:${st.size || 0}`;
+  } catch (_) {
+    return 'missing';
+  }
+}
+
 ipcMain.handle('antigravite:select-and-copy-music', async () => {
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   const result = await dialog.showOpenDialog(win, {
@@ -942,7 +1201,8 @@ ipcMain.handle('antigravite:select-and-copy-music', async () => {
     return { canceled: true, copied: [], duplicates: [], errors: [] };
   }
 
-  const copyResult = copyMusicFilesToPersonalFolder(result.filePaths);
+  const copyResult = await copyMusicFilesToPersonalFolder(result.filePaths);
+  _localMusicCatalogCache = null;
   return { canceled: false, ...copyResult };
 });
 
@@ -950,32 +1210,23 @@ ipcMain.handle('antigravite:copy-music-files', async (_event, filePaths) => {
   if (!Array.isArray(filePaths) || filePaths.length === 0) {
     return { canceled: false, copied: [], duplicates: [], errors: [] };
   }
-  const copyResult = copyMusicFilesToPersonalFolder(filePaths);
+  const copyResult = await copyMusicFilesToPersonalFolder(filePaths);
+  _localMusicCatalogCache = null;
   return { canceled: false, ...copyResult };
 });
 
-ipcMain.handle('antigravite:list-local-music', async () => {
-  const fsSync = require('node:fs');
+ipcMain.handle('antigravite:list-local-music', async (_event, options = {}) => {
+  const forceRefresh = !!(options && options.forceRefresh);
   const allowedExts = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac', '.opus', '.weba']);
-  const tracks = [];
 
-  // Mappage des dossiers de catégories et métadonnées prédéfinis
   const tracksJsonPath = path.join(__dirname, 'data', 'music-tracks.json');
-  const infoMap = {};
-  if (fsSync.existsSync(tracksJsonPath)) {
-    try {
-      const savedTracks = JSON.parse(fsSync.readFileSync(tracksJsonPath, 'utf8'));
-      if (Array.isArray(savedTracks)) {
-        savedTracks.forEach(t => {
-          if (t.filename) infoMap[t.filename] = t;
-        });
-      }
-    } catch (_e) {}
-  }
-
   const personalDir = getPersonalMusicDir();
   const unpackedDir = path.join(process.resourcesPath || '', 'app.asar.unpacked', 'music');
-  const bundledMusicDir = fsSync.existsSync(unpackedDir) ? unpackedDir : path.join(__dirname, 'music');
+  let bundledMusicDir = path.join(__dirname, 'music');
+  try {
+    await fs.access(unpackedDir);
+    bundledMusicDir = unpackedDir;
+  } catch (_) {}
 
   const candidates = [
     { dir: bundledMusicDir, prefix: './music/', defaultFolder: 'Focus, Rituals & Daily Routines', type: 'local' },
@@ -983,54 +1234,97 @@ ipcMain.handle('antigravite:list-local-music', async () => {
     { dir: personalDir, prefix: null, defaultFolder: 'Musique personnelle', type: 'personal' }
   ];
 
-  for (const item of candidates) {
-    if (fsSync.existsSync(item.dir)) {
-      try {
-        const entries = fsSync.readdirSync(item.dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isFile()) {
-            const ext = path.extname(entry.name).toLowerCase();
-            if (allowedExts.has(ext)) {
-              const baseName = path.basename(entry.name, ext);
-              const parts = baseName.split(' - ');
-              let artist = (item.type === 'personal') ? 'Musique personnelle' : 'Antigravité Lofi';
-              let title = baseName;
-              if (parts.length >= 2) {
-                artist = parts[0].replace(/^\d+[\s._-]*/, '').trim() || ((item.type === 'personal') ? 'Musique personnelle' : 'Antigravité Lofi');
-                title = parts.slice(1).join(' - ').trim();
-              } else {
-                title = baseName
-                  .replace(/[-_]+/g, ' ')
-                  .replace(/\b[a-z]/g, char => char.toUpperCase())
-                  .trim();
-              }
-              const fullPath = path.join(item.dir, entry.name);
-              const stats = fsSync.statSync(fullPath);
-              const meta = infoMap[entry.name] || {};
-              const fileUrl = pathToFileURL(fullPath).href;
-              const idPrefix = (item.type === 'personal') ? 'personal-' : 'track-';
-              tracks.push({
-                id: idPrefix + Buffer.from(entry.name).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16),
-                filename: entry.name,
-                title: title || baseName,
-                artist: meta.artist || artist,
-                folder: meta.folder || item.defaultFolder || 'Focus, Rituals & Daily Routines',
-                duration: meta.duration || 0,
-                durationFormatted: meta.durationFormatted || '--:--',
-                src: item.prefix ? (item.prefix + encodeURIComponent(entry.name)) : fileUrl,
-                fileUrl: fileUrl,
-                size: stats.size,
-                ext: ext.slice(1).toUpperCase(),
-                type: item.type
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('[Music] Erreur lecture dossier musical:', err.message);
-      }
-    }
+  // Signature légère basée uniquement sur mtimeMs des dossiers et du manifest JSON
+  const sigParts = await Promise.all([
+    _safeStatMtime(tracksJsonPath),
+    ...candidates.map(c => _safeStatMtime(c.dir))
+  ]);
+  const cacheSig = sigParts.join('|');
+  if (!forceRefresh && _localMusicCatalogCache && _localMusicCatalogCache.sig === cacheSig) {
+    return _localMusicCatalogCache.tracks;
   }
+
+  // Mappage des dossiers de catégories et métadonnées prédéfinis (asynchrone)
+  const infoMap = {};
+  try {
+    const rawJson = await fs.readFile(tracksJsonPath, 'utf8');
+    const savedTracks = JSON.parse(rawJson);
+    if (Array.isArray(savedTracks)) {
+      savedTracks.forEach(t => {
+        if (t && t.filename) infoMap[t.filename] = t;
+      });
+    }
+  } catch (_e) {}
+
+  const perFolderResults = await Promise.all(
+    candidates.map(async (item) => {
+      const folderTracks = [];
+      try {
+        const entries = await fs.readdir(item.dir, { withFileTypes: true });
+        const audioEntries = entries.filter((entry) => {
+          if (!entry.isFile()) return false;
+          return allowedExts.has(path.extname(entry.name).toLowerCase());
+        });
+
+        const settled = await Promise.allSettled(
+          audioEntries.map(async (entry) => {
+            const ext = path.extname(entry.name).toLowerCase();
+            const baseName = path.basename(entry.name, ext);
+            const parts = baseName.split(' - ');
+            let artist = (item.type === 'personal') ? 'Musique personnelle' : 'Antigravité Lofi';
+            let title = baseName;
+            if (parts.length >= 2) {
+              artist = parts[0].replace(/^\d+[\s._-]*/, '').trim() || ((item.type === 'personal') ? 'Musique personnelle' : 'Antigravité Lofi');
+              title = parts.slice(1).join(' - ').trim();
+            } else {
+              title = baseName
+                .replace(/[-_]+/g, ' ')
+                .replace(/\b[a-z]/g, char => char.toUpperCase())
+                .trim();
+            }
+
+            const fullPath = path.join(item.dir, entry.name);
+            const stats = await fs.stat(fullPath);
+            const meta = infoMap[entry.name] || {};
+            const fileUrl = pathToFileURL(fullPath).href;
+            const idPrefix = (item.type === 'personal') ? 'personal-' : 'track-';
+            const idHash = crypto.createHash('sha1').update(`${item.type}:${entry.name}`).digest('hex').slice(0, 16);
+            return {
+              id: idPrefix + idHash,
+              filename: entry.name,
+              title: title || baseName,
+              artist: meta.artist || artist,
+              folder: meta.folder || item.defaultFolder || 'Focus, Rituals & Daily Routines',
+              duration: meta.duration || 0,
+              durationFormatted: meta.durationFormatted || '--:--',
+              src: item.prefix ? (item.prefix + encodeURIComponent(entry.name)) : fileUrl,
+              fileUrl: fileUrl,
+              size: stats.size,
+              ext: ext.slice(1).toUpperCase(),
+              type: item.type
+            };
+          })
+        );
+
+        settled.forEach((res, idx) => {
+          if (res.status === 'fulfilled' && res.value) {
+            folderTracks.push(res.value);
+          } else if (res.status === 'rejected') {
+            const name = audioEntries[idx] ? audioEntries[idx].name : 'inconnu';
+            console.warn('[Music] Fichier ignoré (inaccessible):', name, res.reason && res.reason.message);
+          }
+        });
+      } catch (err) {
+        if (!err || err.code !== 'ENOENT') {
+          console.warn('[Music] Erreur lecture dossier musical:', err && err.message ? err.message : err);
+        }
+      }
+      return folderTracks;
+    })
+  );
+
+  const tracks = perFolderResults.flat();
+  _localMusicCatalogCache = { sig: cacheSig, tracks };
   return tracks;
 });
 
@@ -1044,13 +1338,8 @@ ipcMain.handle('antigravite:set-title-bar-overlay', async (_event, options) => {
         if (options.backgroundColor && typeof mainWindow.setBackgroundColor === 'function') {
           mainWindow.setBackgroundColor(options.backgroundColor);
         }
-        if (typeof mainWindow.setTitleBarOverlay === 'function') {
-          const overlayOpts = {};
-          if (options.color) overlayOpts.color = options.color;
-          if (options.symbolColor) overlayOpts.symbolColor = options.symbolColor;
-          if (typeof options.height === 'number') overlayOpts.height = options.height;
-          mainWindow.setTitleBarOverlay(overlayOpts);
-        }
+        // Note: mainWindow utilise titleBarStyle: 'hidden' avec des contrôles HTML personnalisés (#window-controls-container)
+        // sans titleBarOverlay natif ; éviter l'appel systématique à setTitleBarOverlay() qui échoue sans overlay natif.
       }
       return true;
     } catch (e) {
@@ -1071,18 +1360,20 @@ ipcMain.handle('antigravite:window-minimize', () => {
 
 ipcMain.handle('antigravite:window-maximize', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMaximized()) {
+    if (typeof mainWindow.isFullScreen === 'function' && mainWindow.isFullScreen()) {
+      mainWindow.setFullScreen(false);
+    } else if (mainWindow.isMaximized()) {
       mainWindow.unmaximize();
     } else {
       mainWindow.maximize();
     }
-    return mainWindow.isMaximized();
+    return mainWindow.isMaximized() || (typeof mainWindow.isFullScreen === 'function' && mainWindow.isFullScreen());
   }
   return false;
 });
 
 ipcMain.handle('antigravite:window-is-maximized', () => {
-  return !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized());
+  return !!(mainWindow && !mainWindow.isDestroyed() && (mainWindow.isMaximized() || (typeof mainWindow.isFullScreen === 'function' && mainWindow.isFullScreen())));
 });
 
 ipcMain.handle('antigravite:window-close', () => {
@@ -1115,6 +1406,11 @@ ipcMain.handle('antigravite:show-notification', async (_event, options) => {
 
     notif.on('click', () => {
       restoreAndFocusWindow();
+      if (options.action && mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+        try {
+          mainWindow.webContents.send('antigravite:notification-clicked', options.action);
+        } catch (_) {}
+      }
     });
 
     notif.show();
@@ -1141,9 +1437,10 @@ ipcMain.handle('antigravite:get-desktop-prefs', () => {
     try {
       const shortcutPath = getWindowsStartupShortcutPath();
       const shortcutExists = shortcutPath && fsSync.existsSync(shortcutPath);
+      const { targetExe, regArgs } = resolveWindowsStartupTarget();
       const loginInfo = app.getLoginItemSettings({
-        path: process.execPath,
-        args: app.isPackaged ? [] : [app.getAppPath()]
+        path: targetExe,
+        args: regArgs
       });
       actualLogin = !!(shortcutExists || loginInfo.openAtLogin || desktopPrefs.launchOnStartup);
     } catch (_) {}
@@ -1163,15 +1460,16 @@ ipcMain.handle('antigravite:get-desktop-prefs', () => {
 
 ipcMain.handle('antigravite:set-desktop-prefs', async (_event, prefs = {}) => {
   if (!prefs || typeof prefs !== 'object') return desktopPrefs;
-  const updated = await saveDesktopPrefs(prefs);
+  const nextPatch = { ...prefs };
   if (prefs.launchOnStartup !== undefined && process.platform === 'win32') {
     try {
-      applyWindowsLoginItem(prefs.launchOnStartup);
+      const res = applyWindowsLoginItem(prefs.launchOnStartup);
+      nextPatch.launchOnStartup = !!res.enabled;
     } catch (err) {
       console.warn('[Startup] Erreur configuration démarrage Windows:', err.message);
     }
   }
-  return updated;
+  return saveDesktopPrefs(nextPatch);
 });
 
 ipcMain.handle('antigravite:set-startup-setting', async (_event, enabled) => {
@@ -1292,6 +1590,14 @@ ipcMain.handle('antigravite:updater-enable-mock', () => {
 
 ipcMain.handle('antigravite:updater-install', async () => {
   isQuitting = true;
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    try {
+      await Promise.race([
+        mainWindow.webContents.executeJavaScript('if (window.NotesManager && typeof window.NotesManager.flushPendingSave === "function") window.NotesManager.flushPendingSave();', true),
+        new Promise(resolve => setTimeout(resolve, 350))
+      ]);
+    } catch (_) {}
+  }
   updateService.quitAndInstall(true, true);
   return true;
 });
@@ -1311,7 +1617,8 @@ app.on('before-quit', () => {
 });
 
 async function bootApplication() {
-  if (!gotSingleInstanceLock) return;
+  if (!gotSingleInstanceLock || hasBooted) return;
+  hasBooted = true;
   loadDesktopPrefsSync();
 
   // Si le lancement au démarrage est activé dans les préférences, synchroniser le raccourci et le registre
@@ -1403,3 +1710,12 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    getWindowsStartupShortcutPath,
+    resolveWindowsStartupTarget,
+    syncWindowsRegistryStartup,
+    applyWindowsLoginItem
+  };
+}

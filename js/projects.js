@@ -30,6 +30,32 @@ const ProjectsManager = {
     }
   },
 
+  _pruneCollapsedFamilies(projectsList = null) {
+    this._ensureCollapsedFamiliesLoaded();
+    if (this.collapsedFamilies.size === 0) return;
+    const projects = Array.isArray(projectsList) ? projectsList : this.getAll();
+    const activeParentIds = new Set();
+    for (let i = 0; i < projects.length; i++) {
+      const p = projects[i];
+      if (p && !p.archived && p.parentProjectId) {
+        const parent = projects.find(pr => pr && pr.id === p.parentProjectId && !pr.archived);
+        if (parent) activeParentIds.add(String(parent.id));
+      }
+    }
+    let changed = false;
+    for (const id of Array.from(this.collapsedFamilies)) {
+      if (!activeParentIds.has(id)) {
+        this.collapsedFamilies.delete(id);
+        changed = true;
+      }
+    }
+    if (changed && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('antigravite_collapsed_project_families', JSON.stringify(Array.from(this.collapsedFamilies)));
+      } catch (e) {}
+    }
+  },
+
   isFamilyCollapsed(projectId) {
     this._ensureCollapsedFamiliesLoaded();
     return Boolean(projectId && this.collapsedFamilies.has(String(projectId)));
@@ -147,9 +173,9 @@ const ProjectsManager = {
     return { roots: rootNodes, byId };
   },
 
-  init() {
+  init(options = {}) {
     if (this.initialized) {
-      this.render();
+      if (!options || !options.deferRender) this.render();
       return;
     }
     this.initialized = true;
@@ -159,7 +185,9 @@ const ProjectsManager = {
         this.viewMode = savedMode;
       }
     }
-    this.render();
+    if (!options || !options.deferRender) {
+      this.render();
+    }
     this.bindEvents();
   },
 
@@ -214,7 +242,7 @@ const ProjectsManager = {
 
   // Basculer entre tout déplier et tout replier
   toggleAllCollapse() {
-    this._ensureCollapsedFamiliesLoaded();
+    this._pruneCollapsedFamilies();
     if (this.collapsedFamilies.size > 0) {
       this.expandAll();
     } else {
@@ -227,7 +255,7 @@ const ProjectsManager = {
     if (typeof document === 'undefined') return;
     const btn = document.getElementById('btn-projects-toggle-collapse') || document.getElementById('btn-projects-expand-all');
     if (!btn) return;
-    this._ensureCollapsedFamiliesLoaded();
+    this._pruneCollapsedFamilies();
     const hasCollapsed = this.collapsedFamilies.size > 0;
     const label = hasCollapsed ? 'Tout déplier' : 'Tout replier';
     const title = hasCollapsed ? "Tout déplier dans l'arborescence" : "Tout replier au premier niveau";
@@ -311,13 +339,6 @@ const ProjectsManager = {
     });
 
     this.saveAll(projects);
-    this.render();
-    if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') {
-      TasksManager.render();
-    }
-    if (typeof App !== 'undefined' && typeof App.updateDashboard === 'function') {
-      App.updateDashboard(true);
-    }
     if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
       App.showToast(subprojectIds.length > 0 ? "Projet et sous-projets archivés" : "Projet archivé", "info");
     }
@@ -329,15 +350,35 @@ const ProjectsManager = {
     if (!target) return;
 
     const subprojectIds = [];
+    const visitedChildren = new Set([id]);
     const collectChildren = (parentId) => {
       projects.filter(p => p.parentProjectId === parentId).forEach(sub => {
+        if (visitedChildren.has(sub.id)) return;
+        visitedChildren.add(sub.id);
         subprojectIds.push(sub.id);
         collectChildren(sub.id);
       });
     };
     collectChildren(id);
 
-    const idsToRestore = new Set([id, ...subprojectIds]);
+    // Réactiver aussi les ancêtres archivés pour éviter les sous-projets orphelins invisibles
+    const restoredAncestorIds = [];
+    const visitedAncestors = new Set([id]);
+    let cursorParentId = target.parentProjectId;
+    while (cursorParentId && !visitedAncestors.has(cursorParentId)) {
+      visitedAncestors.add(cursorParentId);
+      const ancestor = projects.find(p => p.id === cursorParentId);
+      if (!ancestor) {
+        target.parentProjectId = null;
+        break;
+      }
+      if (ancestor.archived) {
+        restoredAncestorIds.push(ancestor.id);
+      }
+      cursorParentId = ancestor.parentProjectId;
+    }
+
+    const idsToRestore = new Set([id, ...subprojectIds, ...restoredAncestorIds]);
     projects.forEach(p => {
       if (idsToRestore.has(p.id)) {
         p.archived = false;
@@ -346,15 +387,11 @@ const ProjectsManager = {
     });
 
     this.saveAll(projects);
-    this.render();
-    if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') {
-      TasksManager.render();
-    }
-    if (typeof App !== 'undefined' && typeof App.updateDashboard === 'function') {
-      App.updateDashboard(true);
-    }
     if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
-      App.showToast("Projet et tâches réactivés", "success");
+      App.showToast(
+        restoredAncestorIds.length > 0 ? "Projet, branche parente et tâches réactivés" : "Projet et tâches réactivés",
+        "success"
+      );
     }
   },
 
@@ -493,6 +530,7 @@ const ProjectsManager = {
   },
 
   saveAll(projects) {
+    this._pruneCollapsedFamilies(projects);
     StorageManager.saveProjects(projects);
     this.render();
     if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') TasksManager.render();
@@ -503,13 +541,20 @@ const ProjectsManager = {
   },
 
   addProject(projectData) {
+    const safeTitle = (projectData && typeof projectData.title === 'string') ? projectData.title.trim() : '';
+    if (!safeTitle) {
+      if (window.App && typeof window.App.showToast === 'function') {
+        window.App.showToast("Le nom du projet est requis.", "warning");
+      }
+      return null;
+    }
     const projects = this.getAll();
     const parentId = projectData.parentProjectId ? String(projectData.parentProjectId) : null;
     const validParent = parentId && projects.some(p => p.id === parentId) ? parentId : null;
     const newProj = {
       id: 'proj-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-      title: projectData.title.trim(),
-      description: projectData.description ? projectData.description.trim() : '',
+      title: safeTitle,
+      description: projectData.description ? String(projectData.description).trim() : '',
       color: projectData.color || '#3b82f6',
       status: projectData.status || 'in_progress',
       parentProjectId: validParent,
@@ -526,13 +571,21 @@ const ProjectsManager = {
     const p = projects.find(item => item.id === id);
     if (!p) return false;
 
-    p.title = updatedData.title.trim();
-    p.description = updatedData.description ? updatedData.description.trim() : '';
+    const nextTitle = updatedData && updatedData.title !== undefined ? String(updatedData.title).trim() : p.title;
+    if (!nextTitle) {
+      if (window.App && typeof window.App.showToast === 'function') {
+        window.App.showToast("Le nom du projet est requis.", "warning");
+      }
+      return false;
+    }
+    p.title = nextTitle;
+    p.description = updatedData.description !== undefined ? String(updatedData.description || '').trim() : p.description;
     p.color = updatedData.color || p.color;
     p.status = updatedData.status || p.status;
     if (updatedData.parentProjectId !== undefined) {
       const nextParent = updatedData.parentProjectId || null;
-      if (!nextParent || !this.isDescendant(nextParent, id, projects)) {
+      const parentExists = !nextParent || projects.some(item => item.id === nextParent);
+      if (parentExists && (!nextParent || !this.isDescendant(nextParent, id, projects))) {
         p.parentProjectId = nextParent;
       }
     }
@@ -546,31 +599,32 @@ const ProjectsManager = {
   async deleteProject(id) {
     let projects = this.getAll();
     const projectToDelete = projects.find(p => p.id === id);
-    if (projectToDelete && typeof TrashManager !== 'undefined' && typeof TrashManager.moveToTrash === 'function') {
-      TrashManager.moveToTrash('project', projectToDelete);
-    }
-    const fallbackParentId = projectToDelete ? (projectToDelete.parentProjectId || null) : null;
-    projects = projects
-      .filter(p => p.id !== id)
-      .map(p => (p.parentProjectId === id ? Object.assign({}, p, { parentProjectId: fallbackParentId }) : p));
+    const childProjectIds = projects.filter(p => p && p.parentProjectId === id).map(p => p.id);
 
-    // Détacher le projet des tâches
+    // Détacher le projet des tâches tout en enregistrant les liens pour une restauration complète depuis la Corbeille
     const tasks = StorageManager.getTasks();
+    const linkedTaskIds = [];
     const detachRecursive = (list) => {
       list.forEach(t => {
-        if (t.projectId === id) t.projectId = null;
+        if (t.projectId === id) {
+          linkedTaskIds.push(t.id);
+          t.projectId = null;
+        }
         if (t.subtasks && t.subtasks.length > 0) detachRecursive(t.subtasks);
       });
     };
     detachRecursive(tasks);
     StorageManager.saveTasks(tasks);
 
-    // Détacher le projet des notes associées
+    // Détacher le projet des notes associées (projectId ET linkedProjectId)
     const notes = StorageManager.getNotes();
+    const linkedNoteIds = [];
     let notesChanged = false;
     notes.forEach(n => {
-      if (n.projectId === id) {
+      if (n.projectId === id || n.linkedProjectId === id) {
+        linkedNoteIds.push(n.id);
         n.projectId = null;
+        if (n.linkedProjectId === id) n.linkedProjectId = null;
         notesChanged = true;
       }
     });
@@ -581,7 +635,42 @@ const ProjectsManager = {
       }
     }
 
+    // Détacher le projet des créneaux d'agenda associés
+    const linkedEventIds = [];
+    if (typeof StorageManager.getEvents === 'function') {
+      const events = StorageManager.getEvents();
+      let eventsChanged = false;
+      events.forEach(evt => {
+        if (evt && evt.projectId === id) {
+          linkedEventIds.push(evt.id);
+          evt.projectId = null;
+          eventsChanged = true;
+        }
+      });
+      if (eventsChanged) {
+        StorageManager.saveEvents(events);
+        if (typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.render === 'function') {
+          window.AgendaManager.render();
+        }
+      }
+    }
+
+    if (projectToDelete && typeof TrashManager !== 'undefined' && typeof TrashManager.moveToTrash === 'function') {
+      const trashPayload = Object.assign({}, projectToDelete, {
+        _deletedMeta: { childProjectIds, linkedTaskIds, linkedNoteIds, linkedEventIds }
+      });
+      TrashManager.moveToTrash('project', trashPayload);
+    }
+
+    const fallbackParentId = projectToDelete ? (projectToDelete.parentProjectId || null) : null;
+    projects = projects
+      .filter(p => p.id !== id)
+      .map(p => (p.parentProjectId === id ? Object.assign({}, p, { parentProjectId: fallbackParentId }) : p));
+
     this.saveAll(projects);
+    if (window.NotesManager && typeof window.NotesManager.populateProjectFilter === 'function') {
+      window.NotesManager.populateProjectFilter();
+    }
     if (window.App) window.App.showToast("Projet déplacé dans la corbeille", "info");
   },
 
@@ -610,15 +699,33 @@ const ProjectsManager = {
     return { total, completed, percent, notesCount };
   },
 
-  // Calcul groupé ultra-rapide des statistiques de tous les projets en une seule passe
+  // Calcul groupé ultra-rapide des statistiques de tous les projets en une seule passe (avec mémoïsation par révision)
   getAllProjectsStats() {
     const tasks = StorageManager.getTasks();
     const notes = StorageManager.getNotes();
+    const tasksRev = typeof StorageManager.getRevision === 'function' ? StorageManager.getRevision('tasks') : null;
+    const notesRev = typeof StorageManager.getRevision === 'function' ? StorageManager.getRevision('notes') : null;
+
+    if (
+      this._statsCacheMap &&
+      tasksRev !== null &&
+      notesRev !== null &&
+      this._statsCacheTasksRev === tasksRev &&
+      this._statsCacheNotesRev === notesRev &&
+      this._statsCacheTasksRef === tasks &&
+      this._statsCacheNotesRef === notes &&
+      this._statsCacheTasksLen === (tasks ? tasks.length : 0) &&
+      this._statsCacheNotesLen === (notes ? notes.length : 0)
+    ) {
+      return this._statsCacheMap;
+    }
+
     const statsMap = new Map();
 
     const countTasks = (list) => {
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
+        if (!t) continue;
         if (t.projectId) {
           let s = statsMap.get(t.projectId);
           if (!s) {
@@ -631,23 +738,33 @@ const ProjectsManager = {
         if (t.subtasks && t.subtasks.length > 0) countTasks(t.subtasks);
       }
     };
-    countTasks(tasks);
+    if (Array.isArray(tasks)) countTasks(tasks);
 
-    for (let i = 0; i < notes.length; i++) {
-      const n = notes[i];
-      if (n.projectId) {
-        let s = statsMap.get(n.projectId);
-        if (!s) {
-          s = { total: 0, completed: 0, percent: 0, notesCount: 0 };
-          statsMap.set(n.projectId, s);
+    if (Array.isArray(notes)) {
+      for (let i = 0; i < notes.length; i++) {
+        const n = notes[i];
+        if (n && n.projectId) {
+          let s = statsMap.get(n.projectId);
+          if (!s) {
+            s = { total: 0, completed: 0, percent: 0, notesCount: 0 };
+            statsMap.set(n.projectId, s);
+          }
+          s.notesCount++;
         }
-        s.notesCount++;
       }
     }
 
     statsMap.forEach(s => {
       s.percent = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
     });
+
+    this._statsCacheMap = statsMap;
+    this._statsCacheTasksRev = tasksRev;
+    this._statsCacheNotesRev = notesRev;
+    this._statsCacheTasksRef = tasks;
+    this._statsCacheNotesRef = notes;
+    this._statsCacheTasksLen = tasks ? tasks.length : 0;
+    this._statsCacheNotesLen = notes ? notes.length : 0;
 
     return statsMap;
   },
@@ -693,23 +810,33 @@ const ProjectsManager = {
       if (this._draggedForbiddenIds && this._draggedForbiddenIds.has(p.id)) return;
       e.preventDefault();
       e.stopPropagation();
-      this._clearFamilyDragHighlight();
 
-      const rect = card.getBoundingClientRect();
-      const useVerticalAxis = (this.viewMode === 'list') || (card.dataset && card.dataset.dropAxis === 'y');
-      const ratio = useVerticalAxis
-        ? ((e.clientY - rect.top) / Math.max(1, rect.height))
-        : ((e.clientX - rect.left) / Math.max(1, rect.width));
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+      if (this._dragOverRaf) return;
+      this._dragOverRaf = requestAnimationFrame(() => {
+        this._dragOverRaf = null;
+        if (!this.draggedProjectId || this.draggedProjectId === p.id) return;
+        this._clearFamilyDragHighlight();
 
-      let pos = 'nest';
-      if (ratio < 0.25) pos = 'before';
-      else if (ratio > 0.75) pos = 'after';
+        const rect = card.getBoundingClientRect();
+        const useVerticalAxis = (this.viewMode === 'list') || (card.dataset && card.dataset.dropAxis === 'y');
+        const ratio = useVerticalAxis
+          ? ((clientY - rect.top) / Math.max(1, rect.height))
+          : ((clientX - rect.left) / Math.max(1, rect.width));
 
-      card.classList.toggle('drag-over-before', pos === 'before');
-      card.classList.toggle('drag-over-after', pos === 'after');
-      card.classList.toggle('drag-over-nest', pos === 'nest');
-      card.dataset.dropPos = pos;
-      card.dataset.dropAfter = (pos === 'after') ? 'true' : 'false';
+        let pos = 'nest';
+        if (ratio < 0.25) pos = 'before';
+        else if (ratio > 0.75) pos = 'after';
+
+        if (card.dataset.dropPos !== pos) {
+          card.classList.toggle('drag-over-before', pos === 'before');
+          card.classList.toggle('drag-over-after', pos === 'after');
+          card.classList.toggle('drag-over-nest', pos === 'nest');
+          card.dataset.dropPos = pos;
+          card.dataset.dropAfter = (pos === 'after') ? 'true' : 'false';
+        }
+      });
     });
 
     card.addEventListener('dragleave', (e) => {
@@ -1013,10 +1140,27 @@ const ProjectsManager = {
     return { total, completed, percent, notesCount, descendantsCount };
   },
 
+  _getRenderSig() {
+    const pRev = typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function' ? StorageManager.getRevision('projects') : -1;
+    const tRev = typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function' ? StorageManager.getRevision('tasks') : -1;
+    const nRev = typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function' ? StorageManager.getRevision('notes') : -1;
+    return `${pRev}:${tRev}:${nRev}:${this.viewMode}:${this.currentFilter}:${this.collapsedFamilies ? this.collapsedFamilies.size : 0}`;
+  },
+
+  renderIfNeeded() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('projects-grid-container');
+    if (!container) return;
+    const sig = this._getRenderSig();
+    if (this._lastRenderedSig === sig && container.childElementCount > 0) return;
+    this.render();
+  },
+
   render() {
     if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
     const container = document.getElementById('projects-grid-container');
     if (!container) return;
+    this._lastRenderedSig = this._getRenderSig();
 
     // Synchronisation de l'état visuel des boutons de vue Grille / Lignes
     const btnGrid = document.getElementById('btn-project-view-grid');
@@ -1239,17 +1383,21 @@ const ProjectsManager = {
       }
     }
 
-    const stats = this.getProjectStats(p.id);
+    const allStatsMap = this.getAllProjectsStats();
+    const stats = allStatsMap.get(p.id) || { total: 0, completed: 0, percent: 0, notesCount: 0 };
     if (progressLabel) progressLabel.textContent = `Tâches réalisées : ${stats.completed} / ${stats.total}`;
     if (progressPct) progressPct.textContent = `${stats.percent}%`;
     if (progressFill) {
       progressFill.style.width = `${stats.percent}%`;
       progressFill.style.backgroundColor = p.color || 'var(--primary)';
     }
+    const eventsCountEl = document.getElementById('project-detail-events-count');
+    const eventsListEl = document.getElementById('project-detail-events-list');
+    const btnAddEvent = document.getElementById('btn-project-detail-add-event');
+    const btnFocusProj = document.getElementById('btn-project-detail-focus');
 
     // 0. Liste des sous-projets directs
     const childProjects = this.getChildProjects(p.id, allProjects);
-    const allStatsMap = this.getAllProjectsStats();
     if (subprojectsCountEl) subprojectsCountEl.textContent = childProjects.length;
     if (subprojectsListEl) {
       if (childProjects.length === 0) {
@@ -1393,6 +1541,69 @@ const ProjectsManager = {
       };
     }
 
+    // 3. Liste des créneaux d'agenda associés (directement via projectId ou indirectement via une tâche du projet)
+    const projTaskIdSet = new Set(projectTasks.map(t => t.id));
+    const allEvents = (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function')
+      ? StorageManager.getEvents()
+      : [];
+    const projectEvents = allEvents
+      .filter(ev => ev && (ev.projectId === p.id || (ev.taskId && projTaskIdSet.has(ev.taskId))))
+      .sort((a, b) => String(a.start || '').localeCompare(String(b.start || '')));
+
+    if (eventsCountEl) eventsCountEl.textContent = projectEvents.length;
+    if (eventsListEl) {
+      if (projectEvents.length === 0) {
+        eventsListEl.innerHTML = `
+          <div style="color: var(--text-dim); font-size: 0.82rem; font-style: italic; padding: 8px 0;">
+            Aucun créneau planifié pour ce projet.
+          </div>
+        `;
+      } else {
+        let evHtml = '';
+        projectEvents.forEach(ev => {
+          const rawDate = ev.start ? ev.start.slice(0, 10) : '';
+          const timeLabel = ev.isAllDay ? 'Journée entière' : (ev.start && ev.start.length >= 16 ? ev.start.slice(11, 16) : '');
+          evHtml += `
+            <div class="project-event-row" style="display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3.5px solid ${p.color || '#8b5cf6'}; border-radius: var(--radius-sm); gap: 8px; cursor: pointer;" onclick="ProjectsManager.openEventFromDetail('${ev.id}')">
+              <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+                <span style="font-size: 0.84rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(ev.title || '(Sans titre)')}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                <span style="font-size: 0.72rem; color: var(--accent);">${this.escapeHtml(rawDate)}${timeLabel ? ' • ' + this.escapeHtml(timeLabel) : ''}</span>
+                <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 1px 6px; height: 22px;" onclick="event.stopPropagation(); ProjectsManager.openEventFromDetail('${ev.id}')">Agenda ↗</button>
+              </div>
+            </div>
+          `;
+        });
+        eventsListEl.innerHTML = evHtml;
+      }
+    }
+
+    if (btnAddEvent) {
+      btnAddEvent.onclick = () => {
+        this.closeProjectDetailModal();
+        if (window.App && typeof window.App.navigate === 'function') {
+          window.App.navigate('agenda');
+        }
+        if (window.AgendaManager && typeof window.AgendaManager.openEventModal === 'function') {
+          window.AgendaManager.openEventModal(null, {
+            title: p.title,
+            projectId: p.id,
+            color: p.color || '#8b5cf6'
+          });
+        }
+      };
+    }
+
+    if (btnFocusProj) {
+      btnFocusProj.onclick = () => {
+        this.closeProjectDetailModal();
+        if (window.App && typeof window.App.startFocusOn === 'function') {
+          window.App.startFocusOn('project', p.id);
+        }
+      };
+    }
+
     if (btnEdit) {
       btnEdit.onclick = () => {
         this.closeProjectDetailModal();
@@ -1456,6 +1667,18 @@ const ProjectsManager = {
     }
   },
 
+  openEventFromDetail(eventId) {
+    this.closeProjectDetailModal();
+    if (window.App && typeof window.App.openEventFromDashboard === 'function') {
+      window.App.openEventFromDashboard(eventId);
+    } else if (window.App && typeof window.App.navigate === 'function') {
+      window.App.navigate('agenda');
+      if (window.AgendaManager && typeof window.AgendaManager.openEventModal === 'function') {
+        setTimeout(() => window.AgendaManager.openEventModal(eventId), 80);
+      }
+    }
+  },
+
   openProjectModal(id = null, defaultParentId = null) {
     const modal = document.getElementById('project-modal');
     if (!modal) return;
@@ -1497,18 +1720,21 @@ const ProjectsManager = {
     }
 
     const allProjects = this.getAll();
+    const currentEditingProject = id ? allProjects.find(item => item.id === id) : null;
     const forbidden = id ? new Set([id, ...this.getDescendantIds(id, allProjects)]) : new Set();
 
     if (inputParent) {
       inputParent.innerHTML = '<option value="">(Aucun — Projet principal)</option>';
+      const activeProjects = allProjects.filter(pr => !pr.archived || (currentEditingProject && currentEditingProject.parentProjectId === pr.id));
       const hier = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
-        ? StorageManager.getProjectsHierarchy(allProjects)
-        : allProjects.map(p => ({ project: p, displayTitle: p.title }));
+        ? StorageManager.getProjectsHierarchy(activeProjects)
+        : activeProjects.map(p => ({ project: p, displayTitle: p.title }));
       hier.forEach(({ project: projItem, displayTitle }) => {
         if (forbidden.has(projItem.id)) return;
         const opt = document.createElement('option');
         opt.value = projItem.id;
-        opt.textContent = displayTitle || projItem.title;
+        const baseLabel = displayTitle || projItem.title;
+        opt.textContent = projItem.archived ? `${baseLabel} (Archivé)` : baseLabel;
         inputParent.appendChild(opt);
       });
     }
@@ -1523,7 +1749,14 @@ const ProjectsManager = {
       syncColorUI(p.color || '#3b82f6');
 
       btnSave.onclick = () => {
-        if (!inputTitle.value.trim()) return alert("Le nom du projet est requis.");
+        if (!inputTitle.value.trim()) {
+          if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast("Le nom du projet est requis.", "warning");
+          } else if (typeof alert === 'function') {
+            alert("Le nom du projet est requis.");
+          }
+          return;
+        }
         this.updateProject(id, {
           title: inputTitle.value,
           description: inputDesc.value,
@@ -1541,7 +1774,14 @@ const ProjectsManager = {
       syncColorUI((parentProj && parentProj.color) ? parentProj.color : '#3b82f6');
 
       btnSave.onclick = () => {
-        if (!inputTitle.value.trim()) return alert("Le nom du projet est requis.");
+        if (!inputTitle.value.trim()) {
+          if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast("Le nom du projet est requis.", "warning");
+          } else if (typeof alert === 'function') {
+            alert("Le nom du projet est requis.");
+          }
+          return;
+        }
         this.addProject({
           title: inputTitle.value,
           description: inputDesc.value,

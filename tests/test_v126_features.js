@@ -41,19 +41,19 @@ async function runTests() {
   console.log("   (Démarrage Windows Garanti & Fiabilisation Système)");
   console.log("==========================================================");
 
-  // 1. Version 1.3.0 synchronisée
-  await it("1.1 Version 1.3.0 synchronisée (package.json, index.html, app.js, settings.js)", () => {
+  // 1. Version 1.3.0 ou supérieure synchronisée
+  await it("1.1 Version 1.3.0+ synchronisée (package.json, index.html, app.js, settings.js)", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-    assert(pkg.version === '1.3.0' || pkg.version === '1.2.6', "package.json doit être en version 1.3.0");
+    assert(['1.3.1', '1.3.0', '1.2.6'].includes(pkg.version), "package.json doit être en version 1.3.0 ou supérieure");
 
     const htmlContent = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-    assert(htmlContent.includes('id="updater-current-version-label">1.3.0</strong>') || htmlContent.includes('id="updater-current-version-label">1.2.6</strong>'), "index.html affiche la version 1.3.0");
+    assert(htmlContent.includes('id="updater-current-version-label">1.3.1</strong>') || htmlContent.includes('id="updater-current-version-label">1.3.0</strong>') || htmlContent.includes('id="updater-current-version-label">1.2.6</strong>'), "index.html affiche la version 1.3.0+");
 
     const appCode = fs.readFileSync(path.join(rootDir, 'js', 'app.js'), 'utf8');
-    assert(appCode.includes("APP_VERSION: '1.3.0'") || appCode.includes("APP_VERSION: '1.2.6'"), "app.js est configuré sur la version 1.3.0");
+    assert(appCode.includes("APP_VERSION: '1.3.1'") || appCode.includes("APP_VERSION: '1.3.0'") || appCode.includes("APP_VERSION: '1.2.6'"), "app.js est configuré sur la version 1.3.0+");
 
     const settingsCode = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
-    assert(settingsCode.includes("currentVersion: '1.3.0'") || settingsCode.includes("currentVersion: '1.2.6'"), "settings.js est initialisé avec 1.3.0");
+    assert(settingsCode.includes("currentVersion: '1.3.1'") || settingsCode.includes("currentVersion: '1.3.0'") || settingsCode.includes("currentVersion: '1.2.6'"), "settings.js est initialisé avec 1.3.0+");
   });
 
   // 2. Changelog 1.3.0
@@ -533,12 +533,12 @@ async function runTests() {
     assert(htmlContent.includes('class="changelog-history-pill'), "index.html contient les puces de sélection de version");
 
     // Vérification que la version courante n'a PAS la classe d'archive
-    const vCurrentIndex = htmlContent.includes('Version 1.3.0') ? htmlContent.indexOf('Version 1.3.0') : htmlContent.indexOf('Version 1.2.6');
+    const vCurrentIndex = htmlContent.includes('Version 1.3.1') ? htmlContent.indexOf('Version 1.3.1') : htmlContent.indexOf('Version 1.3.0');
     const vCurrentCardChunk = htmlContent.substring(vCurrentIndex - 120, vCurrentIndex + 50);
     assert(!vCurrentCardChunk.includes('changelog-archived-card'), "La carte de version courante ne doit pas être archivée et reste ouverte en permanence");
 
     // Vérification que les anciennes versions portent la classe changelog-archived-card
-    const versions = ['1.2.5', '1.2.4', '1.2.3', '1.2.2', '1.2.1', '1.2.0'];
+    const versions = ['1.3.0', '1.2.5', '1.2.4', '1.2.3', '1.2.2', '1.2.1', '1.2.0'];
     versions.forEach(ver => {
       assert(htmlContent.includes(`data-version="${ver}"`), `data-version="${ver}" est présent dans index.html`);
     });

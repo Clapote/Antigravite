@@ -112,6 +112,8 @@ async function runTests() {
   // Test 3 : Glisser-déposer des tâches : Élimination des scans récursifs sur dragover
   // -----------------------------------------------------------------------------
   it("3. TasksManager : Cache _draggedForbiddenIds pour éviter les parcours récursifs en continu", () => {
+    const Storage = require('../js/storage.js');
+    global.StorageManager = Storage;
     const Tasks = require('../js/tasks.js');
     const tree = [
       {
@@ -422,6 +424,366 @@ async function runTests() {
       assert.strictEqual(rootAttrs['data-disable-hover'], 'true');
       assert.strictEqual(fakeWallpaper.style.display, 'none', "Le fond d'écran est masqué en Mode PC de merde");
     } finally {
+      global.document = origDoc;
+    }
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 14 : Révisions O(1) StorageManager, mesure UTF-8 sans Blob & GPU compat
+  // -----------------------------------------------------------------------------
+  it("14. StorageManager : Révisions par collection, _utf8ByteLength sans Blob et gpuCompatibilityMode", () => {
+    const Storage = require('../js/storage.js');
+    global.StorageManager = Storage;
+    Storage.clearCache();
+
+    let storageMock = {};
+    global.localStorage = {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(storageMock, k) ? storageMock[k] : null),
+      setItem: (k, v) => { storageMock[k] = String(v); },
+      removeItem: (k) => { delete storageMock[k]; }
+    };
+
+    const rev0 = Storage.getRevision('tasks');
+    Storage.saveTasks([{ id: 't1', title: 'Test rev' }]);
+    const rev1 = Storage.getRevision('tasks');
+    assert.ok(rev1 > rev0, "La révision des tâches doit s'incrémenter après sauvegarde");
+
+    Storage.clearCache();
+    const rev2 = Storage.getRevision('tasks');
+    assert.ok(rev2 > rev1, "La révision doit s'incrémenter sur clearCache()");
+
+    // Vérification exacte de _utf8ByteLength (ASCII, accents Latin-1, Euro, emoji surrogate pair)
+    const samples = [
+      '',
+      'Antigravite 123',
+      'Tâches récurrentes café €',
+      'Fusée 🚀 + étoile ✨ + drapeau 🇫🇷'
+    ];
+    for (const s of samples) {
+      assert.strictEqual(
+        Storage._utf8ByteLength(s),
+        Buffer.byteLength(s, 'utf8'),
+        `Taille UTF-8 exacte attendue pour "${s}"`
+      );
+    }
+
+    const storageCode = fs.readFileSync(path.join(__dirname, '..', 'js', 'storage.js'), 'utf8');
+    assert.ok(!storageCode.includes('new Blob('), "getStorageStats ne doit plus allouer de Blob temporaire");
+    assert.strictEqual(Storage.DEFAULT_SETTINGS.gpuCompatibilityMode, false, "gpuCompatibilityMode désactivé par défaut");
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 15 : Mémoïsation O(1) des stats Projets & passe unique dans modale projet
+  // -----------------------------------------------------------------------------
+  it("15. ProjectsManager : Mémoïsation getAllProjectsStats() par révision & modale sans double scan", () => {
+    const Storage = require('../js/storage.js');
+    global.StorageManager = Storage;
+    const Projects = require('../js/projects.js');
+    Storage.clearCache();
+
+    let storageMock = {};
+    global.localStorage = {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(storageMock, k) ? storageMock[k] : null),
+      setItem: (k, v) => { storageMock[k] = String(v); },
+      removeItem: (k) => { delete storageMock[k]; }
+    };
+
+    Storage.saveProjects([{ id: 'p-1', title: 'Projet A' }]);
+    Storage.saveTasks([{ id: 't-1', title: 'T1', projectId: 'p-1', completed: false }]);
+    Storage.saveNotes([{ id: 'n-1', title: 'N1', projectId: 'p-1' }]);
+
+    const stats1 = Projects.getAllProjectsStats();
+    const stats2 = Projects.getAllProjectsStats();
+    assert.ok(stats1 instanceof Map, "getAllProjectsStats doit retourner une Map indexée par ID projet");
+    assert.strictEqual(stats1, stats2, "Deux appels sans modification doivent renvoyer la même référence mémoïsée");
+    assert.strictEqual(stats1.get('p-1').total, 1);
+    assert.strictEqual(stats1.get('p-1').notesCount, 1);
+
+    // Modification d'une tâche -> invalidation automatique via révision
+    Storage.saveTasks([
+      { id: 't-1', title: 'T1', projectId: 'p-1', completed: true },
+      { id: 't-2', title: 'T2', projectId: 'p-1', completed: false }
+    ]);
+    const stats3 = Projects.getAllProjectsStats();
+    assert.notStrictEqual(stats3, stats1, "La sauvegarde des tâches doit invalider le cache des statistiques");
+    assert.strictEqual(stats3.get('p-1').total, 2);
+    assert.strictEqual(stats3.get('p-1').completed, 1);
+
+    const projCode = fs.readFileSync(path.join(__dirname, '..', 'js', 'projects.js'), 'utf8');
+    assert.ok(!projCode.includes('this.getProjectStats(projectId)'), "openProjectDetailModal ne doit plus re-scanner toute la base en doublon");
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 16 : Splash Screen rentabilisé (phases ~4,8s préservées + warmups utiles)
+  // -----------------------------------------------------------------------------
+  await itAsync("16. Splash Screen ~4,8s rentabilisé : warmups Notes/Agenda/Constellation et nettoyage DOM", async () => {
+    const appCode = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'styles.css'), 'utf8');
+
+    assert.ok(html.includes('id="splash-substatus"'), "index.html doit exposer #splash-substatus pour informer sur les tâches de fond");
+    assert.ok(css.includes('.splash-substatus'), "styles.css doit stiler .splash-substatus");
+    assert.ok(appCode.includes('warmUpCatalog'), "Le splash déclenche la préparation asynchrone du catalogue audio");
+    assert.ok(appCode.includes('warmUpIndex'), "Le splash construit l'index des notes");
+    assert.ok(appCode.includes('warmUpRecurrenceCache'), "Le splash pré-calcule le cache de récurrence agenda");
+    assert.ok(appCode.includes('warmUpTopology'), "Le splash prépare la topologie Constellation");
+    assert.ok(appCode.includes('runStartupMaintenance'), "Le splash exécute la maintenance Backups différée");
+    assert.ok(appCode.includes('splash.remove()'), "hideSplashScreen retire #app-splash-screen du DOM après le fondu");
+
+    // Vérifier les warmups en exécution réelle
+    const Storage = require('../js/storage.js');
+    global.StorageManager = Storage;
+    Storage.clearCache();
+    Storage.saveNotes([
+      { id: 'n-a', title: 'Alpha', content: 'Lien [[Beta]] #focus', tags: ['focus'] },
+      { id: 'n-b', title: 'Beta', content: 'Suite', tags: ['projet'] }
+    ]);
+    const Notes = require('../js/notes.js');
+    const origNotesGetAll = Notes.getAll;
+    Notes.getAll = () => Storage.getNotes();
+    Notes._noteIndexCache = null;
+    try {
+      const noteIdx = Notes.warmUpIndex();
+      assert.ok(noteIdx && noteIdx.byId.get('n-a'), "warmUpIndex doit indexer les notes par ID");
+      assert.strictEqual(noteIdx.byLowerTitle.get('beta').id, 'n-b', "warmUpIndex doit indexer les titres en O(1)");
+      const wl = noteIdx.wikilinksBySource.get('n-a');
+      assert.ok(Array.isArray(wl) && wl.includes('beta'), "warmUpIndex doit indexer les wikilinks");
+    } finally {
+      Notes.getAll = origNotesGetAll;
+      Notes._noteIndexCache = null;
+    }
+
+    const Agenda = require('../js/agenda.js');
+    Storage.saveEvents([
+      { id: 'e-rec', title: 'Hebdo', start: '2026-11-23T09:00', end: '2026-11-23T10:00', recurrence: 'weekly' }
+    ]);
+    const warmAgenda = Agenda.warmUpRecurrenceCache();
+    assert.ok(warmAgenda && warmAgenda.weekEventsMap instanceof Map, "warmUpRecurrenceCache construit le cache hebdomadaire");
+    assert.strictEqual(Agenda.isEventOnDate({ start: '2026-11-23T09:00', recurrence: 'weekly' }, '2026-11-30'), true);
+
+    const Constellation = require('../js/constellation.js');
+    const topo = Constellation.warmUpTopology();
+    assert.ok(topo && Array.isArray(topo.nodes), "warmUpTopology pré-calcule le graphe Constellation");
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 17 : Zéro reflow synchrone, zéro double-rendu Agenda & renderIfNeeded
+  // -----------------------------------------------------------------------------
+  it("17. Reflows synchrones éliminés, Agenda anti double-rendu et renderIfNeeded()", () => {
+    const appCode = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+    assert.ok(!appCode.includes('void view.offsetWidth'), "Plus de void view.offsetWidth synchrone dans navigate()");
+    assert.ok(!appCode.includes('void splash.offsetWidth'), "Plus de reflow synchrone dans updateSplashProgress()");
+    assert.ok(!appCode.includes('void section.offsetWidth'), "Plus de reflow synchrone dans openChangelogInSettings()");
+    assert.ok(!appCode.includes('void modal.offsetWidth'), "Plus de reflow synchrone dans openUpdatePromptModal()");
+    assert.ok(appCode.includes('_lastAgendaAutoSyncAt'), "Cooldown anti double-sync lors de la navigation Agenda");
+    assert.ok(appCode.includes("AgendaManager.scrollToNormalHours"), "Centrage automatique sur 07h00 préservé");
+
+    const Storage = require('../js/storage.js');
+    global.StorageManager = Storage;
+    const Tasks = require('../js/tasks.js');
+    const Projects = require('../js/projects.js');
+    const Notes = require('../js/notes.js');
+    const Agenda = require('../js/agenda.js');
+    const Constellation = require('../js/constellation.js');
+    const Backups = require('../js/backups.js');
+    const Trash = require('../js/trash.js');
+
+    assert.strictEqual(typeof Tasks.renderIfNeeded, 'function', "TasksManager expose renderIfNeeded");
+    assert.strictEqual(typeof Projects.renderIfNeeded, 'function', "ProjectsManager expose renderIfNeeded");
+    assert.strictEqual(typeof Notes.renderIfNeeded, 'function', "NotesManager expose renderIfNeeded");
+    assert.strictEqual(typeof Agenda.renderIfNeeded, 'function', "AgendaManager expose renderIfNeeded");
+    assert.strictEqual(typeof Constellation.renderIfNeeded, 'function', "ConstellationManager expose renderIfNeeded");
+    assert.strictEqual(typeof Backups.renderIfNeeded, 'function', "BackupManager expose renderIfNeeded");
+    assert.strictEqual(typeof Trash.renderIfNeeded, 'function', "TrashManager expose renderIfNeeded");
+
+    // Vérifier qu'un second appel renderIfNeeded sans changement ne déclenche pas de re-rendu
+    const origDoc = global.document;
+    const origRender = Tasks.render;
+    let renderCalls = 0;
+    const fakeContainer = { childElementCount: 1 };
+    global.document = {
+      getElementById: (id) => (id === 'tasks-tree-container' ? fakeContainer : null),
+      querySelectorAll: () => []
+    };
+    Tasks._lastRenderedSig = null;
+    Tasks.render = function () {
+      renderCalls++;
+      this._lastRenderedSig = this._getRenderSig();
+    };
+    try {
+      Tasks.renderIfNeeded();
+      Tasks.renderIfNeeded();
+      assert.strictEqual(renderCalls, 1, "Un seul appel render() attendu pour un état inchangé");
+    } finally {
+      Tasks.render = origRender;
+      Tasks._lastRenderedSig = null;
+      global.document = origDoc;
+    }
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 18 : CSS GPU propre (0 transition:all, 0 sélecteur *, blur ciblé, GPU Compat)
+  // -----------------------------------------------------------------------------
+  it("18. CSS & IPC : Zéro transition:all, zéro sélecteur universel *, .app-dormant & GPU Compat", () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'styles.css'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const mainCode = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+
+    assert.ok(!/transition\s*:\s*all\b/i.test(css), "Aucune déclaration 'transition: all' ne doit subsister dans styles.css");
+    assert.ok(!css.includes('[data-perf-mode="potato"] *'), "Le sélecteur universel '*' en Mode PC modeste doit être remplacé");
+    assert.ok(!css.includes('[data-disable-animations="true"] *'), "Le sélecteur universel '*' disableAnimations doit être remplacé");
+    assert.ok(css.includes(':root.app-dormant'), "La règle CSS :root.app-dormant doit geler les animations fenêtre cachée");
+    assert.ok(css.includes('content-visibility: auto'), "content-visibility: auto doit isoler les écrans/cartes hors-écran");
+    assert.ok(html.includes('id="setting-gpu-compat-mode"'), "Toggle Compatibilité GPU présent dans index.html");
+    assert.ok(mainCode.includes('readEarlyDesktopGpuPrefs'), "main.js lit les préférences GPU avant app.whenReady()");
+    assert.ok(mainCode.includes('!earlyGpuPrefs.gpuCompatibilityMode'), "enable-zero-copy désactivé si gpuCompatibilityMode actif");
+    assert.ok(mainCode.includes('await fs.readdir('), "list-local-music converti en I/O asynchrone non bloquante via fs.promises");
+    assert.ok(mainCode.includes('_localMusicCatalogCache'), "Cache mémoire catalogue audio dans main.js");
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 19 : TasksManager délégation drag-and-drop et mise à jour badges sans innerHTML
+  // -----------------------------------------------------------------------------
+  it("19. TasksManager : Délégation drag & drop rAF et badges mis à jour via textContent", () => {
+    const tasksCode = fs.readFileSync(path.join(__dirname, '..', 'js', 'tasks.js'), 'utf8');
+    assert.ok(tasksCode.includes('_bindTreeDragDelegation'), "TasksManager délègue les événements drag au conteneur racine");
+    assert.ok(tasksCode.includes('badge.textContent = nextText'), "updateFilterCounts met à jour les pastilles via textContent sans innerHTML");
+    assert.ok(!tasksCode.includes("item.addEventListener('dragstart'"), "Plus de listeners dragstart attachés individuellement par tâche");
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 20 : Sprite SVG master (<use href>) et modales différées (<template>)
+  // -----------------------------------------------------------------------------
+  it("20. HTML & Icônes : Sprite SVG <use href='#ico-...'> et <template> modales paresseuses", () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const App = require('../js/app.js');
+
+    assert.ok(html.includes('id="antigravite-svg-sprite"'), "Sprite SVG master présent dans index.html");
+    assert.ok(html.includes('<template id="tpl-whats-new-modal">'), "Modale Nouveautés mise en <template>");
+    assert.ok(html.includes('<template id="tpl-modal-update-prompt">'), "Modale Mise à jour mise en <template>");
+    assert.ok(html.includes('<template id="tpl-wallpaper-studio-modal">'), "Studio Fond d'écran mis en <template>");
+    assert.ok(html.includes('<script defer src="./js/app.js"></script>'), "Les scripts modulaires utilisent l'attribut defer");
+
+    const pinSvg = App.getSvgIcon('📌', 14);
+    assert.ok(pinSvg.includes('<svg') && pinSvg.includes('viewBox="0 0 24 24"') && pinSvg.includes('stroke="currentColor"'), "Signature SVG standard conservée");
+    assert.ok(pinSvg.includes('<use href="#ico-pin"/>'), "getSvgIcon référence le symbole dans le sprite via <use>");
+
+    // Vérifier ensureTemplateElement()
+    const origDoc = global.document;
+    let instantiated = null;
+    const fakeBody = {
+      appendChild: (node) => { instantiated = node; }
+    };
+    const fakeTpl = {
+      content: {
+        cloneNode: () => ({ id: 'whats-new-modal', cloned: true })
+      }
+    };
+    global.document = {
+      body: fakeBody,
+      getElementById: (id) => {
+        if (id === 'whats-new-modal') return instantiated;
+        if (id === 'tpl-whats-new-modal') return fakeTpl;
+        return null;
+      }
+    };
+    try {
+      const el1 = App.ensureTemplateElement('whats-new-modal', 'tpl-whats-new-modal');
+      assert.ok(el1 && el1.cloned === true, "La modale est clonée à la demande depuis son <template>");
+      const el2 = App.ensureTemplateElement('whats-new-modal', 'tpl-whats-new-modal');
+      assert.strictEqual(el2, el1, "Les appels suivants retournent l'élément déjà monté");
+    } finally {
+      global.document = origDoc;
+    }
+  });
+
+  // -----------------------------------------------------------------------------
+  // Test 21 : Mode Dormant (setDormant) et report d'auto-backup fenêtre cachée
+  // -----------------------------------------------------------------------------
+  it("21. Mode Dormant : setDormant(true/false) et rattrapage BackupManager au réveil", () => {
+    const Storage = require('../js/storage.js');
+    global.StorageManager = Storage;
+    const App = require('../js/app.js');
+    const Backups = require('../js/backups.js');
+    const Agenda = require('../js/agenda.js');
+    const Constellation = require('../js/constellation.js');
+
+    const origAgendaGlobal = global.AgendaManager;
+    const origConstGlobal = global.ConstellationManager;
+    const origBackupGlobal = global.BackupManager;
+    global.AgendaManager = Agenda;
+    global.ConstellationManager = Constellation;
+    global.BackupManager = Backups;
+
+    const origDoc = global.document;
+    const clsSet = new Set();
+    global.document = {
+      hidden: true,
+      documentElement: {
+        classList: {
+          add: (c) => clsSet.add(c),
+          remove: (c) => clsSet.delete(c),
+          toggle: (c, force) => (force ? clsSet.add(c) : clsSet.delete(c)),
+          contains: (c) => clsSet.has(c)
+        },
+        setAttribute: () => {},
+        removeAttribute: () => {}
+      },
+      getElementById: () => null,
+      querySelectorAll: () => []
+    };
+
+    const origStartAuto = Backups.startAutoBackupTimer;
+    const origCheckAuto = Backups.checkAutoBackup;
+    const origAgendaSetDormant = Agenda.setDormant;
+    const origConstSetDormant = Constellation.setDormant;
+    let wakeCheckCalled = 0;
+    const agendaDormantCalls = [];
+    const constDormantCalls = [];
+    try {
+      Backups._autoBackupPendingOnWake = true;
+      Backups.checkAutoBackup = () => { wakeCheckCalled++; };
+      Agenda._nowInterval = setTimeout(() => {}, 10000);
+      Agenda.setDormant = function (flag) {
+        agendaDormantCalls.push(flag);
+        return origAgendaSetDormant.call(this, flag);
+      };
+      Constellation.setDormant = function (flag) {
+        constDormantCalls.push(flag);
+        return origConstSetDormant.call(this, flag);
+      };
+
+      App.setDormant(true);
+      assert.strictEqual(App._isDormant, true, "App passe en état dormant");
+      assert.ok(clsSet.has('app-dormant'), "Classe CSS app-dormant appliquée sur :root");
+      assert.strictEqual(Agenda._nowInterval, null, "Agenda coupe son intervalle repère heure actuelle en mode dormant");
+      assert.deepStrictEqual(agendaDormantCalls, [true]);
+      assert.deepStrictEqual(constDormantCalls, [true]);
+
+      // Réveil
+      global.document.hidden = false;
+      App.setDormant(false);
+      assert.strictEqual(App._isDormant, false, "App sort du mode dormant");
+      assert.ok(!clsSet.has('app-dormant'), "Classe CSS app-dormant retirée");
+      assert.deepStrictEqual(agendaDormantCalls, [true, false]);
+      assert.deepStrictEqual(constDormantCalls, [true, false]);
+      assert.strictEqual(wakeCheckCalled, 1, "BackupManager rattrape l'auto-backup différé au réveil");
+    } finally {
+      if (App._clockTimer) clearInterval(App._clockTimer);
+      if (App._dayProgressTimer) clearInterval(App._dayProgressTimer);
+      if (Agenda._nowInterval) clearInterval(Agenda._nowInterval);
+      App._clockTimer = null;
+      App._dayProgressTimer = null;
+      Agenda._nowInterval = null;
+      Agenda.setDormant = origAgendaSetDormant;
+      Constellation.setDormant = origConstSetDormant;
+      Backups.startAutoBackupTimer = origStartAuto;
+      Backups.checkAutoBackup = origCheckAuto;
+      Backups._autoBackupPendingOnWake = false;
+      App._isDormant = false;
+      global.AgendaManager = origAgendaGlobal;
+      global.ConstellationManager = origConstGlobal;
+      global.BackupManager = origBackupGlobal;
       global.document = origDoc;
     }
   });

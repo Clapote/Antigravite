@@ -7,15 +7,31 @@ const SettingsManager = {
   currentTab: 'customization',
   currentSeriousSubtab: 'performance',
 
-  init() {
+  init(options = {}) {
     if (!this.initialized) {
       this.bindEvents();
       this.initialized = true;
     }
-    this.render();
+    if (!options || !options.deferRender) {
+      this.render();
+      this.refreshDesktopPrefsUI();
+    }
     if (this.updater && typeof this.updater.init === 'function') {
       this.updater.init();
     }
+  },
+
+  renderIfNeeded() {
+    if (typeof document === 'undefined') return;
+    const rev = (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function')
+      ? StorageManager.getRevision('settings')
+      : -1;
+    if (rev !== -1 && this._lastRenderedRev === rev) {
+      if (this.currentTab === 'serious') this.refreshSeriousTabLiveData();
+      return;
+    }
+    this.render();
+    this.refreshDesktopPrefsUI();
   },
 
   switchTab(tabId) {
@@ -32,7 +48,8 @@ const SettingsManager = {
       display: document.getElementById('settings-pane-display'),
       'sync-updates': document.getElementById('settings-pane-sync-updates'),
       help: document.getElementById('settings-pane-help'),
-      serious: document.getElementById('settings-pane-serious')
+      serious: document.getElementById('settings-pane-serious'),
+      contact: document.getElementById('settings-pane-contact')
     };
 
     Object.keys(panes).forEach(k => {
@@ -151,15 +168,7 @@ const SettingsManager = {
           return;
         }
 
-        // C. Densité d'affichage
-        const densityBtn = e.target.closest('.density-option-btn');
-        if (densityBtn && densityBtn.dataset.densityVal) {
-          e.preventDefault();
-          this.updateSetting('density', densityBtn.dataset.densityVal);
-          return;
-        }
-
-        // D. Taille de police
+        // C. Taille de police
         const fontBtn = e.target.closest('.font-size-option-btn');
         if (fontBtn && fontBtn.dataset.sizeVal) {
           e.preventDefault();
@@ -351,12 +360,17 @@ const SettingsManager = {
         if (!file) return;
         try {
           const dataUrl = await this.processImageFile(file);
-          this.updateSetting('backgroundImage', dataUrl);
+          const bgValue = (typeof StorageManager !== 'undefined' && typeof StorageManager.saveCustomWallpaperDataUrl === 'function')
+            ? await StorageManager.saveCustomWallpaperDataUrl(dataUrl)
+            : dataUrl;
+          this.updateSetting('backgroundImage', bgValue || dataUrl);
           if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
             App.showToast("Image de fond d'écran appliquée", "success");
           }
         } catch (err) {
-          alert("Impossible de charger l'image : " + err.message);
+          if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+            App.showToast("Impossible de charger l'image : " + err.message, "error");
+          }
         } finally {
           fileInput.value = '';
         }
@@ -370,6 +384,7 @@ const SettingsManager = {
         const val = Number(e.target.value);
         const opacityVal = document.getElementById('wallpaper-opacity-val');
         if (opacityVal) opacityVal.textContent = `${val}%`;
+        this.updateSliderFill(e.target);
         this.updateSetting('backgroundOpacity', val, true);
       });
     }
@@ -381,6 +396,7 @@ const SettingsManager = {
         const val = Number(e.target.value);
         const blurVal = document.getElementById('wallpaper-blur-val');
         if (blurVal) blurVal.textContent = `${val} px`;
+        this.updateSliderFill(e.target);
         this.updateSetting('backgroundBlur', val, true);
       });
     }
@@ -406,6 +422,7 @@ const SettingsManager = {
         const val = Number(e.target.value);
         const volumeVal = document.getElementById('label-notification-volume');
         if (volumeVal) volumeVal.textContent = `${val}%`;
+        this.updateSliderFill(e.target);
         this.updateSetting('notificationVolume', val, true);
       });
     }
@@ -413,36 +430,38 @@ const SettingsManager = {
     // 8. Message personnalisé & Profil (Nom / Prénom d'usage)
     const inputUserName = document.getElementById('input-user-name');
     const btnSaveUserName = document.getElementById('btn-save-user-name');
-    const saveName = () => {
+    const saveName = (silentToast = false) => {
       if (!inputUserName) return;
       const val = inputUserName.value.trim();
-      this.updateSetting('userName', val);
+      const prev = ((StorageManager.getSettings && StorageManager.getSettings().userName) || '').trim();
+      if (silentToast && val === prev) return;
+      this.updateSetting('userName', val, true);
       if (typeof App !== 'undefined' && typeof App.updateLiveClockNow === 'function') {
         App.updateLiveClockNow();
       }
       this.updateGreetingPreview();
-      if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      if (!silentToast && typeof App !== 'undefined' && typeof App.showToast === 'function') {
         App.showToast(val ? `Prénom enregistré : ${val}` : "Prénom réinitialisé", "success");
       }
     };
     if (btnSaveUserName) {
       btnSaveUserName.addEventListener('click', (e) => {
         e.preventDefault();
-        saveName();
+        saveName(false);
       });
     }
     if (inputUserName) {
       inputUserName.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
-          saveName();
+          saveName(false);
         }
       });
       inputUserName.addEventListener('input', () => {
         this.updateGreetingPreview();
       });
       inputUserName.addEventListener('change', () => {
-        saveName();
+        saveName(true);
       });
     }
 
@@ -466,36 +485,38 @@ const SettingsManager = {
     // 10. Phrase personnalisée sur-mesure
     const inputCustomPhrase = document.getElementById('input-custom-phrase');
     const btnSaveCustomPhrase = document.getElementById('btn-save-custom-phrase');
-    const saveCustomPhrase = () => {
+    const saveCustomPhrase = (silentToast = false) => {
       if (!inputCustomPhrase) return;
       const val = inputCustomPhrase.value.trim();
-      this.updateSetting('customGreetingPhrase', val);
+      const prev = ((StorageManager.getSettings && StorageManager.getSettings().customGreetingPhrase) || '').trim();
+      if (silentToast && val === prev) return;
+      this.updateSetting('customGreetingPhrase', val, true);
       if (typeof App !== 'undefined' && typeof App.updateDashboardQuote === 'function') {
         App.updateDashboardQuote(true);
       }
       this.updateGreetingPreview();
-      if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+      if (!silentToast && typeof App !== 'undefined' && typeof App.showToast === 'function') {
         App.showToast("Phrase personnalisée enregistrée", "success");
       }
     };
     if (btnSaveCustomPhrase) {
       btnSaveCustomPhrase.addEventListener('click', (e) => {
         e.preventDefault();
-        saveCustomPhrase();
+        saveCustomPhrase(false);
       });
     }
     if (inputCustomPhrase) {
       inputCustomPhrase.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
-          saveCustomPhrase();
+          saveCustomPhrase(false);
         }
       });
       inputCustomPhrase.addEventListener('input', () => {
         this.updateGreetingPreview();
       });
       inputCustomPhrase.addEventListener('change', () => {
-        saveCustomPhrase();
+        saveCustomPhrase(true);
       });
     }
 
@@ -696,6 +717,20 @@ const SettingsManager = {
     bindUiOverrideToggle('setting-disable-animations', 'disableAnimations');
     bindUiOverrideToggle('setting-disable-previews', 'disablePreviews');
     bindUiOverrideToggle('setting-disable-hover-effects', 'disableHoverEffects');
+    const chkGpuCompat = document.getElementById('setting-gpu-compat-mode');
+    if (chkGpuCompat) {
+      chkGpuCompat.addEventListener('change', (e) => {
+        this.updateSetting('gpuCompatibilityMode', !!e.target.checked);
+        if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+          App.showToast(
+            e.target.checked
+              ? "Mode compatibilité GPU activé (appliqué complètement au prochain redémarrage)"
+              : "Accélération matérielle GPU standard restaurée (au prochain redémarrage)",
+            'info'
+          );
+        }
+      });
+    }
 
     // 17. Historique pliable des versions antérieures du changelog
     this.bindChangelogHistoryEvents();
@@ -856,7 +891,7 @@ const SettingsManager = {
       // Clic sur la carte (hors case à cocher et poignée) pour cocher/décocher confortablement
       card.addEventListener('click', (e) => {
         if (isDragging) return;
-        if (e.target && (e.target.closest('input[type="checkbox"]') || e.target.closest('.tab-drag-handle'))) {
+        if (e.target && (e.target.closest('input[type="checkbox"]') || e.target.closest('.tab-toggle-checkbox-wrapper') || e.target.closest('.tab-drag-handle'))) {
           return;
         }
         const chk = card.querySelector('input[type="checkbox"]');
@@ -962,8 +997,8 @@ const SettingsManager = {
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          const MAX_WIDTH = 1920;
-          const MAX_HEIGHT = 1080;
+          const MAX_WIDTH = 1600;
+          const MAX_HEIGHT = 900;
           let width = img.width;
           let height = img.height;
 
@@ -978,7 +1013,7 @@ const SettingsManager = {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
           resolve(dataUrl);
         };
         img.onerror = () => reject(new Error("Format d'image non reconnu ou corrompu"));
@@ -991,6 +1026,9 @@ const SettingsManager = {
 
   // Rendu de l'écran des paramètres d'apparence
   render() {
+    if (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function') {
+      this._lastRenderedRev = StorageManager.getRevision('settings');
+    }
     const settings = StorageManager.getSettings();
 
     // 1. Thème
@@ -1010,17 +1048,16 @@ const SettingsManager = {
     const pickerInput = document.getElementById('accent-color-picker-input');
     const pickerPreview = document.getElementById('custom-accent-picker-preview');
     if (isCustomAccent) {
-      if (hexInput) hexInput.value = settings.accentColor.toUpperCase();
+      if (hexInput && document.activeElement !== hexInput) hexInput.value = settings.accentColor.toUpperCase();
       if (pickerInput) pickerInput.value = settings.accentColor;
       if (pickerPreview) pickerPreview.style.background = settings.accentColor;
+    } else {
+      if (hexInput && document.activeElement !== hexInput) hexInput.value = '';
+      if (pickerInput) pickerInput.value = '';
+      if (pickerPreview) pickerPreview.style.background = '';
     }
 
-    // 3. Densité d'affichage
-    document.querySelectorAll('.density-option-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.densityVal === settings.density);
-    });
-
-    // 4. Taille de police
+    // 3. Taille de police
     document.querySelectorAll('.font-size-option-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.sizeVal === settings.fontSize);
     });
@@ -1042,7 +1079,7 @@ const SettingsManager = {
     });
 
     // 6. Fond d'écran (Image derrière les panneaux)
-    const PRESET_NAMES = ['nebula', 'aurora', 'mineral', 'sunset', 'ocean', 'forest', 'cyberpunk', 'minimal', 'lavender', 'solar', 'none'];
+    const PRESET_NAMES = ['nebula', 'aurora', 'mineral', 'sunset', 'ocean', 'forest', 'cyberpunk', 'minimal', 'lavender', 'solar', 'jade', 'astral', 'polar', 'none'];
     const currentWp = settings.backgroundImage;
     const isStudioWp = Array.isArray(settings.customWallpapers) && settings.customWallpapers.some(w => w.id === currentWp);
 
@@ -1069,20 +1106,29 @@ const SettingsManager = {
     const opacitySlider = document.getElementById('wallpaper-opacity-slider');
     const opacityVal = document.getElementById('wallpaper-opacity-val');
     const curOpacity = settings.backgroundOpacity !== undefined ? settings.backgroundOpacity : 25;
-    if (opacitySlider) opacitySlider.value = curOpacity;
+    if (opacitySlider) {
+      opacitySlider.value = curOpacity;
+      this.updateSliderFill(opacitySlider);
+    }
     if (opacityVal) opacityVal.textContent = `${curOpacity}%`;
 
     const blurSlider = document.getElementById('wallpaper-blur-slider');
     const blurVal = document.getElementById('wallpaper-blur-val');
     const curBlur = settings.backgroundBlur !== undefined ? settings.backgroundBlur : 0;
-    if (blurSlider) blurSlider.value = curBlur;
+    if (blurSlider) {
+      blurSlider.value = curBlur;
+      this.updateSliderFill(blurSlider);
+    }
     if (blurVal) blurVal.textContent = `${curBlur} px`;
 
     const customThumb = document.getElementById('wallpaper-custom-thumb');
     if (customThumb) {
       const isCustomFile = currentWp && !PRESET_NAMES.includes(currentWp) && !isStudioWp;
-      if (isCustomFile) {
-        customThumb.style.backgroundImage = `url("${currentWp}")`;
+      const thumbSrc = (currentWp === '__custom_wallpaper__' && typeof StorageManager !== 'undefined' && typeof StorageManager.getCustomWallpaperDataUrl === 'function')
+        ? StorageManager.getCustomWallpaperDataUrl()
+        : currentWp;
+      if (isCustomFile && thumbSrc) {
+        customThumb.style.backgroundImage = `url("${thumbSrc}")`;
         customThumb.innerHTML = '';
       } else {
         customThumb.style.backgroundImage = 'none';
@@ -1119,12 +1165,15 @@ const SettingsManager = {
     const volumeSlider = document.getElementById('slider-notification-volume');
     const volumeVal = document.getElementById('label-notification-volume');
     const curVol = settings.notificationVolume !== undefined ? settings.notificationVolume : 60;
-    if (volumeSlider) volumeSlider.value = curVol;
+    if (volumeSlider) {
+      volumeSlider.value = curVol;
+      this.updateSliderFill(volumeSlider);
+    }
     if (volumeVal) volumeVal.textContent = `${curVol}%`;
 
     // 8. Message personnalisé & Profil
     const inputUserName = document.getElementById('input-user-name');
-    if (inputUserName) {
+    if (inputUserName && document.activeElement !== inputUserName) {
       const curName = (settings.userName && settings.userName.toLowerCase() !== 'utilisateur') ? settings.userName : '';
       inputUserName.value = curName;
     }
@@ -1137,7 +1186,7 @@ const SettingsManager = {
       groupCustom.style.display = (settings.greetingMood === 'custom') ? 'block' : 'none';
     }
     const inputCustomPhrase = document.getElementById('input-custom-phrase');
-    if (inputCustomPhrase) {
+    if (inputCustomPhrase && document.activeElement !== inputCustomPhrase) {
       inputCustomPhrase.value = settings.customGreetingPhrase || '';
     }
     this.updateGreetingPreview();
@@ -1179,10 +1228,23 @@ const SettingsManager = {
 
     // 11-bis. Synchroniser l'état des toggles d'onglets du volet latéral
     const visibleScreens = settings.sidebarVisibleScreens || {};
+    const defaultVisible = {
+      agenda: true,
+      tasks: true,
+      projects: true,
+      notes: true,
+      trash: true,
+      constellation: false,
+      focus: false,
+      music: false,
+      backups: false
+    };
     document.querySelectorAll('.sidebar-tabs-toggle-grid input[type="checkbox"]').forEach(chk => {
       const tabName = chk.dataset.tabName;
       if (tabName) {
-        chk.checked = (visibleScreens[tabName] !== undefined) ? visibleScreens[tabName] : true;
+        chk.checked = (visibleScreens[tabName] !== undefined)
+          ? visibleScreens[tabName]
+          : (defaultVisible[tabName] !== false);
       }
     });
 
@@ -1223,6 +1285,33 @@ const SettingsManager = {
 
     if (typeof App !== 'undefined' && typeof App.updateAllSlidersFill === 'function') {
       App.updateAllSlidersFill();
+    } else {
+      this.updateAllSlidersFill();
+    }
+  },
+
+  // Met à jour le remplissage dynamique à gauche du curseur pour une glissière / tirette de réglage
+  updateSliderFill(slider) {
+    if (typeof App !== 'undefined' && typeof App.updateSliderFill === 'function') {
+      App.updateSliderFill(slider);
+    } else if (slider) {
+      const min = (slider.min !== '' && !isNaN(parseFloat(slider.min))) ? parseFloat(slider.min) : 0;
+      const max = (slider.max !== '' && !isNaN(parseFloat(slider.max))) ? parseFloat(slider.max) : 100;
+      const val = (slider.value !== '' && !isNaN(parseFloat(slider.value))) ? parseFloat(slider.value) : min;
+      const pct = max > min ? Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100)) : 0;
+      if (slider.style && typeof slider.style.setProperty === 'function') {
+        slider.style.setProperty('--slider-percent', `${pct}%`);
+      }
+    }
+  },
+
+  // Met à jour le remplissage de toutes les glissières / tirettes des paramètres et du studio
+  updateAllSlidersFill(container = (typeof document !== 'undefined' ? document : null)) {
+    if (typeof App !== 'undefined' && typeof App.updateAllSlidersFill === 'function') {
+      App.updateAllSlidersFill(container);
+    } else if (container && typeof container.querySelectorAll === 'function') {
+      const sliders = container.querySelectorAll('.settings-slider, #wallpaper-opacity-slider, #wallpaper-blur-slider, #slider-notification-volume, #studio-param-angle, #studio-param-size, #studio-param-intensity, #studio-param-blur');
+      sliders.forEach(slider => this.updateSliderFill(slider));
     }
   },
 
@@ -1237,7 +1326,11 @@ const SettingsManager = {
       App.applyAppearanceSettings(settings);
     }
 
-    this.render();
+    if (!silent) {
+      this.render();
+    } else {
+      this.updatePreviewBox(settings);
+    }
 
     if (!silent && typeof App !== 'undefined' && typeof App.showToast === 'function') {
       const labels = {
@@ -1350,7 +1443,7 @@ const SettingsManager = {
         if (customWrap) customWrap.style.display = 'inline-flex';
       }
     }
-    if (inputFreq) inputFreq.value = String(freqHours);
+    if (inputFreq && document.activeElement !== inputFreq) inputFreq.value = String(freqHours);
     if (zeroWarn) zeroWarn.style.display = (freqHours === 0) ? 'flex' : 'none';
 
     const retention = (typeof BackupManager !== 'undefined' && typeof BackupManager.getConfiguredRetentionCount === 'function')
@@ -1365,13 +1458,15 @@ const SettingsManager = {
       btn.classList.toggle('btn-secondary', Number(btn.dataset.retention) !== retention);
     });
 
-    // 4. Overrides interface indépendants
+    // 4. Overrides interface indépendants & GPU
     const chkAnim = document.getElementById('setting-disable-animations');
     const chkPrev = document.getElementById('setting-disable-previews');
     const chkHover = document.getElementById('setting-disable-hover-effects');
+    const chkGpuCompat = document.getElementById('setting-gpu-compat-mode');
     if (chkAnim) chkAnim.checked = settings.disableAnimations === true;
     if (chkPrev) chkPrev.checked = settings.disablePreviews === true;
     if (chkHover) chkHover.checked = settings.disableHoverEffects === true;
+    if (chkGpuCompat) chkGpuCompat.checked = settings.gpuCompatibilityMode === true;
 
     // 5. Maintenir le sous-onglet sélectionné
     this._applySeriousSubtabDOM(this.currentSeriousSubtab || 'performance');
@@ -1404,10 +1499,12 @@ const SettingsManager = {
         if (prefs) {
           if (chkStartup && typeof prefs.launchOnStartup === 'boolean') {
             chkStartup.checked = prefs.launchOnStartup;
-            const currentSettings = StorageManager.getSettings();
-            if (currentSettings.launchOnStartup !== prefs.launchOnStartup) {
-              currentSettings.launchOnStartup = prefs.launchOnStartup;
-              StorageManager.saveSettings(currentSettings);
+            if (typeof StorageManager !== 'undefined') {
+              const currentSettings = StorageManager.getSettings();
+              if (currentSettings.launchOnStartup !== prefs.launchOnStartup) {
+                currentSettings.launchOnStartup = prefs.launchOnStartup;
+                StorageManager.saveSettings(currentSettings);
+              }
             }
           }
           if (startupNote) {
@@ -1440,17 +1537,37 @@ const SettingsManager = {
   },
 
   async toggleLaunchOnStartup(enabled) {
+    const wantEnabled = !!enabled;
     const api = (typeof window !== 'undefined' && window.AntigraviteAPI) ? window.AntigraviteAPI : null;
     if (api && api.system && typeof api.system.setStartupSetting === 'function') {
       try {
-        const res = await api.system.setStartupSetting(!!enabled);
-        this.updateSetting('launchOnStartup', !!(res && res.enabled));
+        const res = await api.system.setStartupSetting(wantEnabled);
+        const actualEnabled = !!(res && res.enabled);
+        if (wantEnabled && !actualEnabled) {
+          const chkStartup = typeof document !== 'undefined' ? document.getElementById('setting-launch-on-startup') : null;
+          if (chkStartup) chkStartup.checked = false;
+          this.updateSetting('launchOnStartup', false, true);
+          if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+            App.showToast("Impossible d'activer le démarrage automatique Windows (vérifiez les autorisations).", "error");
+          }
+          return;
+        }
+        this.updateSetting('launchOnStartup', actualEnabled);
         return;
       } catch (err) {
         console.warn('[Settings] Erreur toggleLaunchOnStartup:', err);
+        if (wantEnabled) {
+          const chkStartup = typeof document !== 'undefined' ? document.getElementById('setting-launch-on-startup') : null;
+          if (chkStartup) chkStartup.checked = false;
+          this.updateSetting('launchOnStartup', false, true);
+          if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+            App.showToast("Erreur lors de la configuration du démarrage automatique Windows.", "error");
+          }
+          return;
+        }
       }
     }
-    this.updateSetting('launchOnStartup', !!enabled);
+    this.updateSetting('launchOnStartup', wantEnabled);
   },
 
   applyBackupFrequencySetting(hours) {
@@ -1770,7 +1887,11 @@ const SettingsManager = {
       emerald: 'Émeraude',
       purple: 'Violet Astral',
       amber: 'Ambre Chaud',
-      rose: 'Rose Framboise'
+      rose: 'Rose Framboise',
+      cyan: 'Cyan Glacier',
+      orange: 'Orange Solaire',
+      mint: 'Menthe Douce',
+      indigo: 'Indigo Profond'
     };
 
     const themeNames = {
@@ -2120,6 +2241,27 @@ const SettingsManager = {
     }
   },
 
+  _esc(str) {
+    if (typeof App !== 'undefined' && typeof App.escapeHtml === 'function') {
+      return App.escapeHtml(str);
+    }
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  },
+
+  _safeCssColor(val, fallback = '#38BDF8') {
+    if (typeof val !== 'string') return fallback;
+    const trimmed = val.trim();
+    if (/^#([0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{6}|[0-9A-F]{8})$/i.test(trimmed)) return trimmed;
+    if (/^(?:rgb|hsl)a?\(\s*[0-9.%,\s/-]+\)$/i.test(trimmed)) return trimmed;
+    return fallback;
+  },
+
+  _safeCssBgValue(val) {
+    if (typeof val !== 'string') return '';
+    return val.replace(/["<>;{}]/g, '');
+  },
+
   renderCustomAccentColors(settings) {
     const section = document.getElementById('custom-accent-colors-section');
     const list = document.getElementById('custom-accent-colors-list');
@@ -2138,17 +2280,20 @@ const SettingsManager = {
     if (countEl) countEl.textContent = `(${colors.length})`;
 
     list.innerHTML = colors.map(c => {
-      const isActive = settings.accentColor === c.hex;
+      const safeHex = this._safeCssColor(c && c.hex, '#38BDF8');
+      const safeId = this._esc(c && c.id);
+      const safeName = this._esc((c && c.name) || safeHex);
+      const isActive = settings.accentColor === (c && c.hex);
       return `
         <div class="accent-option-bubble is-custom ${isActive ? 'active' : ''}"
-             data-accent-val="${c.hex}"
-             data-custom-accent-id="${c.id}"
-             style="--bubble-color: ${c.hex};"
-             title="${c.name || c.hex}">
+             data-accent-val="${this._esc(c && c.hex)}"
+             data-custom-accent-id="${safeId}"
+             style="--bubble-color: ${safeHex};"
+             title="${safeName}">
           <span class="bubble-dot"></span>
-          <span class="bubble-label">${c.name || c.hex}</span>
+          <span class="bubble-label">${safeName}</span>
           <span class="bubble-check">✓</span>
-          <button type="button" class="bubble-edit-btn" data-custom-id="${c.id}" title="Modifier cette teinte" aria-label="Modifier">
+          <button type="button" class="bubble-edit-btn" data-custom-id="${safeId}" title="Modifier cette teinte" aria-label="Modifier">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
           </button>
           <button type="button" class="bubble-delete-btn" title="Supprimer cette teinte" aria-label="Supprimer">
@@ -2193,7 +2338,10 @@ const SettingsManager = {
   },
 
   openWallpaperStudioModal() {
-    const modal = document.getElementById('wallpaper-studio-modal');
+    const app = this._getApp();
+    const modal = (app && typeof app.ensureTemplateElement === 'function')
+      ? app.ensureTemplateElement('wallpaper-studio-modal', 'tpl-wallpaper-studio-modal')
+      : document.getElementById('wallpaper-studio-modal');
     if (!modal) return;
     this.bindStudioEventsOnce();
     this.syncStudioInputsWithConfig();
@@ -2201,7 +2349,9 @@ const SettingsManager = {
     modal.classList.add('active');
     modal.style.display = 'flex';
     if (typeof App !== 'undefined' && typeof App.updateAllSlidersFill === 'function') {
-      App.updateAllSlidersFill();
+      App.updateAllSlidersFill(modal);
+    } else {
+      this.updateAllSlidersFill(modal);
     }
   },
 
@@ -2215,6 +2365,9 @@ const SettingsManager = {
     const app = this._getApp();
     if (app && typeof app.closeColorPicker === 'function') {
       app.closeColorPicker(true);
+    }
+    if (app && typeof app.applyAppearanceSettings === 'function') {
+      app.applyAppearanceSettings();
     }
   },
 
@@ -2277,6 +2430,11 @@ const SettingsManager = {
     const blurVal = document.getElementById('studio-param-blur-val');
     if (blurSlider) blurSlider.value = cfg.blur || 0;
     if (blurVal) blurVal.textContent = `${cfg.blur || 0} px`;
+
+    if (angleSlider) this.updateSliderFill(angleSlider);
+    if (sizeSlider) this.updateSliderFill(sizeSlider);
+    if (intensitySlider) this.updateSliderFill(intensitySlider);
+    if (blurSlider) this.updateSliderFill(blurSlider);
 
     const vignetteToggle = document.getElementById('studio-toggle-vignette');
     if (vignetteToggle) vignetteToggle.checked = cfg.vignette === true;
@@ -2407,19 +2565,19 @@ const SettingsManager = {
   updateStudioPreview() {
     const gen = this.generateStudioCss(this.studioConfig);
     const box = document.getElementById('studio-live-preview-box');
-    const canvas = document.getElementById('studio-preview-canvas') || box;
-    if (box) {
-      box.style.background = gen.css;
-      box.style.backgroundSize = gen.patternSize;
-      box.style.backgroundRepeat = gen.patternRepeat;
-      box.style.backgroundPosition = 'center';
-    }
-    if (canvas && canvas !== box) {
+    const canvas = document.getElementById('studio-preview-canvas');
+    if (canvas) {
       canvas.style.background = gen.css;
       canvas.style.backgroundSize = gen.patternSize;
       canvas.style.backgroundRepeat = gen.patternRepeat;
       canvas.style.backgroundPosition = 'center';
       canvas.style.filter = this.studioConfig.blur > 0 ? `blur(${this.studioConfig.blur}px)` : 'none';
+      if (box) box.style.background = '#070b14';
+    } else if (box) {
+      box.style.background = gen.css;
+      box.style.backgroundSize = gen.patternSize;
+      box.style.backgroundRepeat = gen.patternRepeat;
+      box.style.backgroundPosition = 'center';
     }
   },
 
@@ -2432,11 +2590,20 @@ const SettingsManager = {
       wallpaperLayer.className = 'app-wallpaper-layer';
       document.body.prepend(wallpaperLayer);
     }
+    const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+      ? StorageManager.getSettings()
+      : {};
+    const opacity = (settings.backgroundOpacity !== undefined ? settings.backgroundOpacity : 35) / 100;
     wallpaperLayer.style.background = gen.css;
     wallpaperLayer.style.backgroundSize = gen.patternSize;
     wallpaperLayer.style.backgroundRepeat = gen.patternRepeat;
     wallpaperLayer.style.backgroundPosition = 'center';
+    wallpaperLayer.style.opacity = opacity;
     wallpaperLayer.style.filter = this.studioConfig.blur > 0 ? `blur(${this.studioConfig.blur}px)` : 'none';
+    wallpaperLayer.style.display = 'block';
+    if (typeof document !== 'undefined' && document.body && document.body.classList) {
+      document.body.classList.add('has-custom-wallpaper');
+    }
 
     if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
       App.showToast("Aperçu en plein écran appliqué", "info");
@@ -2697,6 +2864,7 @@ const SettingsManager = {
         this.studioConfig.angle = val;
         const valLabel = document.getElementById('studio-param-angle-val');
         if (valLabel) valLabel.textContent = `${val}°`;
+        this.updateSliderFill(e.target);
         this.updateStudioPreview();
       });
     }
@@ -2708,6 +2876,7 @@ const SettingsManager = {
         this.studioConfig.size = val;
         const valLabel = document.getElementById('studio-param-size-val');
         if (valLabel) valLabel.textContent = `${val} px`;
+        this.updateSliderFill(e.target);
         this.updateStudioPreview();
       });
     }
@@ -2719,6 +2888,7 @@ const SettingsManager = {
         this.studioConfig.intensity = val;
         const valLabel = document.getElementById('studio-param-intensity-val');
         if (valLabel) valLabel.textContent = `${val}%`;
+        this.updateSliderFill(e.target);
         this.updateStudioPreview();
       });
     }
@@ -2730,6 +2900,7 @@ const SettingsManager = {
         this.studioConfig.blur = val;
         const valLabel = document.getElementById('studio-param-blur-val');
         if (valLabel) valLabel.textContent = `${val} px`;
+        this.updateSliderFill(e.target);
         this.updateStudioPreview();
       });
     }
@@ -2818,6 +2989,7 @@ const SettingsManager = {
     }
 
     settings.backgroundImage = wpId;
+    settings.backgroundBlur = Number(this.studioConfig.blur) || 0;
     StorageManager.saveSettings(settings);
 
     if (typeof App !== 'undefined' && typeof App.applyAppearanceSettings === 'function') {
@@ -2909,10 +3081,15 @@ const SettingsManager = {
 
     grid.innerHTML = list.map(w => {
       const isActive = settings.backgroundImage === w.id;
+      const safeId = this._esc(w && w.id);
+      const safeName = this._esc((w && w.name) || 'Fond personnalisé');
+      const safeCss = this._safeCssBgValue(w && w.css);
+      const safeSize = this._safeCssBgValue((w && w.patternSize) || 'cover');
+      const safeRepeat = this._safeCssBgValue((w && w.patternRepeat) || 'no-repeat');
       return `
-        <div class="wallpaper-card is-custom ${isActive ? 'active' : ''}" data-wallpaper="${w.id}" data-custom-wp-id="${w.id}" title="${w.name}">
-          <div class="wallpaper-thumb" style="background: ${w.css}; background-size: ${w.patternSize || 'cover'}; background-repeat: ${w.patternRepeat || 'no-repeat'}; background-position: center;"></div>
-          <span class="wallpaper-name">${w.name}</span>
+        <div class="wallpaper-card is-custom ${isActive ? 'active' : ''}" data-wallpaper="${safeId}" data-custom-wp-id="${safeId}" title="${safeName}">
+          <div class="wallpaper-thumb" style="background: ${safeCss}; background-size: ${safeSize}; background-repeat: ${safeRepeat}; background-position: center;"></div>
+          <span class="wallpaper-name">${safeName}</span>
           <button type="button" class="wallpaper-delete-btn" title="Supprimer ce fond d'écran" aria-label="Supprimer">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -2931,7 +3108,7 @@ const SettingsManager = {
 const UpdateManager = {
   initialized: false,
   isBusy: false,
-  currentVersion: '1.3.0',
+  currentVersion: '1.3.1',
   isPackaged: false,
   status: 'idle',
   updateInfo: null,
@@ -2993,6 +3170,30 @@ const UpdateManager = {
       btnInstall._hasUpdaterListener = true;
     }
 
+    // Case à cocher d'activation/désactivation de la vérification automatique au démarrage
+    const chkAutoUpdates = document.getElementById('setting-auto-check-updates');
+    if (chkAutoUpdates && !chkAutoUpdates._hasUpdaterAutoListener) {
+      chkAutoUpdates.addEventListener('change', (e) => {
+        const enabled = !!e.target.checked;
+        if (typeof SettingsManager !== 'undefined' && typeof SettingsManager.updateSetting === 'function') {
+          SettingsManager.updateSetting('autoCheckUpdates', enabled, true);
+        } else if (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function') {
+          const s = StorageManager.getSettings();
+          s.autoCheckUpdates = enabled;
+          StorageManager.saveSettings(s);
+        }
+        if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+          App.showToast(
+            enabled
+              ? "Vérification automatique des mises à jour activée au lancement"
+              : "Vérification automatique désactivée : Antigravité démarre 100 % hors ligne",
+            "info"
+          );
+        }
+      });
+      chkAutoUpdates._hasUpdaterAutoListener = true;
+    }
+
     // Écoute des événements IPC temps réel (via preload.js)
     const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
     if (updaterApi && typeof updaterApi.onStatusChanged === 'function') {
@@ -3044,7 +3245,7 @@ const UpdateManager = {
   async refreshStatus() {
     const updaterApi = typeof window !== 'undefined' ? window.AntigraviteAPI?.updater : null;
     if (!updaterApi) {
-      this.currentVersion = '1.3.0';
+      this.currentVersion = '1.3.1';
       this.isPackaged = false;
       this.render();
       return;
@@ -3170,16 +3371,14 @@ const UpdateManager = {
       const message = `La mise à jour${versionStr} a été téléchargée avec succès !\n\nSouhaitez-vous redémarrer Antigravité maintenant pour l'installer en toute discrétion en arrière-plan, ou préférez-vous continuer à travailler ?`;
 
       if (window.App && typeof window.App.confirm === 'function') {
-        const shouldRestart = await window.App.confirm(
+        const shouldRestart = await window.App.confirm({
+          title: "Mise à jour prête à installer",
           message,
-          "Mise à jour prête à installer",
-          {
-            confirmText: "Redémarrer maintenant",
-            cancelText: "Continuer à travailler",
-            isDanger: false,
-            icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
-          }
-        );
+          confirmText: "Redémarrer maintenant",
+          cancelText: "Continuer à travailler",
+          danger: false,
+          icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
+        });
 
         if (shouldRestart) {
           this.installUpdate();
@@ -3226,10 +3425,15 @@ const UpdateManager = {
   render() {
     if (typeof document === 'undefined') return;
 
-    // 1. Version courante
+    // 1. Version courante & préférence autoCheckUpdates
     const versionLabel = document.getElementById('updater-current-version-label');
     if (versionLabel) {
       versionLabel.textContent = this.currentVersion || '1.0.0';
+    }
+    const chkAutoUpdates = document.getElementById('setting-auto-check-updates');
+    if (chkAutoUpdates && typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function') {
+      const s = StorageManager.getSettings();
+      chkAutoUpdates.checked = s.autoCheckUpdates !== false;
     }
 
     // 2. Éléments DOM
@@ -3427,21 +3631,10 @@ const UpdateManager = {
 
 SettingsManager.updater = UpdateManager;
 
-// Exposer globalement pour compatibilité
+// Exposer globalement pour compatibilité (initialisé par App.init() après StorageManager.init())
 if (typeof window !== 'undefined') {
   window.SettingsManager = SettingsManager;
   window.UpdateManager = UpdateManager;
-}
-
-// Auto-initialisation au chargement du DOM si disponible
-if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      SettingsManager.init();
-    });
-  } else {
-    SettingsManager.init();
-  }
 }
 
 if (typeof module !== 'undefined' && module.exports) {

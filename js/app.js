@@ -4,13 +4,13 @@
 
 const App = {
   currentScreen: 'home',
-  APP_VERSION: '1.3.0',
+  APP_VERSION: '1.3.1',
   dashboardAgendaView: 'grid',
   WHATS_NEW_STORAGE_KEY: 'antigravite_last_seen_version',
   _activeWhatsNewVersion: null,
   // Versions majeures justifiant l'affichage automatique de la modale "Quoi de neuf" au premier démarrage
   // Les versions d'ajustements et de finitions (ex: 1.2.2) n'affichent pas de pop-up intrusif à l'ouverture
-  MAJOR_ANNOUNCED_VERSIONS: ['1.2.0'],
+  MAJOR_ANNOUNCED_VERSIONS: ['1.2.0', '1.3.1'],
 
   // Messages de chargement variés affichés aléatoirement au démarrage
   LOADING_PHRASES: [
@@ -69,8 +69,16 @@ const App = {
     return list.slice(0, count);
   },
 
+  _yieldFrame() {
+    if (typeof requestAnimationFrame === 'function') {
+      return new Promise(resolve => requestAnimationFrame(() => resolve()));
+    }
+    return new Promise(resolve => setTimeout(resolve, 0));
+  },
+
   async init() {
     this._bootStartTs = Date.now();
+    this._preloadedScreens = false;
     this.removePendingUpdateIndicator();
     // 0. Configurer le message d'accueil dynamique sur l'écran de chargement
     this.initSplashScreen();
@@ -78,69 +86,112 @@ const App = {
 
     // Sélection aléatoire de 3 messages de chargement pour l'animation
     const loadingPhrases = this.getRandomLoadingPhrases(3);
-    this.updateSplashProgress(20, loadingPhrases[0]);
+    this.updateSplashProgress(20, loadingPhrases[0], "Initialisation du moteur local & catalogue musical...");
 
-    // 1. Initialiser le stockage local et les modules en arrière-plan
-    const initTask = (async () => {
-      await StorageManager.init();
-      const settings = StorageManager.getSettings();
-      this.applyAppearanceSettings(settings);
+    const delayMs = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    const waitUntilBootElapsed = async (targetMs) => {
+      const remaining = targetMs - (Date.now() - this._bootStartTs);
+      if (remaining > 0) await delayMs(remaining);
+    };
 
-      TasksManager.init();
-      ProjectsManager.init();
-      AgendaManager.init();
-      NotesManager.init();
-      BackupManager.init();
-      if (typeof SettingsManager !== 'undefined') SettingsManager.init();
-      if (typeof AgendaNotificationManager !== 'undefined') AgendaNotificationManager.init();
-      if (typeof MusicManager !== 'undefined') MusicManager.init();
-      if (typeof FocusManager !== 'undefined') FocusManager.init();
-      if (typeof TrashManager !== 'undefined') TrashManager.init();
-      if (typeof SearchManager !== 'undefined') SearchManager.init();
-      if (typeof DebriefManager !== 'undefined') DebriefManager.init();
+    // 1. Phase 1 du Splash (0 -> 1400ms) : Stockage, thème/wallpaper Canvas, init légère des modules & scan musique asynchrone
+    await StorageManager.init();
+    const settings = StorageManager.getSettings();
+    this.applyAppearanceSettings(settings);
 
-      this.bindNavigation();
-      this.bindGlobalActions();
-      this.initSidebarState();
-      this.initSidebarRailTooltips();
-      this.initSidebarStickyNote();
-      this.dashboardAgendaView = (typeof localStorage !== 'undefined' && localStorage.getItem('antigravite_dashboard_agenda_view')) || 'grid';
-      this.initDashboardClock();
-      this.updateDashboard();
-      this._initDurationMs = Date.now() - (this._bootStartTs || Date.now());
+    const musicInitPromise = (typeof MusicManager !== 'undefined')
+      ? MusicManager.init({ deferRender: true })
+      : Promise.resolve();
 
-      if (typeof GoogleSyncManager !== 'undefined') {
-        try {
-          await GoogleSyncManager.init();
-          if (GoogleSyncManager.status?.isConnected) {
-            await GoogleSyncManager.syncCalendarNow(true);
-          }
-        } catch (err) {
-          console.warn("[App] Synchronisation initiale de l'agenda :", err);
+    TasksManager.init({ deferRender: true });
+    ProjectsManager.init({ deferRender: true });
+    AgendaManager.init({ deferRender: true });
+    NotesManager.init({ deferRender: true });
+    BackupManager.init({ deferStartupIO: true });
+    if (typeof SettingsManager !== 'undefined') SettingsManager.init({ deferRender: true });
+    if (typeof AgendaNotificationManager !== 'undefined') AgendaNotificationManager.init();
+    if (typeof FocusManager !== 'undefined') FocusManager.init({ deferRender: true });
+    if (typeof TrashManager !== 'undefined') TrashManager.init({ deferRender: true });
+    if (typeof SearchManager !== 'undefined') SearchManager.init();
+    if (typeof DebriefManager !== 'undefined') DebriefManager.init();
+
+    this.bindNavigation();
+    this.bindGlobalActions();
+    this.updateAllSlidersFill();
+    this.initSidebarState();
+    this.initSidebarRailTooltips();
+    this.initSidebarStickyNote();
+    this.dashboardAgendaView = (typeof localStorage !== 'undefined' && localStorage.getItem('antigravite_dashboard_agenda_view')) || 'grid';
+    this.initDashboardClock();
+    this.bindDormancyListeners();
+    this.updateDashboard();
+
+    await waitUntilBootElapsed(1400);
+    this.updateSplashProgress(55, loadingPhrases[1], "Indexation des notes, récurrences & synchronisation Google...");
+
+    // 2. Phase 2 du Splash (1400ms -> 2800ms) : Sync Google silencieuse, indexation mémoire, récurrences, stats & sauvegarde
+    await this._yieldFrame();
+    if (typeof MusicManager !== 'undefined' && typeof MusicManager.warmUpCatalog === 'function') {
+      await MusicManager.warmUpCatalog().catch(() => {});
+    } else {
+      await musicInitPromise.catch(() => {});
+    }
+    if (typeof StorageManager.checkStorageQuotaHealth === 'function') {
+      StorageManager.checkStorageQuotaHealth(true);
+    }
+    if (typeof TrashManager !== 'undefined' && typeof TrashManager.cleanExpired === 'function') {
+      TrashManager.cleanExpired();
+    }
+    if (typeof ProjectsManager !== 'undefined' && typeof ProjectsManager.getAllProjectsStats === 'function') {
+      ProjectsManager.getAllProjectsStats();
+    }
+
+    await this._yieldFrame();
+    if (typeof NotesManager !== 'undefined' && typeof NotesManager.warmUpIndex === 'function') {
+      NotesManager.warmUpIndex();
+    }
+    await this._yieldFrame();
+    if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.warmUpRecurrenceCache === 'function') {
+      AgendaManager.warmUpRecurrenceCache();
+    }
+    await this._yieldFrame();
+    if (typeof ConstellationManager !== 'undefined' && typeof ConstellationManager.warmUpTopology === 'function') {
+      ConstellationManager.warmUpTopology();
+    }
+
+    if (typeof GoogleSyncManager !== 'undefined') {
+      try {
+        await GoogleSyncManager.init();
+        if (GoogleSyncManager.status?.isConnected) {
+          await GoogleSyncManager.syncCalendarNow(true);
+          this._lastAgendaAutoSyncAt = Date.now();
+          this.updateDashboard(true);
         }
+      } catch (err) {
+        console.warn("[App] Synchronisation initiale de l'agenda :", err);
       }
-    })();
+    }
 
-    // Animation cadencée sur ~4.8 secondes (+2s supplémentaires) permettant un temps de lecture confortable
-    // 1ère phrase (0 -> 1400ms)
-    await new Promise(resolve => setTimeout(resolve, 1400));
-    this.updateSplashProgress(55, loadingPhrases[1]);
+    if (typeof BackupManager !== 'undefined' && typeof BackupManager.runStartupMaintenance === 'function') {
+      await BackupManager.runStartupMaintenance().catch(() => {});
+    }
 
-    // 2ème phrase (1400ms -> 2800ms)
-    await new Promise(resolve => setTimeout(resolve, 1400));
-    this.updateSplashProgress(85, loadingPhrases[2]);
+    await waitUntilBootElapsed(2800);
+    this.updateSplashProgress(85, loadingPhrases[2], "Préparation des vues & contrôle d'intégrité...");
 
-    // 3ème phrase (2800ms -> 4200ms)
-    await new Promise(resolve => setTimeout(resolve, 1400));
-    await initTask;
+    // 3. Phase 3 du Splash (2800ms -> 4200ms) : Pré-rendu étalé par trames pendant que le splash reste affiché
+    await this.preloadScreens();
+    this._initDurationMs = Date.now() - (this._bootStartTs || Date.now());
+
+    await waitUntilBootElapsed(4200);
 
     // Étape finale : barre à 100% avec message de bienvenue
     const userName = this.getUserName();
     const readyMessage = userName ? `Prêt ${userName} ! Bonne journée !` : "Prêt ! Bonne journée !";
-    this.updateSplashProgress(100, readyMessage);
+    this.updateSplashProgress(100, readyMessage, "Espace prêt !");
 
     // Temps de lecture de la validation finale et fermeture en douceur (4200ms -> 4800ms)
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await delayMs(600);
     this.hideSplashScreen();
     this._splashHidden = true;
 
@@ -154,40 +205,42 @@ const App = {
     // 7. Afficher l'écran initial
     this.navigate('home');
 
-    // 8. Pré-chargement instantané des écrans principaux (Zero-lag)
-    this.preloadScreens();
-
-    // 9. Afficher les nouveautés au premier lancement après une mise à jour
+    // 8. Afficher les nouveautés au premier lancement après une mise à jour
     this.scheduleWhatsNewCheck();
   },
 
-  preloadScreens() {
+  async preloadScreens() {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
-    const schedule = (typeof window.requestIdleCallback === 'function')
-      ? window.requestIdleCallback
-      : (cb) => setTimeout(cb, 120);
+    if (this._preloadedScreens) return;
+    this._preloadedScreens = true;
 
-    schedule(() => {
+    const currentSettings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+      ? StorageManager.getSettings()
+      : {};
+    const perfMode = currentSettings.performanceMode || 'normal';
+
+    // Sur PC modeste / mode économie, ne pas pré-rendre les DOM cachés (rendu paresseux à la demande)
+    if (perfMode === 'potato' || perfMode === 'economy') {
+      return;
+    }
+
+    const queue = [];
+    if (typeof TasksManager !== 'undefined' && typeof TasksManager.renderIfNeeded === 'function') queue.push(() => TasksManager.renderIfNeeded());
+    if (typeof ProjectsManager !== 'undefined' && typeof ProjectsManager.renderIfNeeded === 'function') queue.push(() => ProjectsManager.renderIfNeeded());
+    if (typeof NotesManager !== 'undefined' && typeof NotesManager.renderIfNeeded === 'function') queue.push(() => NotesManager.renderIfNeeded());
+    if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.renderIfNeeded === 'function') queue.push(() => AgendaManager.renderIfNeeded());
+    if (typeof DebriefManager !== 'undefined' && typeof DebriefManager.renderIfNeeded === 'function' && currentSettings.debriefEnabled !== false) {
+      queue.push(() => DebriefManager.renderIfNeeded());
+    }
+
+    for (let i = 0; i < queue.length; i++) {
+      await this._yieldFrame();
       try {
-        if (typeof TasksManager !== 'undefined' && typeof TasksManager.render === 'function') {
-          TasksManager.render();
-        }
-        if (typeof ProjectsManager !== 'undefined' && typeof ProjectsManager.render === 'function') {
-          ProjectsManager.render();
-        }
-        if (typeof NotesManager !== 'undefined' && typeof NotesManager.render === 'function') {
-          NotesManager.render();
-        }
-        if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.render === 'function') {
-          AgendaManager.render();
-        }
-        if (typeof DebriefManager !== 'undefined' && typeof DebriefManager.render === 'function') {
-          DebriefManager.render();
-        }
+        queue[i]();
       } catch (err) {
         console.warn("[App] Préchargement doux des écrans :", err);
       }
-    });
+    }
   },
 
   async resolveAppVersion() {
@@ -247,9 +300,25 @@ const App = {
     }
   },
 
+  // Instancie à la demande une modale stockée dans un <template> pour alléger le DOM initial
+  ensureTemplateElement(targetId, templateId) {
+    if (typeof document === 'undefined') return null;
+    const existing = document.getElementById(targetId);
+    if (existing) return existing;
+    const tpl = document.getElementById(templateId);
+    if (!tpl) return null;
+    const frag = (tpl.content && typeof tpl.content.cloneNode === 'function')
+      ? tpl.content.cloneNode(true)
+      : null;
+    if (frag && document.body && typeof document.body.appendChild === 'function') {
+      document.body.appendChild(frag);
+    }
+    return document.getElementById(targetId);
+  },
+
   openWhatsNewModal(version = null) {
     if (typeof document === 'undefined') return false;
-    const modal = document.getElementById('whats-new-modal');
+    const modal = this.ensureTemplateElement('whats-new-modal', 'tpl-whats-new-modal');
     if (!modal) return false;
 
     this._bindWhatsNewModalButtons();
@@ -298,8 +367,12 @@ const App = {
       }
       if (!instant && section.classList) {
         section.classList.remove('changelog-highlight-flash');
-        void section.offsetWidth;
-        section.classList.add('changelog-highlight-flash');
+        const activateFlash = () => section.classList.add('changelog-highlight-flash');
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(activateFlash);
+        } else {
+          activateFlash();
+        }
         setTimeout(() => {
           section.classList.remove('changelog-highlight-flash');
         }, 1600);
@@ -390,18 +463,26 @@ const App = {
             this._availableUpdate = null;
             this.removePendingUpdateIndicator();
           }
-          if (data.status === 'downloading' && data.progress) {
+          if (data.status === 'downloading' && data.progress && this._promptDownloadInProgress) {
             this.updatePromptDownloadProgress(data.progress);
           }
-          if (data.status === 'downloaded') {
+          if (data.status === 'downloaded' && this._promptDownloadInProgress) {
+            this._promptDownloadInProgress = false;
             this.onPromptUpdateDownloaded();
           }
         });
       }
 
-      // Requête non bloquante avec timeout strict de 2.5s maximum
+      const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+        ? StorageManager.getSettings()
+        : {};
+      if (settings && settings.autoCheckUpdates === false) {
+        return;
+      }
+
+      // Requête non bloquante avec timeout strict de 2.5s maximum (rejet tardif capturé proprement)
       const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2500));
-      const checkPromise = window.AntigraviteAPI.updater.checkForUpdates();
+      const checkPromise = Promise.resolve(window.AntigraviteAPI.updater.checkForUpdates()).catch(() => null);
       const res = await Promise.race([checkPromise, timeoutPromise]);
       if (res && res.updateInfo && this.isNewerVersion(res.updateInfo.version, this.APP_VERSION)) {
         this._availableUpdate = res.updateInfo;
@@ -414,13 +495,25 @@ const App = {
     }
   },
 
+  postponeUpdatePromptModal() {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('modal-update-prompt');
+    this._updatePostponed = true;
+    this._promptDownloadInProgress = false;
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+    this.showPendingUpdateIndicator();
+  },
+
   openUpdatePromptModal(updateInfo) {
     if (typeof document === 'undefined') return;
     if (!updateInfo || !updateInfo.version || !this.isNewerVersion(updateInfo.version, this.APP_VERSION)) {
       this.removePendingUpdateIndicator();
       return;
     }
-    const modal = document.getElementById('modal-update-prompt');
+    const modal = this.ensureTemplateElement('modal-update-prompt', 'tpl-modal-update-prompt');
     if (!modal) return;
 
     const badge = document.getElementById('update-prompt-version-badge');
@@ -437,12 +530,7 @@ const App = {
     const btnLater = document.getElementById('btn-update-prompt-later');
     const btnNow = document.getElementById('btn-update-prompt-now');
 
-    const closeModal = () => {
-      this._updatePostponed = true;
-      modal.classList.remove('active');
-      modal.style.display = 'none';
-      this.showPendingUpdateIndicator();
-    };
+    const closeModal = () => this.postponeUpdatePromptModal();
 
     if (btnCloseX && !btnCloseX._promptBound) {
       btnCloseX._promptBound = true;
@@ -458,6 +546,7 @@ const App = {
       btnNow.addEventListener('click', async () => {
         if (btnLater) btnLater.disabled = true;
         if (btnNow) btnNow.disabled = true;
+        this._promptDownloadInProgress = true;
         const progressBox = document.getElementById('update-prompt-progress-box');
         if (progressBox) progressBox.style.display = 'block';
         const actionsBox = document.getElementById('update-prompt-actions');
@@ -466,6 +555,7 @@ const App = {
         try {
           await window.AntigraviteAPI.updater.downloadUpdate();
         } catch (err) {
+          this._promptDownloadInProgress = false;
           const label = document.getElementById('update-prompt-progress-label');
           if (label) label.textContent = "Erreur de téléchargement. Réessayez depuis les paramètres.";
           setTimeout(closeModal, 2500);
@@ -474,8 +564,12 @@ const App = {
     }
 
     modal.style.display = 'flex';
-    modal.offsetHeight; // Forcer le reflow
-    modal.classList.add('active');
+    const activateModal = () => modal.classList.add('active');
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(activateModal);
+    } else {
+      activateModal();
+    }
   },
 
   updatePromptDownloadProgress(progress) {
@@ -547,120 +641,61 @@ const App = {
     return '';
   },
 
-  // Dictionnaire centralisé d'icônes vectorielles SVG (Identité visuelle qualitative)
-  getSvgIcon(name, size = 14, extraClass = '') {
+  // Table de correspondance vers le sprite SVG master (#antigravite-svg-sprite)
+  _SVG_ICON_MAP: {
+    pin: ['pin', 2], '📌': ['pin', 2],
+    note: ['note', 2], '📝': ['note', 2],
+    calendar: ['calendar', 2], '📅': ['calendar', 2],
+    clock: ['clock', 2], '⏱️': ['clock', 2], '⏱': ['clock', 2],
+    sun: ['sun', 2.5], '☀️': ['sun', 2.5],
+    repeat: ['repeat', 2.5], '🔁': ['repeat', 2.5],
+    location: ['location', 2], '📍': ['location', 2],
+    folder: ['folder', 2], '📁': ['folder', 2], '📂': ['folder', 2],
+    trash: ['trash', 2], '🗑️': ['trash', 2], '🗑': ['trash', 2],
+    edit: ['edit', 2], '✏️': ['edit', 2], '✏': ['edit', 2],
+    globe: ['globe', 2], '🌐': ['globe', 2],
+    debrief: ['debrief', 2], sunset: ['debrief', 2],
+    sparkles: ['sparkles', 2],
+    check: ['check', 3], '✓': ['check', 3], '✅': ['check', 3], success: ['check', 3],
+    palette: ['palette', 2], '🎨': ['palette', 2],
+    restore: ['restore', 2], '📥': ['restore', 2],
+    broom: ['broom', 2], '🧹': ['broom', 2],
+    lock: ['lock', 2], '🔒': ['lock', 2],
+    lightbulb: ['lightbulb', 2], tip: ['lightbulb', 2], '💡': ['lightbulb', 2],
+    plus: ['plus', 2.5], '➕': ['plus', 2.5],
+    zap: ['zap', 2], '⚡': ['zap', 2],
+    infinity: ['infinity', 2], '♾️': ['infinity', 2], '♾': ['infinity', 2],
+    target: ['target', 2], '🎯': ['target', 2],
+    keyboard: ['keyboard', 2], '⌨️': ['keyboard', 2], '⌨': ['keyboard', 2],
+    tag: ['tag', 2], '🏷️': ['tag', 2], '🏷': ['tag', 2],
+    warning: ['warning', 2], caution: ['warning', 2], '⚠️': ['warning', 2],
+    alert: ['alert', 2], danger: ['alert', 2], error: ['alert', 2], '🚨': ['alert', 2], '❌': ['alert', 2],
+    important: ['important', 2], '❗': ['important', 2],
+    info: ['info', 2], 'ℹ️': ['info', 2], 'ℹ': ['info', 2],
+    shield: ['shield', 2], '🛡️': ['shield', 2], '🛡': ['shield', 2],
+    book: ['book', 2], '📖': ['book', 2],
+    refresh: ['refresh', 2], '🔄': ['refresh', 2],
+    user: ['user', 2], '👤': ['user', 2],
+    'chevron-down': ['chevron-down', 2.5],
+    'chevron-up': ['chevron-up', 2.5],
+    'chevron-left': ['chevron-left', 2],
+    'chevron-right': ['chevron-right', 2],
+    flame: ['flame', 2],
+    task: ['task', 2],
+    close: ['close', 2.2],
+    hourglass: ['hourglass', 2],
+    download: ['download', 2.2],
+    shuffle: ['shuffle', 2],
+    constellation: ['constellation', 2]
+  },
+
+  // Dictionnaire centralisé d'icônes vectorielles SVG via <use href="#ico-..."/> (zéro duplication DOM)
+  getSvgIcon(name, size = 14, extraClass = '', strokeWidth = null) {
     const cls = extraClass ? `app-icon ${extraClass}` : 'app-icon';
-    switch (name) {
-      case 'pin':
-      case '📌':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
-      case 'note':
-      case '📝':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`;
-      case 'calendar':
-      case '📅':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`;
-      case 'clock':
-      case '⏱️':
-      case '⏱':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-      case 'sun':
-      case '☀️':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
-      case 'repeat':
-      case '🔁':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
-      case 'location':
-      case '📍':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
-      case 'folder':
-      case '📁':
-      case '📂':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`;
-      case 'trash':
-      case '🗑️':
-      case '🗑':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
-      case 'edit':
-      case '✏️':
-      case '✏':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
-      case 'globe':
-      case '🌐':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
-      case 'debrief':
-      case 'sunset':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/></svg>`;
-      case 'sparkles':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>`;
-      case 'check':
-      case '✓':
-      case '✅':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-      case 'palette':
-      case '🎨':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>`;
-      case 'restore':
-      case '📥':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`;
-      case 'broom':
-      case '🧹':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/></svg>`;
-      case 'lock':
-      case '🔒':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
-      case 'lightbulb':
-      case '💡':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>`;
-      case 'plus':
-      case '➕':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
-      case 'zap':
-      case '⚡':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
-      case 'infinity':
-      case '♾️':
-      case '♾':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-2.695 0-4.71-3.613-6.178-5.333C10.533 12.387 8.518 16 5.822 16c-5.096 0-5.096-8 0-8 2.695 0 4.71 3.613 6.178 5.333C13.467 11.613 15.482 8 18.178 8z"/></svg>`;
-      case 'target':
-      case '🎯':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`;
-      case 'keyboard':
-      case '⌨️':
-      case '⌨':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M6 12h.001M10 12h.001M14 12h.001M18 12h.001M7 16h10"/></svg>`;
-      case 'tag':
-      case '🏷️':
-      case '🏷':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>`;
-      case 'warning':
-      case '⚠️':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
-      case 'alert':
-      case 'danger':
-      case 'error':
-      case '🚨':
-      case '❌':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
-      case 'important':
-      case '❗':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
-      case 'shield':
-      case '🛡️':
-      case '🛡':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
-      case 'book':
-      case '📖':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 2v20"/></svg>`;
-      case 'refresh':
-      case '🔄':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
-      case 'user':
-      case '👤':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`;
-      default:
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
-    }
+    const entry = this._SVG_ICON_MAP[name];
+    const sym = entry ? entry[0] : 'important';
+    const sw = strokeWidth !== null ? strokeWidth : (entry ? entry[1] : 2);
+    return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ico-${sym}"/></svg>`;
   },
 
   resolveDialogIcon(icon, defaultIcon) {
@@ -686,19 +721,26 @@ const App = {
     greetingEl.textContent = this.getGreetingMessage();
   },
 
-  updateSplashProgress(percent, statusText) {
+  updateSplashProgress(percent, statusText, subStatusText = null) {
     const bar = document.getElementById('splash-progress-bar');
     const status = document.getElementById('splash-status');
+    const subStatus = document.getElementById('splash-substatus');
     const icon = document.querySelector('.splash-brand-icon');
     if (bar) bar.style.width = `${percent}%`;
     if (status && statusText) status.textContent = statusText;
+    if (subStatus && subStatusText) subStatus.textContent = subStatusText;
     if (icon) {
       icon.classList.remove('splash-beat');
-      // Forcer le reflow du DOM pour déclencher l'impulsion rythmique
-      void icon.offsetWidth;
-      icon.classList.add('splash-beat');
-      if (percent >= 100) {
-        icon.classList.add('splash-complete');
+      const applyBeat = () => {
+        icon.classList.add('splash-beat');
+        if (percent >= 100) {
+          icon.classList.add('splash-complete');
+        }
+      };
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(applyBeat);
+      } else {
+        applyBeat();
       }
     }
   },
@@ -711,12 +753,17 @@ const App = {
         : {};
       const instant = settings.disableAnimations === true || settings.performanceMode === 'potato';
       splash.classList.add('hidden');
-      if (instant) {
-        splash.style.display = 'none';
-      } else {
-        setTimeout(() => {
+      const cleanup = () => {
+        if (typeof splash.remove === 'function') {
+          splash.remove();
+        } else {
           splash.style.display = 'none';
-        }, 500);
+        }
+      };
+      if (instant) {
+        cleanup();
+      } else {
+        setTimeout(cleanup, 500);
       }
     }
   },
@@ -725,11 +772,7 @@ const App = {
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', (e) => {
         const target = item.dataset.screen;
-        if (target === 'agenda') {
-          // Actualisation systématique à chaque clic sur l'agenda
-          this.navigate('agenda');
-          this.refreshAgenda(false);
-        } else if (target) {
+        if (target) {
           this.navigate(target);
         }
       });
@@ -777,13 +820,13 @@ const App = {
       : {};
     const disableAnim = settings.disableAnimations === true || settings.performanceMode === 'potato';
 
+    let pendingTargetView = null;
     document.querySelectorAll('.screen-view').forEach(view => {
       const isTarget = (view.id === `screen-${screenId}`);
       if (isTarget) {
         if (!disableAnim) {
           view.classList.remove('active');
-          void view.offsetWidth; // Déclencher le reflow pour relancer l'animation de transition de page
-          view.classList.add('active');
+          pendingTargetView = view;
         } else {
           view.classList.add('active');
         }
@@ -796,8 +839,6 @@ const App = {
     const transitionBar = document.getElementById('page-transition-bar');
     if (transitionBar && !disableAnim) {
       transitionBar.classList.remove('animating');
-      void transitionBar.offsetWidth;
-      transitionBar.classList.add('animating');
     }
 
     if (typeof this.hideTimelineTooltip === 'function') {
@@ -822,32 +863,56 @@ const App = {
     const titleEl = document.getElementById('current-screen-title');
     if (titleEl) {
       titleEl.textContent = titles[screenId] || 'Antigravité';
-      titleEl.classList.remove('title-screen-transition');
-      void titleEl.offsetWidth; // Déclencher le reflow pour relancer la micro-animation
-      titleEl.classList.add('title-screen-transition');
+      if (!disableAnim) titleEl.classList.remove('title-screen-transition');
     }
 
-    // Rafraîchir les données de l'écran affiché
+    // Regrouper toutes les relances d'animation dans une seule rAF (zéro forced reflow synchrone)
+    const runNavAnimations = () => {
+      if (pendingTargetView) pendingTargetView.classList.add('active');
+      if (transitionBar && !disableAnim) transitionBar.classList.add('animating');
+      if (titleEl && !disableAnim) titleEl.classList.add('title-screen-transition');
+    };
+    if (pendingTargetView || (transitionBar && !disableAnim) || (titleEl && !disableAnim)) {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(runNavAnimations);
+      } else {
+        runNavAnimations();
+      }
+    }
+
+    // Rafraîchir uniquement les écrans dont les données ont évolué (dirty tracking par révision)
     if (screenId === 'home') {
       this.updateDashboard(true);
       if (typeof this.updateLiveClockNow === 'function') this.updateLiveClockNow();
     }
-    if (screenId === 'tasks') TasksManager.render();
-    if (screenId === 'projects') ProjectsManager.render();
+    if (screenId === 'tasks' && typeof TasksManager !== 'undefined') {
+      if (typeof TasksManager.renderIfNeeded === 'function') TasksManager.renderIfNeeded();
+      else TasksManager.render();
+    }
+    if (screenId === 'projects' && typeof ProjectsManager !== 'undefined') {
+      if (typeof ProjectsManager.renderIfNeeded === 'function') ProjectsManager.renderIfNeeded();
+      else ProjectsManager.render();
+    }
     if (screenId === 'agenda') {
       if (typeof AgendaManager !== 'undefined') {
         if (typeof AgendaManager.resetToCurrentWeek === 'function') {
           AgendaManager.resetToCurrentWeek();
+        } else if (typeof AgendaManager.renderIfNeeded === 'function') {
+          AgendaManager.renderIfNeeded();
         } else {
           AgendaManager.render();
-          if (typeof AgendaManager.scrollToNormalHours === 'function' && (AgendaManager._lastScrollTop === null || AgendaManager._lastScrollTop === undefined)) {
-            AgendaManager.scrollToNormalHours(false);
-          }
+        }
+        if ((AgendaManager._lastScrollTop === null || AgendaManager._lastScrollTop === undefined) && typeof AgendaManager.scrollToNormalHours === 'function') {
+          AgendaManager.scrollToNormalHours(false);
         }
       }
       if (typeof GoogleSyncManager !== 'undefined') {
         GoogleSyncManager.refreshStatus();
-        GoogleSyncManager.syncCalendarNow(true);
+        const nowTs = Date.now();
+        if (!this._lastAgendaAutoSyncAt || (nowTs - this._lastAgendaAutoSyncAt) > 15000) {
+          this._lastAgendaAutoSyncAt = nowTs;
+          GoogleSyncManager.syncCalendarNow(true);
+        }
       }
     } else {
       if (typeof AgendaManager !== 'undefined') {
@@ -855,15 +920,39 @@ const App = {
       }
       this.updateSidebarDayProgress();
     }
-    if (screenId === 'notes') NotesManager.render();
-    if (screenId === 'constellation' && typeof ConstellationManager !== 'undefined') ConstellationManager.render();
-    if (screenId === 'focus' && typeof FocusManager !== 'undefined') FocusManager.render();
-    if (screenId === 'music' && typeof MusicManager !== 'undefined') MusicManager.render();
-    if (screenId === 'debrief' && typeof DebriefManager !== 'undefined') DebriefManager.render();
-    if (screenId === 'trash' && typeof TrashManager !== 'undefined') TrashManager.render();
-    if (screenId === 'backups') BackupManager.render();
+    if (screenId === 'notes' && typeof NotesManager !== 'undefined') {
+      if (typeof NotesManager.renderIfNeeded === 'function') NotesManager.renderIfNeeded();
+      else NotesManager.render();
+    }
+    if (screenId === 'constellation' && typeof ConstellationManager !== 'undefined') {
+      if (typeof ConstellationManager.renderIfNeeded === 'function') ConstellationManager.renderIfNeeded();
+      else ConstellationManager.render();
+    }
+    if (screenId === 'focus' && typeof FocusManager !== 'undefined') {
+      if (typeof FocusManager.renderIfNeeded === 'function') FocusManager.renderIfNeeded();
+      else FocusManager.render();
+    }
+    if (screenId === 'music' && typeof MusicManager !== 'undefined') {
+      if (typeof MusicManager.renderIfNeeded === 'function') MusicManager.renderIfNeeded();
+      else MusicManager.render();
+    }
+    if (screenId === 'debrief' && typeof DebriefManager !== 'undefined') {
+      if (typeof DebriefManager.renderIfNeeded === 'function') DebriefManager.renderIfNeeded();
+      else DebriefManager.render();
+    }
+    if (screenId === 'trash' && typeof TrashManager !== 'undefined') {
+      if (typeof TrashManager.renderIfNeeded === 'function') TrashManager.renderIfNeeded();
+      else TrashManager.render();
+    }
+    if (screenId === 'backups' && typeof BackupManager !== 'undefined') {
+      if (typeof BackupManager.renderIfNeeded === 'function') BackupManager.renderIfNeeded();
+      else BackupManager.render();
+    }
     if (screenId === 'settings') {
-      if (typeof SettingsManager !== 'undefined') SettingsManager.render();
+      if (typeof SettingsManager !== 'undefined') {
+        if (typeof SettingsManager.renderIfNeeded === 'function') SettingsManager.renderIfNeeded();
+        else SettingsManager.render();
+      }
       if (typeof GoogleSyncManager !== 'undefined') GoogleSyncManager.refreshStatus();
     }
     if (typeof MusicManager !== 'undefined' && typeof MusicManager.updateMiniPlayer === 'function') {
@@ -914,8 +1003,12 @@ const App = {
     }
 
     this.updateThemeButtonLabel(settings.theme || 'dark');
-    this.applySidebarTabsOrder(settings.sidebarTabsOrder);
-    this.applySidebarTabsVisibility(settings);
+    const desiredOrderSig = Array.isArray(settings.sidebarTabsOrder) ? settings.sidebarTabsOrder.join(',') : '';
+    if (desiredOrderSig !== this._lastSidebarOrderSig) {
+      this._lastSidebarOrderSig = desiredOrderSig;
+      this.applySidebarTabsOrder(settings.sidebarTabsOrder);
+    }
+    this.applySidebarTabsVisibility(settings, true);
 
     // Fond d'écran (Image derrière les panneaux — désactivé en Mode PC de merde pour épargner le GPU)
     const PRESET_WALLPAPERS = this.PRESET_WALLPAPERS || {};
@@ -935,50 +1028,78 @@ const App = {
       }
 
       if (perfMode !== 'potato' && settings.backgroundImage && settings.backgroundImage !== 'none') {
+        const opacity = (settings.backgroundOpacity !== undefined ? settings.backgroundOpacity : 25) / 100;
+        const blurPx = (customWallpaper && settings.backgroundBlur === undefined)
+          ? (customWallpaper.blur || 0)
+          : (settings.backgroundBlur || 0);
+
+        wallpaperLayer.style.opacity = opacity;
+
         if (customWallpaper) {
           wallpaperLayer.style.background = customWallpaper.css;
           wallpaperLayer.style.backgroundSize = customWallpaper.patternSize || 'cover';
           wallpaperLayer.style.backgroundPosition = 'center';
           wallpaperLayer.style.backgroundRepeat = customWallpaper.patternRepeat || 'no-repeat';
+          wallpaperLayer.style.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
         } else {
-          const bgVal = PRESET_WALLPAPERS[settings.backgroundImage] || `url("${settings.backgroundImage}")`;
-          wallpaperLayer.style.background = bgVal;
-          wallpaperLayer.style.backgroundSize = 'cover';
-          wallpaperLayer.style.backgroundPosition = 'center';
-          wallpaperLayer.style.backgroundRepeat = 'no-repeat';
+          let resolvedWp = settings.backgroundImage;
+          if (resolvedWp === '__custom_wallpaper__' && typeof StorageManager !== 'undefined' && typeof StorageManager.getCustomWallpaperDataUrl === 'function') {
+            resolvedWp = StorageManager.getCustomWallpaperDataUrl() || '';
+          }
+          const presetBg = PRESET_WALLPAPERS[settings.backgroundImage];
+          if (presetBg) {
+            wallpaperLayer.style.background = presetBg;
+            wallpaperLayer.style.backgroundSize = 'cover';
+            wallpaperLayer.style.backgroundPosition = 'center';
+            wallpaperLayer.style.backgroundRepeat = 'no-repeat';
+            wallpaperLayer.style.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
+          } else if (resolvedWp) {
+            if (blurPx > 0 && typeof this._applyPreBlurredWallpaper === 'function') {
+              this._applyPreBlurredWallpaper(wallpaperLayer, resolvedWp, blurPx);
+            } else {
+              wallpaperLayer.style.background = `url("${resolvedWp}")`;
+              wallpaperLayer.style.backgroundSize = 'cover';
+              wallpaperLayer.style.backgroundPosition = 'center';
+              wallpaperLayer.style.backgroundRepeat = 'no-repeat';
+              wallpaperLayer.style.filter = 'none';
+            }
+          } else {
+            wallpaperLayer.style.background = 'none';
+            wallpaperLayer.style.filter = 'none';
+          }
         }
-        const opacity = (settings.backgroundOpacity !== undefined ? settings.backgroundOpacity : 25) / 100;
-        wallpaperLayer.style.opacity = opacity;
-        const blurPx = settings.backgroundBlur || 0;
-        wallpaperLayer.style.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
         wallpaperLayer.style.display = 'block';
         if (typeof document !== 'undefined' && document.body && document.body.classList) {
           document.body.classList.add('has-custom-wallpaper');
         }
       } else {
         wallpaperLayer.style.display = 'none';
+        wallpaperLayer.style.filter = 'none';
         if (typeof document !== 'undefined' && document.body && document.body.classList) {
           document.body.classList.remove('has-custom-wallpaper');
         }
       }
     }
 
-    // Mettre à jour la couleur et la géométrie du bandeau de fenêtre intégré (Boutons Réduire, Agrandir, Fermer)
+    // Mettre à jour la couleur de fenêtre intégrée uniquement si thème ou densité ont changé
     if (typeof window !== 'undefined' && window.AntigraviteAPI && typeof window.AntigraviteAPI.setTitleBarOverlay === 'function') {
       const isLight = settings.theme === 'light';
       const isOled = settings.theme === 'oled';
       const isCompact = settings.density === 'compact';
-      // Couleur de fond exacte du liseré / bandeau supérieur (--bg-secondary)
       const topBarColor = isLight ? '#ffffff' : (isOled ? '#08080c' : '#131926');
       const symbolColor = isLight ? '#334155' : '#94a3b8';
       const overlayHeight = isCompact ? 50 : 60;
-      window.AntigraviteAPI.setTitleBarOverlay({
-        color: topBarColor,
-        symbolColor: symbolColor,
-        height: overlayHeight,
-        theme: isLight ? 'light' : 'dark',
-        backgroundColor: topBarColor
-      }).catch(() => {});
+      const tbSig = `${topBarColor}:${symbolColor}:${overlayHeight}:${isLight}`;
+      if (this._lastTitleBarSig !== tbSig) {
+        this._lastTitleBarSig = tbSig;
+        window.AntigraviteAPI.setTitleBarOverlay({
+          color: topBarColor,
+          symbolColor: symbolColor,
+          height: overlayHeight,
+          theme: isLight ? 'light' : 'dark',
+          backgroundColor: topBarColor
+        }).catch(() => {});
+      }
     }
 
     this.applyPerformanceTimers(perfMode);
@@ -990,6 +1111,88 @@ const App = {
       MusicManager.updateSidebarMiniPlayer();
     }
     this.updateSidebarStickyNote();
+  },
+
+  // Pré-calcul unique du flou sur Canvas hors-écran à échelle 0.5x (évite le flou CSS continu sur GPU)
+  _blurredWallpaperCache: null,
+  _applyPreBlurredWallpaper(wallpaperLayer, imageSrc, blurPx) {
+    if (!wallpaperLayer || !imageSrc) return;
+    if (typeof Image !== 'function' || typeof document === 'undefined' || typeof document.createElement !== 'function') {
+      wallpaperLayer.style.background = `url("${imageSrc}")`;
+      wallpaperLayer.style.backgroundSize = 'cover';
+      wallpaperLayer.style.backgroundPosition = 'center';
+      wallpaperLayer.style.backgroundRepeat = 'no-repeat';
+      wallpaperLayer.style.filter = `blur(${blurPx}px)`;
+      return;
+    }
+
+    if (!this._blurredWallpaperCache) {
+      this._blurredWallpaperCache = new Map();
+    }
+    const reqKey = `${imageSrc.length}:${imageSrc.slice(0, 64)}:${imageSrc.slice(-32)}:${blurPx}`;
+    this._activeBlurredWpKey = reqKey;
+
+    const cachedUrl = this._blurredWallpaperCache.get(reqKey);
+    if (cachedUrl) {
+      wallpaperLayer.style.background = `url("${cachedUrl}")`;
+      wallpaperLayer.style.backgroundSize = 'cover';
+      wallpaperLayer.style.backgroundPosition = 'center';
+      wallpaperLayer.style.backgroundRepeat = 'no-repeat';
+      wallpaperLayer.style.filter = 'none';
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      if (this._activeBlurredWpKey !== reqKey) return;
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas && typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+        if (!ctx) {
+          wallpaperLayer.style.background = `url("${imageSrc}")`;
+          wallpaperLayer.style.filter = `blur(${blurPx}px)`;
+          return;
+        }
+        const natW = img.naturalWidth || img.width || 1280;
+        const natH = img.naturalHeight || img.height || 720;
+        const maxW = Math.min(960, Math.max(320, Math.round(natW * 0.5)));
+        const scale = maxW / Math.max(1, natW);
+        const w = Math.max(160, Math.round(natW * scale));
+        const h = Math.max(90, Math.round(natH * scale));
+        canvas.width = w;
+        canvas.height = h;
+
+        const scaledBlur = Math.max(1, Math.round(blurPx * 0.55));
+        const pad = scaledBlur * 2;
+        ctx.filter = `blur(${scaledBlur}px)`;
+        ctx.drawImage(img, -pad, -pad, w + pad * 2, h + pad * 2);
+
+        const outUrl = canvas.toDataURL('image/jpeg', 0.88);
+        if (this._blurredWallpaperCache.size > 4) {
+          const firstKey = this._blurredWallpaperCache.keys().next().value;
+          this._blurredWallpaperCache.delete(firstKey);
+        }
+        this._blurredWallpaperCache.set(reqKey, outUrl);
+
+        if (this._activeBlurredWpKey === reqKey) {
+          wallpaperLayer.style.background = `url("${outUrl}")`;
+          wallpaperLayer.style.backgroundSize = 'cover';
+          wallpaperLayer.style.backgroundPosition = 'center';
+          wallpaperLayer.style.backgroundRepeat = 'no-repeat';
+          wallpaperLayer.style.filter = 'none';
+        }
+      } catch (_err) {
+        wallpaperLayer.style.background = `url("${imageSrc}")`;
+        wallpaperLayer.style.filter = `blur(${blurPx}px)`;
+      }
+    };
+    img.onerror = () => {
+      if (this._activeBlurredWpKey === reqKey) {
+        wallpaperLayer.style.background = `url("${imageSrc}")`;
+        wallpaperLayer.style.filter = `blur(${blurPx}px)`;
+      }
+    };
+    img.src = imageSrc;
   },
 
   // Application de la disposition personnalisée des onglets dans le volet latéral gauche
@@ -1032,13 +1235,13 @@ const App = {
   },
 
   // Gestion de la visibilité des onglets dans le panneau latéral
-  applySidebarTabsVisibility(settings) {
+  applySidebarTabsVisibility(settings, skipOrderReorder = false) {
     if (!settings && typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function') {
       settings = StorageManager.getSettings();
     }
     if (!settings) return;
 
-    if (settings.sidebarTabsOrder && Array.isArray(settings.sidebarTabsOrder)) {
+    if (!skipOrderReorder && settings.sidebarTabsOrder && Array.isArray(settings.sidebarTabsOrder)) {
       this.applySidebarTabsOrder(settings.sidebarTabsOrder);
     }
 
@@ -1085,6 +1288,12 @@ const App = {
     });
   },
 
+  formatLocalYMD(date = new Date()) {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+
   // Mise à jour de la barre de progression de la journée (avec frise colorée des événements)
   updateSidebarDayProgress(targetDate = null) {
     if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
@@ -1106,7 +1315,7 @@ const App = {
     const now = new Date();
     const currentH = now.getHours();
     const currentM = now.getMinutes();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayStr = this.formatLocalYMD(now);
 
     // Plage horaire de la frise chronologique : Amplitude complète de minuit à minuit (24h = 1440 minutes)
     const dayStartMin = 0;
@@ -1118,13 +1327,12 @@ const App = {
     if (typeof targetDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
       activeDateStr = targetDate;
     } else if (targetDate instanceof Date && !isNaN(targetDate.getTime())) {
-      activeDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+      activeDateStr = this.formatLocalYMD(targetDate);
     } else if (typeof window !== 'undefined' && window.AgendaManager && this.currentScreen === 'agenda') {
       if (window.AgendaManager.activeDateStr) {
         activeDateStr = window.AgendaManager.activeDateStr;
       } else if (window.AgendaManager.currentView === 'day' && window.AgendaManager.currentWeekStart) {
-        const d = window.AgendaManager.currentWeekStart;
-        activeDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        activeDateStr = this.formatLocalYMD(window.AgendaManager.currentWeekStart);
       }
     }
 
@@ -1196,15 +1404,19 @@ const App = {
       const startDate = startStr.slice(0, 10);
       const endDate = endStr.slice(0, 10);
 
-      // Vérifier si l'événement concerne la journée active
-      if (startDate <= activeDateStr && endDate >= activeDateStr) {
+      // Vérifier si l'événement concerne la journée active (incluant récurrences)
+      const isMatch = (typeof AgendaManager !== 'undefined' && typeof AgendaManager.isEventOnDate === 'function')
+        ? AgendaManager.isEventOnDate(evt, activeDateStr)
+        : (startDate <= activeDateStr && endDate >= activeDateStr);
+      if (isMatch) {
         let startMin = 0;    // 00:00 (Minuit)
         let endMin = 1440;   // 24:00 (Minuit)
-        const isAllDay = evt.allDay || (!startStr.includes('T') && !endStr.includes('T'));
+        const isAllDay = evt.allDay || evt.isAllDay || (!startStr.includes('T') && !endStr.includes('T'));
+        const isRecurringOccurrence = !!(evt.recurrence && evt.recurrence !== 'none' && startDate !== activeDateStr);
 
         if (startStr.includes('T')) {
           const sDate = startStr.slice(0, 10);
-          if (sDate === activeDateStr) {
+          if (sDate === activeDateStr || isRecurringOccurrence) {
             const sTime = startStr.split('T')[1].slice(0, 5);
             const [sh, sm] = sTime.split(':').map(Number);
             if (!isNaN(sh)) startMin = sh * 60 + (sm || 0);
@@ -1214,7 +1426,7 @@ const App = {
         }
         if (endStr.includes('T')) {
           const eDate = endStr.slice(0, 10);
-          if (eDate === activeDateStr) {
+          if (eDate === activeDateStr || isRecurringOccurrence) {
             const eTime = endStr.split('T')[1].slice(0, 5);
             const [eh, em] = eTime.split(':').map(Number);
             if (!isNaN(eh)) endMin = eh * 60 + (em || 0);
@@ -1235,20 +1447,25 @@ const App = {
         let projectTitle = null;
         let projectColor = null;
         let taskTitle = null;
+        let resolvedProjId = evt.projectId || null;
 
         if (evt.taskId) {
           ensureTaskAndProjectMaps();
           const linkedTask = taskMap.get(evt.taskId);
           if (linkedTask) {
             taskTitle = linkedTask.title;
-            if (linkedTask.projectId && projectMap.has(linkedTask.projectId)) {
-              const proj = projectMap.get(linkedTask.projectId);
-              if (proj) {
-                projectTitle = proj.title;
-                if (proj.color) {
-                  projectColor = proj.color;
-                  color = proj.color;
-                }
+            if (linkedTask.projectId) resolvedProjId = linkedTask.projectId;
+          }
+        }
+        if (resolvedProjId) {
+          ensureTaskAndProjectMaps();
+          if (projectMap.has(resolvedProjId)) {
+            const proj = projectMap.get(resolvedProjId);
+            if (proj) {
+              projectTitle = proj.title;
+              if (proj.color) {
+                projectColor = proj.color;
+                color = proj.color;
               }
             }
           }
@@ -1527,6 +1744,9 @@ const App = {
       </div>
     `;
 
+    const segRect = (typeof seg.getBoundingClientRect === 'function') ? seg.getBoundingClientRect() : null;
+    const winW = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 0;
+
     if (tooltip.style) {
       tooltip.style.display = 'flex';
       tooltip.style.pointerEvents = 'none';
@@ -1535,20 +1755,19 @@ const App = {
       tooltip.classList.remove('visible');
     }
 
-    if (typeof seg.getBoundingClientRect === 'function') {
-      const rect = seg.getBoundingClientRect();
+    if (segRect) {
       const tooltipWidth = 240;
 
-      let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+      let left = segRect.left + (segRect.width / 2) - (tooltipWidth / 2);
       if (left < 10) left = 10;
-      if (typeof window !== 'undefined' && window.innerWidth && left + tooltipWidth > window.innerWidth - 10) {
-        left = window.innerWidth - tooltipWidth - 10;
+      if (winW && left + tooltipWidth > winW - 10) {
+        left = winW - tooltipWidth - 10;
       }
 
       const tooltipHeight = tooltip.offsetHeight || 120;
-      let top = rect.top - tooltipHeight - 8;
+      let top = segRect.top - tooltipHeight - 8;
       if (top < 10) {
-        top = rect.bottom + 8;
+        top = segRect.bottom + 8;
       }
 
       if (tooltip.style) {
@@ -1602,13 +1821,86 @@ const App = {
     }
 
     if (clearBtn && textarea) {
-      clearBtn.addEventListener('click', (e) => {
+      clearBtn.addEventListener('click', async (e) => {
         e.preventDefault();
+        if (textarea.value && textarea.value.trim().length > 0 && typeof this.confirm === 'function') {
+          const confirmed = await this.confirm({
+            title: 'Effacer le post-it rapide',
+            message: 'Voulez-vous vraiment effacer le contenu de votre pense-bête ?',
+            confirmText: 'Effacer',
+            cancelText: 'Annuler',
+            danger: true
+          });
+          if (!confirmed) return;
+        }
         textarea.value = '';
         if (typeof StorageManager !== 'undefined' && typeof StorageManager.saveSidebarQuickNote === 'function') {
           StorageManager.saveSidebarQuickNote('');
         }
         textarea.focus();
+      });
+    }
+
+    // Si aucune donnée sticky-note, ne rien toucher, sinon activer les boutons de conversion rapide
+    const btnStickyToTask = document.getElementById('sidebar-sticky-to-task');
+    if (btnStickyToTask && textarea) {
+      btnStickyToTask.addEventListener('click', (e) => {
+        e.preventDefault();
+        const text = (textarea.value || '').trim();
+        if (!text) {
+          this.showToast("Le post-it est vide.", "info");
+          return;
+        }
+        if (typeof TasksManager !== 'undefined' && typeof TasksManager.addTask === 'function') {
+          const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          const title = lines[0] || text.slice(0, 80);
+          const desc = lines.length > 1 ? lines.slice(1).join('\n') : '';
+          TasksManager.addTask({ title, description: desc, priority: 'medium' });
+          textarea.value = '';
+          if (typeof StorageManager !== 'undefined' && typeof StorageManager.saveSidebarQuickNote === 'function') {
+            StorageManager.saveSidebarQuickNote('');
+          }
+          this.showToast(`Tâche « ${title} » créée depuis le post-it`, 'success');
+        }
+      });
+    }
+
+    const btnStickyToNote = document.getElementById('sidebar-sticky-to-note');
+    if (btnStickyToNote && textarea) {
+      btnStickyToNote.addEventListener('click', (e) => {
+        e.preventDefault();
+        const text = (textarea.value || '').trim();
+        if (!text) {
+          this.showToast("Le post-it est vide.", "info");
+          return;
+        }
+        if (typeof NotesManager !== 'undefined' && typeof NotesManager.getAll === 'function') {
+          const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          const title = (lines[0] || 'Mémo rapide').slice(0, 80);
+          const bodyHtml = text.split(/\r?\n/).map(l => `<div>${this.escapeHtml(l) || '<br>'}</div>`).join('');
+          const allNotes = NotesManager.getAll();
+          const newNote = {
+            id: 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            title,
+            folder: 'Général',
+            tags: [],
+            projectId: null,
+            linkedEventId: null,
+            linkedTaskId: null,
+            content: bodyHtml,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          allNotes.unshift(newNote);
+          NotesManager.saveAll(allNotes);
+          textarea.value = '';
+          if (typeof StorageManager !== 'undefined' && typeof StorageManager.saveSidebarQuickNote === 'function') {
+            StorageManager.saveSidebarQuickNote('');
+          }
+          this.navigate('notes');
+          if (typeof NotesManager.selectNote === 'function') NotesManager.selectNote(newNote.id);
+          this.showToast(`Note « ${title} » enregistrée`, 'success');
+        }
       });
     }
 
@@ -1661,17 +1953,83 @@ const App = {
     this._bindWhatsNewModalButtons();
 
     // Raccourcis clavier globaux (Échap, Entrée, Ctrl+F, Ctrl+B, Ctrl+Shift+A, F1)
+    const getTopmostActiveModal = () => {
+      if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return null;
+      const actives = Array.from(document.querySelectorAll('.modal-overlay.active'));
+      if (actives.length === 0) return null;
+      const dialog = actives.find(m => m.id === 'dialog-modal');
+      if (dialog) return dialog;
+      let top = actives[actives.length - 1];
+      let topZ = -1;
+      actives.forEach(m => {
+        let z = 0;
+        if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+          z = parseInt(window.getComputedStyle(m).zIndex, 10) || 0;
+        }
+        if (z >= topZ) {
+          topZ = z;
+          top = m;
+        }
+      });
+      return top;
+    };
+
+    const closeModalOverlay = (overlay) => {
+      if (!overlay) return;
+      if (overlay.id === 'dialog-modal') {
+        if (typeof overlay._dialogCancelHandler === 'function') {
+          overlay._dialogCancelHandler();
+        } else {
+          overlay.classList.remove('active');
+        }
+        return;
+      }
+      if (overlay.id === 'whats-new-modal') {
+        this.closeWhatsNewModal(true);
+        return;
+      }
+      if (overlay.id === 'wallpaper-studio-modal' && typeof SettingsManager !== 'undefined' && typeof SettingsManager.closeWallpaperStudioModal === 'function') {
+        SettingsManager.closeWallpaperStudioModal();
+        return;
+      }
+      if (overlay.id === 'modal-update-prompt') {
+        this.postponeUpdatePromptModal();
+        return;
+      }
+      if (overlay.id === 'search-modal' && typeof SearchManager !== 'undefined' && typeof SearchManager.close === 'function') {
+        SearchManager.close();
+        return;
+      }
+      overlay.classList.remove('active');
+    };
+
     document.addEventListener('keydown', (e) => {
-      // 1. Fermeture des modales et de la recherche rapide universelle par Échap
+      // 1. Fermeture ordonnée couche par couche par Échap
       if (e.key === 'Escape') {
-        if (typeof SearchManager !== 'undefined' && typeof SearchManager.close === 'function') {
+        const colorPopover = document.getElementById('custom-accent-color-popover');
+        if (colorPopover && colorPopover.style.display !== 'none') {
+          this.closeColorPicker(true);
+          return;
+        }
+
+        const topModal = getTopmostActiveModal();
+        if (topModal) {
+          if (topModal.id === 'dialog-modal') {
+            // Laisser le handler dédié du dialogue ou annuler proprement si absent
+            if (typeof topModal._dialogCancelHandler === 'function') {
+              e.preventDefault();
+              topModal._dialogCancelHandler();
+            }
+            return;
+          }
+          e.preventDefault();
+          closeModalOverlay(topModal);
+          return;
+        }
+
+        if (typeof SearchManager !== 'undefined' && SearchManager.isOpen && typeof SearchManager.close === 'function') {
           SearchManager.close();
         }
-        const whatsNew = document.getElementById('whats-new-modal');
-        if (whatsNew && whatsNew.classList.contains('active')) {
-          this.closeWhatsNewModal(true);
-        }
-        document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
       }
 
       // 2. Recherche universelle Ctrl+F ou Ctrl+K
@@ -1696,21 +2054,23 @@ const App = {
         }
       }
 
-      // 4. Validation formulaire modale par Entrée ou Ctrl+Entrée (Agenda, Tâches, Projets, etc.)
+      // 4. Validation formulaire modale par Entrée ou Ctrl+Entrée (cible uniquement la modale au premier plan)
       const isEnter = (e.key === 'Enter' || e.code === 'Enter');
       if (isEnter) {
-        const activeModal = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
-          ? document.querySelector('.modal-overlay.active')
-          : null;
+        const colorPopover = document.getElementById('custom-accent-color-popover');
+        if (colorPopover && colorPopover.style.display !== 'none') {
+          return;
+        }
 
-        if (activeModal) {
+        const activeModal = getTopmostActiveModal();
+        if (activeModal && activeModal.id !== 'dialog-modal') {
           const tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toUpperCase() : '';
 
-          // 4a. Ctrl+Entrée (ou Cmd+Entrée) : validation et fermeture universelle depuis n'importe où dans la modale (y compris textarea)
+          // 4a. Ctrl+Entrée (ou Cmd+Entrée) : validation et fermeture universelle depuis n'importe où dans la modale
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             e.stopPropagation();
-            const primaryBtn = activeModal.querySelector('#event-modal-save:not(:disabled), #task-modal-save:not(:disabled), #project-modal-save:not(:disabled), #dialog-btn-confirm:not(:disabled), #btn-save-picker-modal:not(:disabled), #btn-done-playlist-select-modal:not(:disabled), .modal-footer .btn-primary:not(:disabled), .modal-actions .btn-primary:not(:disabled), button.btn-primary:not(:disabled)');
+            const primaryBtn = activeModal.querySelector('#event-modal-save:not(:disabled), #task-modal-save:not(:disabled), #project-modal-save:not(:disabled), #btn-save-picker-modal:not(:disabled), #btn-done-playlist-select-modal:not(:disabled), .modal-footer .btn-primary:not(:disabled), .modal-actions .btn-primary:not(:disabled), button.btn-primary:not(:disabled)');
             if (primaryBtn) {
               primaryBtn.click();
             }
@@ -1775,14 +2135,7 @@ const App = {
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
-          if (overlay.id === 'whats-new-modal') {
-            this.closeWhatsNewModal(true);
-            return;
-          }
-          overlay.classList.remove('active');
-          if (overlay.id === 'search-modal' && typeof SearchManager !== 'undefined' && typeof SearchManager.close === 'function') {
-            SearchManager.close();
-          }
+          closeModalOverlay(overlay);
         }
       });
     });
@@ -1794,14 +2147,51 @@ const App = {
         // Ne pas intercepter les clics sur les boutons internes (ex: "Voir tout" ou "➕")
         if (e.target.closest('button')) return;
         const targetScreen = el.dataset.nav;
+        const statAction = el.dataset.statAction;
         if (targetScreen) {
           this.triggerHapticFeedback();
           el.classList.add('haptic-press');
           setTimeout(() => el.classList.remove('haptic-press'), 130);
           this.navigate(targetScreen);
+          if (targetScreen === 'tasks' && statAction && typeof window !== 'undefined' && window.TasksManager && typeof window.TasksManager.focusDashboardStat === 'function') {
+            window.TasksManager.focusDashboardStat(statAction);
+          }
         }
       });
     });
+
+    // Remplissage dynamique en temps réel pour tous les curseurs / tirettes de réglage (.settings-slider, etc.)
+    document.addEventListener('input', (e) => {
+      if (e.target && (
+        (e.target.classList && e.target.classList.contains('settings-slider')) ||
+        e.target.id === 'wallpaper-opacity-slider' ||
+        e.target.id === 'wallpaper-blur-slider' ||
+        e.target.id === 'slider-notification-volume' ||
+        e.target.id === 'studio-param-angle' ||
+        e.target.id === 'studio-param-size' ||
+        e.target.id === 'studio-param-intensity' ||
+        e.target.id === 'studio-param-blur'
+      )) {
+        this.updateSliderFill(e.target);
+      }
+    });
+  },
+
+  // Met à jour le remplissage dynamique à gauche du curseur pour une glissière / tirette de réglage
+  updateSliderFill(slider) {
+    if (!slider) return;
+    const min = (slider.min !== '' && !isNaN(parseFloat(slider.min))) ? parseFloat(slider.min) : 0;
+    const max = (slider.max !== '' && !isNaN(parseFloat(slider.max))) ? parseFloat(slider.max) : 100;
+    const val = (slider.value !== '' && !isNaN(parseFloat(slider.value))) ? parseFloat(slider.value) : min;
+    const pct = max > min ? Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100)) : 0;
+    slider.style.setProperty('--slider-percent', `${pct}%`);
+  },
+
+  // Met à jour le remplissage de toutes les glissières / tirettes des paramètres et du studio
+  updateAllSlidersFill(container = (typeof document !== 'undefined' ? document : null)) {
+    if (!container || typeof container.querySelectorAll !== 'function') return;
+    const sliders = container.querySelectorAll('.settings-slider, #wallpaper-opacity-slider, #wallpaper-blur-slider, #slider-notification-volume, #studio-param-angle, #studio-param-size, #studio-param-intensity, #studio-param-blur');
+    sliders.forEach(slider => this.updateSliderFill(slider));
   },
 
   triggerHapticFeedback() {
@@ -1916,6 +2306,7 @@ const App = {
 
       const cleanup = (result) => {
         modal.classList.remove('active');
+        modal._dialogCancelHandler = null;
         if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
           document.removeEventListener('keydown', onKeyDown);
         }
@@ -1935,6 +2326,7 @@ const App = {
         }
       };
 
+      modal._dialogCancelHandler = () => cleanup(false);
       btnConfirm.onclick = () => cleanup(true);
       btnCancel.onclick = () => cleanup(false);
       if (btnClose) btnClose.onclick = () => cleanup(false);
@@ -1991,6 +2383,7 @@ const App = {
 
       const cleanup = () => {
         modal.classList.remove('active');
+        modal._dialogCancelHandler = null;
         if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
           document.removeEventListener('keydown', onKeyDown);
         }
@@ -2006,6 +2399,7 @@ const App = {
         }
       };
 
+      modal._dialogCancelHandler = () => cleanup();
       btnConfirm.onclick = () => cleanup();
       if (btnClose) btnClose.onclick = () => cleanup();
       if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
@@ -2075,6 +2469,7 @@ const App = {
 
       const cleanup = (result) => {
         modal.classList.remove('active');
+        modal._dialogCancelHandler = null;
         inputEl.style.display = 'none';
         if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
           document.removeEventListener('keydown', onKeyDown);
@@ -2095,6 +2490,7 @@ const App = {
         }
       };
 
+      modal._dialogCancelHandler = () => cleanup(null);
       btnConfirm.onclick = () => cleanup(inputEl.value);
       btnCancel.onclick = () => cleanup(null);
       if (btnClose) btnClose.onclick = () => cleanup(null);
@@ -2114,10 +2510,34 @@ const App = {
      Sélecteur Chromatique Universel Intégré (v1.3.0)
      Ouverture juste à côté à droite de l'élément cliqué
      ========================================================================== */
+  _normalizeHexColor(hex, fallback = '#38BDF8') {
+    if (typeof hex !== 'string') return fallback;
+    let c = hex.trim().replace(/^#/, '');
+    if (/^[0-9A-F]{3}$/i.test(c)) {
+      c = c.split('').map(x => x + x).join('');
+    }
+    if (!/^[0-9A-F]{6}$/i.test(c)) return fallback;
+    return `#${c.toUpperCase()}`;
+  },
+
+  _sanitizeCssColor(color, fallback = '#6366f1') {
+    if (typeof color !== 'string') return fallback;
+    const trimmed = color.trim();
+    if (/^#([0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{6}|[0-9A-F]{8})$/i.test(trimmed)) return trimmed;
+    if (/^(?:rgb|hsl)a?\(\s*[0-9.%,\s/-]+\)$/i.test(trimmed)) return trimmed;
+    if (/^var\(--[a-zA-Z0-9_-]+(?:\s*,\s*#[0-9A-F]{3,8})?\)$/.test(trimmed)) return trimmed;
+    return fallback;
+  },
+
+  _escapeJsSingleQuote(val) {
+    if (val === null || val === undefined) return '';
+    return String(val).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  },
+
   hexToRgb(hex) {
-    let c = (hex || '#38BDF8').replace('#', '');
-    if (c.length === 3) c = c.split('').map(x => x + x).join('');
-    const num = parseInt(c, 16);
+    const clean = this._normalizeHexColor(hex, '#38BDF8').slice(1);
+    const num = parseInt(clean, 16);
+    if (!Number.isFinite(num)) return { r: 56, g: 189, b: 248 };
     return {
       r: (num >> 16) & 255,
       g: (num >> 8) & 255,
@@ -2136,27 +2556,27 @@ const App = {
   },
 
   hslToHex(h, s, l) {
-    l /= 100;
-    const a = (s * Math.min(l, 1 - l)) / 100;
+    const safeH = Number.isFinite(Number(h)) ? ((Number(h) % 360) + 360) % 360 : 0;
+    const safeS = Number.isFinite(Number(s)) ? Math.max(0, Math.min(100, Number(s))) : 92;
+    const safeL = (Number.isFinite(Number(l)) ? Math.max(0, Math.min(100, Number(l))) : 50) / 100;
+    const a = (safeS * Math.min(safeL, 1 - safeL)) / 100;
     const f = (n) => {
-      const k = (n + h / 30) % 12;
-      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-      return Math.round(255 * color).toString(16).padStart(2, '0');
+      const k = (n + safeH / 30) % 12;
+      const color = safeL - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * Math.max(0, Math.min(1, color))).toString(16).padStart(2, '0');
     };
     return (`#${f(0)}${f(8)}${f(4)}`).toUpperCase();
   },
 
   hexToHsl(hex) {
-    let c = (hex || '#38BDF8').replace('#', '');
-    if (c.length === 3) c = c.split('').map(x => x + x).join('');
-    const r = parseInt(c.substring(0, 2), 16) / 255;
-    const g = parseInt(c.substring(2, 4), 16) / 255;
-    const b = parseInt(c.substring(4, 6), 16) / 255;
+    const clean = this._normalizeHexColor(hex, '#38BDF8').slice(1);
+    const r = parseInt(clean.substring(0, 2), 16) / 255;
+    const g = parseInt(clean.substring(2, 4), 16) / 255;
+    const b = parseInt(clean.substring(4, 6), 16) / 255;
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h, s, l = (max + min) / 2;
-    if (max === min) {
-      h = s = 0;
-    } else {
+    let h = 0, s = 0;
+    const l = (max + min) / 2;
+    if (max !== min) {
       const d = max - min;
       s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
       switch (max) {
@@ -2181,7 +2601,8 @@ const App = {
     this.initColorPickerEvents();
 
     const targetElement = options.targetElement;
-    const initialColor = (options.initialColor || '#38BDF8').toUpperCase();
+    const initialColor = this._normalizeHexColor(options.initialColor, '#38BDF8');
+    const initialHsl = this.hexToHsl(initialColor);
     const showNameInput = !!options.showNameInput;
     const initialName = options.initialName || '';
     const title = options.title || 'Palette chromatique';
@@ -2190,6 +2611,7 @@ const App = {
     this._activeColorPicker = {
       initialColor: initialColor,
       currentColor: initialColor,
+      currentSat: initialHsl.s,
       targetElement: targetElement,
       showNameInput: showNameInput,
       onColorChange: typeof options.onColorChange === 'function' ? options.onColorChange : null,
@@ -2224,14 +2646,29 @@ const App = {
         customSwatchesContainer.innerHTML = `
           <div class="popover-section-label">Couleurs favorites</div>
           <div class="popover-custom-grid">
-            ${customColors.map(c => `
-              <button type="button" class="popover-swatch" data-hex="${c.hex}" style="background: ${c.hex};" title="${this.escapeHtml(c.name || c.hex)}"></button>
-            `).join('')}
+            ${customColors.map(c => {
+              const safeHex = this._normalizeHexColor(c && c.hex, '#38BDF8');
+              const label = this.escapeHtml((c && c.name) || safeHex);
+              return `<button type="button" class="popover-swatch" data-hex="${safeHex}" style="background: ${safeHex};" title="${label}"></button>`;
+            }).join('')}
           </div>
         `;
       } else {
         customSwatchesContainer.style.display = 'none';
         customSwatchesContainer.innerHTML = '';
+      }
+    }
+
+    // Lecture préalable du bouton cible et du viewport avant mutation de display sur le popover
+    const winW = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 1200;
+    const winH = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 800;
+    const margin = 14;
+
+    let rect = null;
+    if (targetElement && typeof targetElement.getBoundingClientRect === 'function') {
+      const r = targetElement.getBoundingClientRect();
+      if ((r.width > 0 || r.height > 0) && (r.top !== 0 || r.left !== 0 || r.bottom !== 0 || r.right !== 0)) {
+        rect = r;
       }
     }
 
@@ -2242,22 +2679,10 @@ const App = {
     popover.style.display = 'block';
     popover.style.visibility = 'hidden';
 
-    const winW = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 1200;
-    const winH = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 800;
-    const margin = 14;
-
     // Mesure réelle des dimensions rendues du popover
     const popoverRect = (typeof popover.getBoundingClientRect === 'function') ? popover.getBoundingClientRect() : null;
     const popoverWidth = Math.max(275, Math.ceil((popoverRect && popoverRect.width) || 275));
     const popoverHeight = Math.max(340, Math.ceil((popoverRect && popoverRect.height) || 385));
-
-    let rect = null;
-    if (targetElement && typeof targetElement.getBoundingClientRect === 'function') {
-      const r = targetElement.getBoundingClientRect();
-      if ((r.width > 0 || r.height > 0) && (r.top !== 0 || r.left !== 0 || r.bottom !== 0 || r.right !== 0)) {
-        rect = r;
-      }
-    }
 
     let left = 0;
     let top = 0;
@@ -2313,11 +2738,14 @@ const App = {
 
   updateColorPickerValues(hex, source = null) {
     if (typeof document === 'undefined') return;
-    const cleanHex = (hex || '#38BDF8').toUpperCase();
+    const cleanHex = this._normalizeHexColor(hex, '#38BDF8');
     const hsl = this.hexToHsl(cleanHex);
 
     if (this._activeColorPicker) {
       this._activeColorPicker.currentColor = cleanHex;
+      if (source !== 'slider') {
+        this._activeColorPicker.currentSat = hsl.s;
+      }
       if (source !== 'init' && typeof this._activeColorPicker.onColorChange === 'function') {
         this._activeColorPicker.onColorChange(cleanHex);
       }
@@ -2334,7 +2762,7 @@ const App = {
 
     if (source !== 'slider') {
       if (hueSlider) hueSlider.value = hsl.h;
-      if (lightnessSlider) lightnessSlider.value = Math.max(20, Math.min(80, hsl.l));
+      if (lightnessSlider) lightnessSlider.value = Math.max(0, Math.min(100, hsl.l));
     }
     if (hueVal) hueVal.textContent = `${hsl.h}°`;
     if (lightnessVal) lightnessVal.textContent = `${hsl.l}%`;
@@ -2346,7 +2774,10 @@ const App = {
     if (hexSub) hexSub.textContent = cleanHex;
 
     if (popover && popover.style && typeof popover.style.setProperty === 'function') {
-      popover.style.setProperty('--popover-cur-hue', `hsl(${hsl.h}, 100%, 50%)`);
+      const trackSat = (this._activeColorPicker && typeof this._activeColorPicker.currentSat === 'number')
+        ? this._activeColorPicker.currentSat
+        : hsl.s;
+      popover.style.setProperty('--popover-cur-hue', `hsl(${hsl.h}, ${trackSat}%, 50%)`);
       if (typeof popover.querySelectorAll === 'function') {
         popover.querySelectorAll('.popover-swatch').forEach(sw => {
           const swHex = (sw.dataset.hex || '').toUpperCase();
@@ -2385,14 +2816,15 @@ const App = {
     const handleApply = () => {
       const hexInput = document.getElementById('popover-input-hex');
       const nameInput = document.getElementById('popover-input-name');
-      let hex = hexInput ? hexInput.value.trim().toUpperCase() : '';
-      if (!hex.startsWith('#') && hex.length > 0) hex = '#' + hex;
-      if (!/^#[0-9A-F]{6}$/i.test(hex)) {
+      let rawHex = hexInput ? hexInput.value.trim().toUpperCase() : '';
+      if (!rawHex.startsWith('#') && rawHex.length > 0) rawHex = '#' + rawHex;
+      if (!/^#([0-9A-F]{3}|[0-9A-F]{6})$/i.test(rawHex)) {
         if (typeof this.showToast === 'function') {
           this.showToast("Format de couleur invalide (ex: #38BDF8)", "warning");
         }
         return;
       }
+      const hex = this._normalizeHexColor(rawHex, '#38BDF8');
       const name = (nameInput && nameInput.value.trim()) || ('Teinte ' + hex);
       const active = this._activeColorPicker;
       this.closeColorPicker(false);
@@ -2421,22 +2853,29 @@ const App = {
     const hueSlider = document.getElementById('popover-hue-slider');
     const lightnessSlider = document.getElementById('popover-lightness-slider');
 
-    const handleSlidersChange = () => {
+    const handleSlidersChange = (fromHueSlider = false) => {
       const h = hueSlider ? parseInt(hueSlider.value, 10) : 200;
       const l = lightnessSlider ? parseInt(lightnessSlider.value, 10) : 60;
-      const hex = this.hslToHex(h, 92, l);
+      let sat = (this._activeColorPicker && typeof this._activeColorPicker.currentSat === 'number')
+        ? this._activeColorPicker.currentSat
+        : 92;
+      if (fromHueSlider && sat === 0 && l > 0 && l < 100) {
+        sat = 80;
+        if (this._activeColorPicker) this._activeColorPicker.currentSat = sat;
+      }
+      const hex = this.hslToHex(h, sat, l);
       this.updateColorPickerValues(hex, 'slider');
     };
 
-    if (hueSlider) hueSlider.addEventListener('input', handleSlidersChange);
-    if (lightnessSlider) lightnessSlider.addEventListener('input', handleSlidersChange);
+    if (hueSlider) hueSlider.addEventListener('input', () => handleSlidersChange(true));
+    if (lightnessSlider) lightnessSlider.addEventListener('input', () => handleSlidersChange(false));
 
     const hexInput = document.getElementById('popover-input-hex');
     if (hexInput) {
       hexInput.addEventListener('input', () => {
         let val = hexInput.value.trim().toUpperCase();
         if (!val.startsWith('#') && val.length > 0) val = '#' + val;
-        if (/^#[0-9A-F]{6}$/i.test(val)) {
+        if (/^#([0-9A-F]{3}|[0-9A-F]{6})$/i.test(val)) {
           this.updateColorPickerValues(val, 'hexInput');
         }
       });
@@ -2602,12 +3041,14 @@ const App = {
       const now = new Date();
       const perfMode = getPerfMode();
 
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      const secText = `:${seconds}`;
-      elSec = resolveEl(elSec, 'dashboard-clock-seconds');
-      if (elSec && (force || secText !== lastSecondStr)) {
-        lastSecondStr = secText;
-        elSec.textContent = secText;
+      if (perfMode !== 'potato') {
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const secText = `:${seconds}`;
+        elSec = resolveEl(elSec, 'dashboard-clock-seconds');
+        if (elSec && (force || secText !== lastSecondStr)) {
+          lastSecondStr = secText;
+          elSec.textContent = secText;
+        }
       }
 
       const hNum = now.getHours();
@@ -2658,15 +3099,123 @@ const App = {
     }
   },
 
+  _isDormant: false,
+
+  bindDormancyListeners() {
+    if (this._dormancyBound) return;
+    this._dormancyBound = true;
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => {
+        this.setDormant(document.hidden === true);
+      });
+    }
+    if (typeof window !== 'undefined' && window.AntigraviteAPI && window.AntigraviteAPI.windowControls && typeof window.AntigraviteAPI.windowControls.onVisibilityChanged === 'function') {
+      window.AntigraviteAPI.windowControls.onVisibilityChanged((payload) => {
+        if (payload && typeof payload.visible === 'boolean') {
+          this.setDormant(!payload.visible);
+        }
+      });
+    }
+    if (!this._notifClickBound && typeof window !== 'undefined' && window.AntigraviteAPI && typeof window.AntigraviteAPI.onNotificationClicked === 'function') {
+      this._notifClickBound = true;
+      window.AntigraviteAPI.onNotificationClicked((action) => {
+        this.handleNotificationAction(action);
+      });
+    }
+  },
+
+  handleNotificationAction(action) {
+    if (!action || typeof action !== 'object') return;
+    switch (action.type) {
+      case 'open-event':
+        if (action.eventId) this.openEventFromDashboard(action.eventId);
+        break;
+      case 'open-task':
+        this.navigate('tasks');
+        if (action.taskId && typeof window !== 'undefined' && window.TasksManager && typeof window.TasksManager.openTaskModal === 'function') {
+          setTimeout(() => window.TasksManager.openTaskModal(action.taskId), 80);
+        }
+        break;
+      case 'open-note':
+        if (action.noteId) this.openNoteFromDashboard(action.noteId);
+        break;
+      case 'navigate':
+        if (action.screen) this.navigate(action.screen);
+        if (action.statAction && action.screen === 'tasks' && typeof window !== 'undefined' && window.TasksManager && typeof window.TasksManager.focusDashboardStat === 'function') {
+          setTimeout(() => window.TasksManager.focusDashboardStat(action.statAction), 60);
+        }
+        break;
+      default:
+        break;
+    }
+  },
+
+  setDormant(isDormant) {
+    const dormant = !!isDormant;
+    if (this._isDormant === dormant) return;
+    this._isDormant = dormant;
+
+    if (typeof document !== 'undefined' && document.documentElement && document.documentElement.classList) {
+      document.documentElement.classList.toggle('app-dormant', dormant);
+    }
+
+    if (dormant) {
+      if (this._clockTimer) {
+        clearInterval(this._clockTimer);
+        this._clockTimer = null;
+      }
+      if (this._dayProgressTimer) {
+        clearInterval(this._dayProgressTimer);
+        this._dayProgressTimer = null;
+      }
+      if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.setDormant === 'function') {
+        AgendaManager.setDormant(true);
+      }
+      if (typeof ConstellationManager !== 'undefined' && typeof ConstellationManager.setDormant === 'function') {
+        ConstellationManager.setDormant(true);
+      }
+      return;
+    }
+
+    // Réveil depuis la zone de notification / reprise de visibilité
+    const settings = (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function')
+      ? StorageManager.getSettings()
+      : {};
+    this.applyPerformanceTimers(settings.performanceMode || 'normal');
+    if (this._updateClockFn && (!this.currentScreen || this.currentScreen === 'home')) {
+      this._updateClockFn(true);
+    }
+    if (typeof this.updateSidebarDayProgress === 'function') {
+      this.updateSidebarDayProgress();
+    }
+    if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.setDormant === 'function') {
+      AgendaManager.setDormant(false);
+    }
+    if (typeof ConstellationManager !== 'undefined' && typeof ConstellationManager.setDormant === 'function') {
+      ConstellationManager.setDormant(false);
+    }
+    if (typeof BackupManager !== 'undefined' && typeof BackupManager.onAppResume === 'function') {
+      BackupManager.onAppResume();
+    }
+  },
+
   applyPerformanceTimers(perfMode = 'normal') {
-    // Horloge accueil : toujours 1000ms pour que les secondes s'actualisent précisément à chaque seconde
+    if (this._isDormant) return;
+    // Horloge accueil : 1000ms pour que les secondes s'actualisent, espacé en mode potato (secondes masquées)
     const clockMs = 1000;
+    const effectiveClockMs = perfMode === 'potato' ? 15000 : clockMs;
     const dayMs = perfMode === 'potato' ? 120000 : (perfMode === 'economy' ? 60000 : 30000);
 
-    if (this._updateClockFn && (!this._clockTimer || this._clockIntervalMs !== clockMs)) {
-      this._clockIntervalMs = clockMs;
+    if (this._updateClockFn && (!this._clockTimer || this._clockIntervalMs !== effectiveClockMs)) {
+      this._clockIntervalMs = effectiveClockMs;
       if (this._clockTimer) clearInterval(this._clockTimer);
-      this._clockTimer = setInterval(() => this._updateClockFn(false), clockMs);
+      this._clockTimer = setInterval(() => this._updateClockFn(false), effectiveClockMs);
+      if (this._clockTimer && typeof this._clockTimer.unref === 'function') {
+        this._clockTimer.unref();
+      }
+      if (effectiveClockMs === clockMs) {
+        this._updateClockFn(true);
+      }
     }
 
     if (typeof window !== 'undefined' && (!this._dayProgressTimer || this._dayProgressIntervalMs !== dayMs)) {
@@ -2680,6 +3229,9 @@ const App = {
           }
         }
       }, dayMs);
+      if (this._dayProgressTimer && typeof this._dayProgressTimer.unref === 'function') {
+        this._dayProgressTimer.unref();
+      }
     }
 
     if (typeof AgendaManager !== 'undefined' && typeof AgendaManager.applyPerformanceMode === 'function') {
@@ -2690,10 +3242,13 @@ const App = {
   syncDesktopPrefs(settings) {
     if (!settings || typeof window === 'undefined' || !window.AntigraviteAPI || !window.AntigraviteAPI.system) return;
     if (typeof window.AntigraviteAPI.system.setDesktopPrefs === 'function') {
+      // Ne pas écraser launchOnStartup ici : le démarrage automatique est géré explicitement par setStartupSetting
+      // afin d'éviter qu'une synchronisation visuelle/boot ne réinitialise le raccourci Windows.
       window.AntigraviteAPI.system.setDesktopPrefs({
         runInBackgroundOnClose: settings.runInBackgroundOnClose !== false,
         backupDirectory: settings.backupDirectory || null,
-        launchOnStartup: settings.launchOnStartup === true
+        performanceMode: settings.performanceMode || 'normal',
+        gpuCompatibilityMode: !!settings.gpuCompatibilityMode
       }).catch(() => {});
     }
   },
@@ -2881,18 +3436,21 @@ const App = {
       return;
     }
 
-    // 2. Détecter la période actuelle (matin, midi, après-midi, soir)
+    // 2. Détecter l'humeur configurée et la période actuelle (matin, midi, après-midi, soir)
+    const mood = settings.greetingMood || 'auto';
     const currentPeriod = this.getTimeOfDayPeriod();
+    const quoteKey = (mood === 'warm' || mood === 'witty' || mood === 'mixed') ? mood : `${mood}:${currentPeriod}`;
 
-    // 3. Si la période n'a pas changé et qu'on a déjà une phrase de session, la conserver
-    if (this._currentQuote && this._currentQuotePeriod === currentPeriod && !forceNew) {
+    // 3. Si ni l'humeur ni la période n'ont changé et qu'on a déjà une phrase de session, la conserver
+    if (this._currentQuote && this._currentQuoteKey === quoteKey && !forceNew) {
       subtitleEl.textContent = this._currentQuote;
       return;
     }
 
-    // 4. Sélection de la phrase adaptée à la période (matin, midi, après-midi, soir)
-    const newQuote = this.getRandomGreetingQuote(currentPeriod);
+    // 4. Sélection de la phrase adaptée à l'humeur et/ou à la période
+    const newQuote = this.getRandomGreetingQuote(mood);
     this._currentQuote = newQuote;
+    this._currentQuoteKey = quoteKey;
     this._currentQuotePeriod = currentPeriod;
     subtitleEl.textContent = newQuote;
   },
@@ -2903,7 +3461,7 @@ const App = {
     if (subtitleEl && subtitleEl.style) {
       subtitleEl.style.opacity = '0';
       subtitleEl.style.transform = 'translateY(-3px)';
-      subtitleEl.style.transition = 'all 0.18s ease';
+      subtitleEl.style.transition = 'opacity 0.18s ease, transform 0.18s ease';
       setTimeout(() => {
         this.updateDashboardQuote(true);
         subtitleEl.style.opacity = '1';
@@ -2918,6 +3476,37 @@ const App = {
     this.navigate('notes');
     if (window.NotesManager && typeof window.NotesManager.selectNote === 'function') {
       window.NotesManager.selectNote(noteId);
+    }
+  },
+
+  openEventFromDashboard(eventId) {
+    this.navigate('agenda');
+    if (typeof window !== 'undefined' && window.AgendaManager && typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function') {
+      const targetEvt = StorageManager.getEvents().find(e => e && e.id === eventId);
+      if (targetEvt && targetEvt.start) {
+        const isRecurring = !!(targetEvt.recurrence && targetEvt.recurrence !== 'none');
+        const evtDateStr = targetEvt.start.slice(0, 10);
+        const todayIso = this.formatLocalYMD(new Date());
+        if (!isRecurring || evtDateStr >= todayIso) {
+          const [y, m, d] = evtDateStr.split('-').map(Number);
+          const dt = new Date(y, (m || 1) - 1, d || 1);
+          if (!isNaN(dt.getTime()) && typeof window.AgendaManager.getMonday === 'function') {
+            window.AgendaManager.currentWeekStart = window.AgendaManager.getMonday(dt);
+            window.AgendaManager.render();
+          }
+        }
+      }
+      if (typeof window.AgendaManager.openEventModal === 'function') {
+        setTimeout(() => window.AgendaManager.openEventModal(eventId), 80);
+      }
+    }
+  },
+
+  startFocusOn(type, id) {
+    if (!type || !id) return;
+    this.navigate('focus');
+    if (typeof FocusManager !== 'undefined' && typeof FocusManager.startWithTarget === 'function') {
+      FocusManager.startWithTarget(type, id, true);
     }
   },
 
@@ -2949,13 +3538,13 @@ const App = {
     if (containerOrEvents && ((typeof HTMLElement !== 'undefined' && containerOrEvents instanceof HTMLElement) || typeof containerOrEvents.innerHTML === 'string' || typeof containerOrEvents === 'string')) {
       container = typeof containerOrEvents === 'string' ? document.getElementById(containerOrEvents) : containerOrEvents;
       todayEvents = Array.isArray(todayEventsArg) ? todayEventsArg : [];
-      todayStr = todayStrArg || new Date().toISOString().slice(0, 10);
+      todayStr = todayStrArg || this.formatLocalYMD(new Date());
       tasks = tasksArg || (typeof StorageManager !== 'undefined' ? StorageManager.getTasks() : []);
       projects = projectsArg || (typeof StorageManager !== 'undefined' ? StorageManager.getProjects() : []);
     } else {
       container = document.getElementById('dashboard-today-events');
       todayEvents = Array.isArray(containerOrEvents) ? containerOrEvents : [];
-      todayStr = todayEventsArg || new Date().toISOString().slice(0, 10);
+      todayStr = todayEventsArg || this.formatLocalYMD(new Date());
       tasks = tasksArg || (typeof StorageManager !== 'undefined' ? StorageManager.getTasks() : []);
       projects = projectsArg || (typeof StorageManager !== 'undefined' ? StorageManager.getProjects() : []);
     }
@@ -2965,24 +3554,44 @@ const App = {
     const alldayEvents = todayEvents.filter(e => e.isAllDay);
     const timedEvents = todayEvents.filter(e => !e.isAllDay);
 
+    const taskById = new Map();
+    if (Array.isArray(tasks)) {
+      const mapTasks = (list) => {
+        list.forEach(t => {
+          if (!t || !t.id) return;
+          taskById.set(t.id, t);
+          if (t.subtasks && t.subtasks.length > 0) mapTasks(t.subtasks);
+        });
+      };
+      mapTasks(tasks);
+    }
+
     // 1. Bandeau supérieur pour les événements journée entière
     let alldayBarHtml = '';
     if (alldayEvents.length > 0) {
       const pills = alldayEvents.map(e => {
+        const linkedTask = e.taskId ? taskById.get(e.taskId) : null;
+        const isDone = !!(e.completed || (linkedTask && linkedTask.completed));
         let pillColor = '#6366f1';
         let linkedProj = null;
         if (e.color) {
           pillColor = e.color;
-        } else if (e.projectId && projects) {
-          linkedProj = projects.find(p => p.id === e.projectId);
-          if (linkedProj && linkedProj.color) pillColor = linkedProj.color;
-        } else if (e.source === 'google') {
-          pillColor = '#2563eb';
+        } else {
+          const resolvedProjId = e.projectId || (linkedTask && linkedTask.projectId);
+          if (resolvedProjId && projects) {
+            linkedProj = projects.find(p => p.id === resolvedProjId);
+            if (linkedProj && linkedProj.color) pillColor = linkedProj.color;
+          } else if (e.source === 'google') {
+            pillColor = '#2563eb';
+          }
         }
 
+        pillColor = this._sanitizeCssColor(pillColor, '#6366f1');
+        const safeIdJs = this.escapeHtml(this._escapeJsSingleQuote(e.id));
+
         return `
-          <div class="mini-agenda-allday-pill" onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}')" title="${this.escapeHtml(e.title)}" style="background: linear-gradient(135deg, ${pillColor}ee, ${pillColor}cc); border-left: 3px solid ${pillColor};">
-            ${e.completed ? '<span class="mini-event-done-pill" title="Honoré">✓</span>' : ''}
+          <div class="mini-agenda-allday-pill" onclick="event.stopPropagation(); AgendaManager.openEventModal('${safeIdJs}')" title="${this.escapeHtml(e.title)}${linkedTask ? ' - Tâche : ' + this.escapeHtml(linkedTask.title) : ''}" style="background: linear-gradient(135deg, ${pillColor}ee, ${pillColor}cc); border-left: 3px solid ${pillColor};">
+            ${isDone ? '<span class="mini-event-done-pill" title="Honoré">✓</span>' : ''}
             <span class="mini-allday-title mini-agenda-allday-pill-title">${this.escapeHtml(e.title)}</span>
           </div>
         `;
@@ -3000,7 +3609,7 @@ const App = {
 
     // 2. Calcul dynamique des bornes horaires de la journée (optimisé pour voir la journée d'un coup d'œil)
     const now = new Date();
-    const isToday = now.toISOString().slice(0, 10) === todayStr;
+    const isToday = this.formatLocalYMD(now) === todayStr;
     const currentHour = now.getHours();
 
     let earliestEventH = 24;
@@ -3094,16 +3703,7 @@ const App = {
     }
 
     let firstEventTopPx = -1;
-    const taskById = new Map();
-    if (Array.isArray(tasks)) {
-      const mapTasks = (list) => {
-        list.forEach(t => {
-          taskById.set(t.id, t);
-          if (t.subtasks && t.subtasks.length > 0) mapTasks(t.subtasks);
-        });
-      };
-      mapTasks(tasks);
-    }
+    // taskById est construit plus haut pour alldayEvents et timedEvents
 
     const projectById = new Map();
     if (Array.isArray(projects)) {
@@ -3135,6 +3735,7 @@ const App = {
 
       const isGoogle = e.source === 'google';
       const linkedTask = e.taskId ? taskById.get(e.taskId) : null;
+      const isDone = !!(e.completed || (linkedTask && linkedTask.completed));
       const projId = e.projectId || (linkedTask && linkedTask.projectId);
       const linkedProject = projId ? projectById.get(projId) : null;
 
@@ -3146,19 +3747,20 @@ const App = {
       } else if (isGoogle) {
         eventColor = '#2563eb';
       }
+      eventColor = this._sanitizeCssColor(eventColor, '#6366f1');
 
       const startTime = e.start && e.start.length >= 16 ? e.start.slice(11, 16) : '';
       const endTime = e.end && e.end.length >= 16 ? e.end.slice(11, 16) : '';
       const timeStr = (startTime && endTime) ? `${startTime} - ${endTime}` : (startTime || 'Créneau');
 
       const isCompact = heightPx < 26;
-      const tooltip = `${this.escapeHtml(e.title)} (${timeStr})${linkedTask ? ' - Tâche : ' + this.escapeHtml(linkedTask.title) : ''}`;
+      const tooltip = `${this.escapeHtml(e.title)} (${timeStr})${linkedTask ? ' - Tâche : ' + this.escapeHtml(linkedTask.title) : ''}${e.noteId ? ' • Note liée' : ''}`;
 
       let innerContent = '';
       if (isCompact) {
         innerContent = `
           <div class="mini-event-row compact">
-            ${e.completed ? '<span class="mini-event-done-pill" title="Honoré">✓</span>' : ''}
+            ${isDone ? '<span class="mini-event-done-pill" title="Honoré">✓</span>' : ''}
             <span class="mini-event-time-pill">${startTime}</span>
             <span class="mini-event-title compact">${this.escapeHtml(e.title)}</span>
           </div>
@@ -3168,17 +3770,19 @@ const App = {
           <div class="mini-event-row standard">
             <div class="mini-event-header">
               <span class="mini-event-time-pill">${timeStr}</span>
-              ${e.completed ? '<span class="mini-event-done-pill" title="Créneau honoré">✓</span>' : ''}
+              ${isDone ? '<span class="mini-event-done-pill" title="Créneau honoré">✓</span>' : ''}
             </div>
             <div class="mini-event-title standard">${this.escapeHtml(e.title)}</div>
           </div>
         `;
       }
 
+      const safeEventIdAttr = this.escapeHtml(e.id);
+      const safeEventIdJs = this.escapeHtml(this._escapeJsSingleQuote(e.id));
       eventsBlocksHtml += `
         <div class="mini-agenda-event-block"
-             data-event-id="${e.id}"
-             onclick="event.stopPropagation(); AgendaManager.openEventModal('${e.id}');"
+             data-event-id="${safeEventIdAttr}"
+             onclick="event.stopPropagation(); AgendaManager.openEventModal('${safeEventIdJs}');"
              title="${tooltip}"
              style="top: ${topPx}px; height: ${heightPx}px; left: ${leftPct}%; width: ${widthPct}%; background: linear-gradient(135deg, ${eventColor}ee, ${eventColor}cc); border-left-color: ${eventColor};">
           ${innerContent}
@@ -3256,7 +3860,7 @@ const App = {
     const projectById = new Map((projects || []).map(p => [p.id, p]));
     const archivedProjectIds = new Set((projects || []).filter(p => p.archived).map(p => p.id));
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = this.formatLocalYMD(new Date());
     const now = new Date();
 
     // 1. Tâches prévues aujourd'hui
@@ -3324,15 +3928,21 @@ const App = {
       } else {
         panelPlanned.innerHTML = plannedTodayList.slice(0, 5).map(t => {
           const proj = t.projectId ? projectById.get(t.projectId) : null;
-          const projectBorder = proj && proj.color ? `border-left: 3.5px solid ${proj.color};` : '';
-          const projectBadge = proj && proj.color ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${proj.color}60; color:${proj.color}; background-color:${proj.color}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${proj.id}');" title="Ouvrir le projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${proj.color}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
+          const safeProjColor = (proj && proj.color) ? this._sanitizeCssColor(proj.color, '#6366f1') : '';
+          const safeProjIdJs = proj ? this.escapeHtml(this._escapeJsSingleQuote(proj.id)) : '';
+          const safeTaskIdJs = this.escapeHtml(this._escapeJsSingleQuote(t.id));
+          const safeNoteIdJs = t.noteId ? this.escapeHtml(this._escapeJsSingleQuote(t.noteId)) : '';
+          const projectBorder = safeProjColor ? `border-left: 3.5px solid ${safeProjColor};` : '';
+          const projectBadge = (proj && safeProjColor) ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${safeProjColor}60; color:${safeProjColor}; background-color:${safeProjColor}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${safeProjIdJs}');" title="Ouvrir le projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${safeProjColor}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
           return `
             <div class="dashboard-item dashboard-task-item" style="${projectBorder}">
               <div class="dashboard-item-main">
-                <span class="dashboard-item-icon">${this.getSvgIcon('pin', 14)}</span>
-                <span class="dashboard-item-title" onclick="TasksManager.openTaskModal('${t.id}')" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
+                <input type="checkbox" class="dashboard-task-checkbox" ${t.completed ? 'checked' : ''} onclick="event.stopPropagation();" onchange="if (window.TasksManager) { TasksManager.toggleCompleted('${safeTaskIdJs}'); if (window.App && typeof window.App.renderDashboard === 'function') window.App.renderDashboard(); }" title="${t.completed ? 'Marquer comme non terminée' : 'Marquer comme terminée'}" aria-label="Marquer cette tâche comme terminée">
+                <span class="dashboard-item-title" onclick="TasksManager.openTaskModal('${safeTaskIdJs}')" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
               </div>
               <div class="dashboard-item-meta" style="display:flex; align-items:center; gap:5px;">
+                ${safeNoteIdJs ? `<button type="button" class="btn-icon-subtle dashboard-quick-btn" onclick="event.stopPropagation(); App.openNoteFromDashboard('${safeNoteIdJs}');" title="Ouvrir la note liée">📝</button>` : ''}
+                <button type="button" class="btn-icon-subtle dashboard-quick-btn" onclick="event.stopPropagation(); App.startFocusOn('task', '${safeTaskIdJs}');" title="Démarrer une session Focus sur cette tâche">🎯</button>
                 ${projectBadge}
                 ${typeof TasksManager !== 'undefined' && typeof TasksManager.getPriorityBadge === 'function' ? TasksManager.getPriorityBadge(t.priority) : ''}
               </div>
@@ -3375,8 +3985,23 @@ const App = {
       } else if (this.dashboardAgendaView === 'grid') {
         this.renderDashboardMiniAgenda(panelEvents, todayEvents, todayStr, tasks, projects);
       } else {
+        const eventTaskById = new Map();
+        if (Array.isArray(tasks)) {
+          const indexEvtTasks = (list) => {
+            list.forEach(t => {
+              if (!t || !t.id) return;
+              eventTaskById.set(t.id, t);
+              if (t.subtasks && t.subtasks.length > 0) indexEvtTasks(t.subtasks);
+            });
+          };
+          indexEvtTasks(tasks);
+        }
         panelEvents.innerHTML = todayEvents.map(e => {
           const isGoogle = e.source === 'google';
+          const linkedTask = e.taskId ? eventTaskById.get(e.taskId) : null;
+          const isDone = !!(e.completed || (linkedTask && linkedTask.completed));
+          const projId = e.projectId || (linkedTask && linkedTask.projectId);
+          const linkedProj = projId ? projectById.get(projId) : null;
           const startDay = e.start ? e.start.slice(0, 10) : '';
           const endDay = e.end ? e.end.slice(0, 10) : startDay;
           const isMultiDay = startDay && endDay && endDay > startDay;
@@ -3397,19 +4022,27 @@ const App = {
           } else {
             timeBadge = startTime && endTime ? `${startTime} - ${endTime}` : (startTime || 'Journée');
           }
-          const dotColor = isGoogle ? '#3b82f6' : '#8b5cf6';
+          const rawDotColor = (linkedProj && linkedProj.color) ? linkedProj.color : (isGoogle ? '#3b82f6' : '#8b5cf6');
+          const dotColor = this._sanitizeCssColor(rawDotColor, '#8b5cf6');
+          const safeEventIdJs = this.escapeHtml(this._escapeJsSingleQuote(e.id));
+          const safeNoteIdJs = e.noteId ? this.escapeHtml(this._escapeJsSingleQuote(e.noteId)) : '';
+          const safeTaskIdJs = linkedTask ? this.escapeHtml(this._escapeJsSingleQuote(linkedTask.id)) : '';
+          const safeTimeBadge = this.escapeHtml(timeBadge);
 
           return `
-            <div class="dashboard-item dashboard-event-item">
+            <div class="dashboard-item dashboard-event-item${isDone ? ' is-done' : ''}">
               <div class="dashboard-item-main">
                 <span class="dashboard-item-dot" style="background-color:${dotColor}; box-shadow:0 0 6px ${dotColor};"></span>
-                <span class="dashboard-item-title" onclick="AgendaManager.openEventModal('${e.id}')" title="${this.escapeHtml(e.title)}">${this.escapeHtml(e.title)}</span>
+                <span class="dashboard-item-title" onclick="AgendaManager.openEventModal('${safeEventIdJs}')" title="${this.escapeHtml(e.title)}">${isDone ? '<span style="color:#10b981;font-weight:700;margin-right:4px;" title="Honoré / Terminé">✓</span>' : ''}${this.escapeHtml(e.title)}</span>
               </div>
-              <div class="dashboard-item-meta">
+              <div class="dashboard-item-meta" style="display:flex; align-items:center; gap:5px;">
+                ${safeTaskIdJs ? `<button type="button" class="btn-icon-subtle dashboard-quick-btn" onclick="event.stopPropagation(); if (window.TasksManager) TasksManager.openTaskModal('${safeTaskIdJs}');" title="Ouvrir la tâche liée">✅</button>` : ''}
+                ${safeNoteIdJs ? `<button type="button" class="btn-icon-subtle dashboard-quick-btn" onclick="event.stopPropagation(); App.openNoteFromDashboard('${safeNoteIdJs}');" title="Ouvrir la note liée">📝</button>` : ''}
+                <button type="button" class="btn-icon-subtle dashboard-quick-btn" onclick="event.stopPropagation(); App.startFocusOn('event', '${safeEventIdJs}');" title="Lancer une session Focus sur ce créneau">🎯</button>
                 <span class="dashboard-source-pill ${isGoogle ? 'pill-google' : 'pill-antigravite'}">
                   ${isGoogle ? '<span class="source-icon">' + this.getSvgIcon('globe', 12) + '</span> Google' : '<img src="./assets/icon.png" class="antigravite-symbol-icon" alt=""> Antigravité'}
                 </span>
-                <span class="dashboard-time-badge" title="Créneau horaire : ${timeBadge}"><span class="badge-time-icon">${this.getSvgIcon('clock', 12)}</span> <span class="badge-time-text">${timeBadge}</span></span>
+                <span class="dashboard-time-badge" title="Créneau horaire : ${safeTimeBadge}"><span class="badge-time-icon">${this.getSvgIcon('clock', 12)}</span> <span class="badge-time-text">${safeTimeBadge}</span></span>
               </div>
             </div>
           `;
@@ -3439,33 +4072,47 @@ const App = {
         });
 
         panelNotes.innerHTML = sortedNotes.slice(0, 5).map(n => {
-          const rawContent = (n.content || '').replace(/[#*`_~>\-]/g, '').trim();
+          const rawContent = (n.content || '')
+            .replace(/<[^>]*>?/g, ' ')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/[#*`_~>\-]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
           const preview = rawContent.length > 55 ? rawContent.slice(0, 55) + '…' : rawContent;
           const dateObj = new Date(n.updatedAt || n.createdAt);
-          const isTodayNote = !isNaN(dateObj.getTime()) && dateObj.toISOString().slice(0, 10) === todayStr;
+          const isTodayNote = !isNaN(dateObj.getTime()) && this.formatLocalYMD(dateObj) === todayStr;
           const timeFormatted = !isNaN(dateObj.getTime()) 
             ? (isTodayNote ? `Aujourd'hui à ${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}` : dateObj.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }))
             : '';
 
           const proj = (n.projectId || n.linkedProjectId) ? projectById.get(n.projectId || n.linkedProjectId) : null;
-          const projectBorder = proj && proj.color ? `border-left: 3.5px solid ${proj.color};` : '';
-          const projectBadge = proj && proj.color ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${proj.color}60; color:${proj.color}; background-color:${proj.color}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${proj.id}');" title="Ouvrir le projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${proj.color}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
+          const safeProjColor = (proj && proj.color) ? this._sanitizeCssColor(proj.color, '#6366f1') : '';
+          const safeProjIdJs = proj ? this.escapeHtml(this._escapeJsSingleQuote(proj.id)) : '';
+          const safeNoteIdJs = this.escapeHtml(this._escapeJsSingleQuote(n.id));
+          const linkedEvt = n.linkedEventId ? eventById.get(n.linkedEventId) : (events.find(e => e && e.noteId === n.id) || null);
+          const effectiveEvtId = linkedEvt ? linkedEvt.id : (n.linkedEventId || '');
+          const safeLinkedEventIdJs = effectiveEvtId ? this.escapeHtml(this._escapeJsSingleQuote(effectiveEvtId)) : '';
+          const projectBorder = safeProjColor ? `border-left: 3.5px solid ${safeProjColor};` : '';
+          const projectBadge = (proj && safeProjColor) ? `<span class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; border:1px solid ${safeProjColor}60; color:${safeProjColor}; background-color:${safeProjColor}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${safeProjIdJs}');" title="Ouvrir le projet : ${this.escapeHtml(proj.title)}"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${safeProjColor}; margin-right:4px;"></span>${this.escapeHtml(proj.title)}</span>` : '';
 
           return `
             <div class="dashboard-item dashboard-note-item" style="${projectBorder}">
               <div class="dashboard-item-main" style="flex-direction:column; align-items:flex-start; gap:2px;">
                 <div style="display:flex; align-items:center; gap:6px; width:100%; min-width:0;">
                   <span class="dashboard-item-icon">${this.getSvgIcon('note', 14)}</span>
-                  <span class="dashboard-item-title" onclick="App.openNoteFromDashboard('${n.id}')" title="${this.escapeHtml(n.title || 'Note sans titre')}">
+                  <span class="dashboard-item-title" onclick="App.openNoteFromDashboard('${safeNoteIdJs}')" title="${this.escapeHtml(n.title || 'Note sans titre')}">
                     ${this.escapeHtml(n.title || 'Note sans titre')}
                   </span>
-                  ${n.linkedEventId ? '<span title="Liée à un créneau d\'agenda (cliquer pour voir)" style="color:var(--accent); display:inline-flex; align-items:center; flex-shrink:0; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate(\'agenda\'); if (window.AgendaManager && typeof window.AgendaManager.openEventModal === \'function\') window.AgendaManager.openEventModal(\'' + n.linkedEventId + '\');">' + this.getSvgIcon('calendar', 12) + '</span>' : ''}
+                  ${safeLinkedEventIdJs ? '<span title="Liée à un créneau d\'agenda (cliquer pour voir)" style="color:var(--accent); display:inline-flex; align-items:center; flex-shrink:0; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.openEventFromDashboard(\'' + safeLinkedEventIdJs + '\');">' + this.getSvgIcon('calendar', 12) + '</span>' : ''}
                 </div>
                 ${preview ? `<div class="dashboard-note-preview" style="font-size:0.76rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%;">${this.escapeHtml(preview)}</div>` : ''}
               </div>
               <div class="dashboard-item-meta" style="display:flex; align-items:center; gap:5px;">
                 ${projectBadge}
-                <span class="dashboard-note-date">${timeFormatted}</span>
+                <span class="dashboard-note-date">${this.escapeHtml(timeFormatted)}</span>
               </div>
             </div>
           `;
@@ -3474,8 +4121,8 @@ const App = {
     }
   },
 
-  // Système de Toasts / Notifications Windows
-  showToast(message, type = 'info') {
+  // Système de Toasts / Notifications Windows (avec bouton d'action facultatif)
+  showToast(message, type = 'info', options = {}) {
     if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -3483,27 +4130,43 @@ const App = {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     const icons = {
-      success: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; flex-shrink:0;"><path d="M20 6L9 17l-5-5"/></svg>',
-      info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
-      error: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      success: this.getSvgIcon('check', 15, '', 2.2),
+      info: this.getSvgIcon('info', 15, '', 2.2),
+      error: this.getSvgIcon('warning', 15, '', 2.2)
     };
     const iconSvg = icons[type] || icons.info;
-    toast.innerHTML = `<span style="display:inline-flex; align-items:center;">${iconSvg}</span> <span>${this.escapeHtml(message)}</span><div class="toast-progress-bar"></div>`;
+    const actionLabel = options && options.actionLabel ? String(options.actionLabel) : '';
+    const hasAction = Boolean(actionLabel && typeof options.onAction === 'function');
+    toast.innerHTML = `<span style="display:inline-flex; align-items:center;">${iconSvg}</span> <span>${this.escapeHtml(message)}</span>${hasAction ? `<button type="button" class="toast-action-btn">${this.escapeHtml(actionLabel)}</button>` : ''}<div class="toast-progress-bar"></div>`;
 
+    if (hasAction && typeof toast.querySelector === 'function') {
+      const actBtn = toast.querySelector('.toast-action-btn');
+      if (actBtn) {
+        actBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          try {
+            options.onAction();
+          } catch (_) {}
+          if (toast && typeof toast.remove === 'function') toast.remove();
+        });
+      }
+    }
+
+    const durationMs = hasAction ? 6500 : 3500;
     container.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transform = 'translateY(10px)';
-      toast.style.transition = 'all 0.3s ease';
+      toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
       setTimeout(() => {
         if (toast && typeof toast.remove === 'function') toast.remove();
       }, 300);
-    }, 3500);
+    }, durationMs);
   },
 
   escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 };
 

@@ -14,21 +14,42 @@ const GoogleSyncManager = {
   status: null,
   calendars: [],
   initialized: false,
+  _initPromise: null,
+  _queuePromise: null,
+  _onlineBound: false,
 
   async init() {
-    if (this.initialized) {
-      await this.refreshStatus();
+    if (this._initPromise) {
+      await this._initPromise;
       return;
     }
-    this.initialized = true;
-    this.bindEvents();
-    this.bindOnlineEvents();
-    await this.refreshStatus();
-    // Traiter la file d'attente hors-ligne au démarrage
-    await this.processOfflineQueue();
+    if (this.initialized) {
+      await this.refreshStatus();
+      await this.processOfflineQueue();
+      return;
+    }
+
+    this._initPromise = (async () => {
+      this.initialized = true;
+      this.bindEvents();
+      this.bindOnlineEvents();
+      await this.refreshStatus();
+      // Traiter la file d'attente hors-ligne au démarrage
+      await this.processOfflineQueue();
+    })();
+
+    try {
+      await this._initPromise;
+    } finally {
+      this._initPromise = null;
+    }
   },
 
   bindOnlineEvents() {
+    if (this._onlineBound || typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+      return;
+    }
+    this._onlineBound = true;
     window.addEventListener('online', async () => {
       console.log("[GoogleSync] Connexion rétablie : traitement de la file d'attente hors-ligne...");
       await this.processOfflineQueue();
@@ -368,10 +389,12 @@ const GoogleSyncManager = {
     }
     if (!shouldDisconnect) return;
 
-    // Retirer les événements Google du calendrier actif d'Antigravité
+    // Retirer les événements Google du calendrier actif d'Antigravité et nettoyer les liens notes orphelins
     const currentEvents = StorageManager.getEvents();
+    const removedIds = new Set(currentEvents.filter(e => e.source === 'google').map(e => e.id));
     const localEventsOnly = currentEvents.filter(e => e.source !== 'google');
     StorageManager.saveEvents(localEventsOnly);
+    this._cleanupRemovedEventLinks(removedIds, { clearTaskSchedule: false });
     if (window.AgendaManager) window.AgendaManager.render();
 
     if (window.AntigraviteAPI && window.AntigraviteAPI.google) {
@@ -487,8 +510,9 @@ const GoogleSyncManager = {
 
       this._lastSyncSuccessAt = Date.now();
 
-      if (result && result.events) {
-        if (result.events.length === 0) {
+      if (result && Array.isArray(result.events)) {
+        const isIncremental = result.isIncremental !== false;
+        if (isIncremental && result.events.length === 0) {
           // Aucun changement côté Google : éviter toute écriture disque inutile
           if (!silent && window.App && typeof window.App.showToast === 'function') {
             window.App.showToast("Agenda déjà à jour", "info");
@@ -496,7 +520,7 @@ const GoogleSyncManager = {
           return;
         }
 
-        this.mergeGoogleEvents(result.events, true);
+        this.mergeGoogleEvents(result.events, isIncremental);
 
         if (window.AgendaManager) {
           window.AgendaManager.render();
@@ -525,6 +549,73 @@ const GoogleSyncManager = {
     }
   },
 
+  _cleanupRemovedEventLinks(removedEventIds, { clearTaskSchedule = true, remainingEvents = null } = {}) {
+    if (!removedEventIds || removedEventIds.size === 0) return;
+
+    // 1. Détacher les notes liées aux événements supprimés / annulés
+    if (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function') {
+      try {
+        const notes = StorageManager.getNotes();
+        let notesChanged = false;
+        notes.forEach(n => {
+          if (n && n.linkedEventId && removedEventIds.has(n.linkedEventId)) {
+            n.linkedEventId = null;
+            n.updatedAt = new Date().toISOString();
+            notesChanged = true;
+          }
+        });
+        if (notesChanged && typeof StorageManager.saveNotes === 'function') {
+          StorageManager.saveNotes(notes);
+          if (typeof window !== 'undefined' && window.NotesManager) {
+            if (typeof window.NotesManager.renderNotesList === 'function') window.NotesManager.renderNotesList();
+            if (typeof window.NotesManager.renderEventSelector === 'function' && window.NotesManager.currentNoteId) {
+              const cur = notes.find(n => n.id === window.NotesManager.currentNoteId);
+              if (cur) window.NotesManager.renderEventSelector(cur);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Erreur nettoyage linkedEventId sur notes :", err);
+      }
+    }
+
+    // 2. Si demandé et qu'aucun autre créneau ne reste lié à une tâche, nettoyer plannedDate/plannedTime (sans jamais supprimer la tâche)
+    if (clearTaskSchedule && typeof StorageManager !== 'undefined' && typeof StorageManager.getTasks === 'function') {
+      try {
+        const evts = Array.isArray(remainingEvents) ? remainingEvents : StorageManager.getEvents();
+        const activeTaskLinks = new Set(evts.map(e => e && e.taskId).filter(Boolean));
+        // Rempli par l'appelant si knownTaskIds fourni, ou vérification globale des orphelins
+        if (this._pendingRemovedTaskIds && this._pendingRemovedTaskIds.size > 0) {
+          const tasks = StorageManager.getTasks();
+          let tasksChanged = false;
+          const clearRecursive = (list) => {
+            if (!Array.isArray(list)) return;
+            for (const t of list) {
+              if (!t) continue;
+              if (this._pendingRemovedTaskIds.has(t.id) && !activeTaskLinks.has(t.id) && (t.plannedDate || t.plannedTime)) {
+                t.plannedDate = null;
+                t.plannedTime = null;
+                t.updatedAt = new Date().toISOString();
+                tasksChanged = true;
+              }
+              if (Array.isArray(t.subtasks)) clearRecursive(t.subtasks);
+            }
+          };
+          clearRecursive(tasks);
+          if (tasksChanged && typeof StorageManager.saveTasks === 'function') {
+            StorageManager.saveTasks(tasks);
+            if (typeof window !== 'undefined' && window.TasksManager && typeof window.TasksManager.render === 'function') {
+              window.TasksManager.render();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Erreur nettoyage horaire tâches liées :", err);
+      }
+    }
+    this._pendingRemovedTaskIds = null;
+  },
+
   mergeGoogleEvents(googleEvents, isIncremental = false) {
     const currentEvents = StorageManager.getEvents();
     if (isIncremental && (!googleEvents || googleEvents.length === 0)) {
@@ -542,37 +633,75 @@ const GoogleSyncManager = {
 
     const updatedGoogleList = [];
     const returnedGoogleIds = new Set();
+    const removedIds = new Set();
+    const removedTaskIds = new Set();
+    const rescheduledLinkedEvents = [];
 
     googleEvents.forEach(gEvt => {
       returnedGoogleIds.add(gEvt.googleId);
 
       // Si l'événement a été supprimé sur Google Calendar
       if (gEvt.status === 'cancelled') {
+        const old = existingGoogleMap.get(gEvt.googleId);
+        if (old) {
+          removedIds.add(old.id);
+          if (old.taskId) removedTaskIds.add(old.taskId);
+        }
         return; // Retiré de la vue locale
       }
 
       const existing = existingGoogleMap.get(gEvt.googleId);
       if (existing) {
-        // Conserver les métadonnées locales (ex: tâche ou note Antigravité rattachée)
+        // Conserver les métadonnées locales (ex: tâche, note ou projet Antigravité rattaché)
         gEvt.taskId = existing.taskId || gEvt.taskId || null;
         gEvt.noteId = existing.noteId || gEvt.noteId || null;
+        if (existing.projectId && !gEvt.projectId) gEvt.projectId = existing.projectId;
         gEvt.id = existing.id;
+
+        if (
+          gEvt.taskId &&
+          gEvt.start &&
+          (existing.start !== gEvt.start || existing.end !== gEvt.end || !!existing.isAllDay !== !!gEvt.isAllDay)
+        ) {
+          rescheduledLinkedEvents.push(gEvt);
+        }
       }
 
       updatedGoogleList.push(gEvt);
     });
 
-    // En mode incrémental, préserver les événements existants non retournés
+    // En mode incrémental, préserver les événements existants non retournés ; en mode complet, détecter ceux disparus
     if (isIncremental) {
       existingGoogleMap.forEach((oldEvt, gId) => {
         if (!returnedGoogleIds.has(gId)) {
           updatedGoogleList.push(oldEvt);
         }
       });
+    } else {
+      existingGoogleMap.forEach((oldEvt, gId) => {
+        if (!returnedGoogleIds.has(gId)) {
+          removedIds.add(oldEvt.id);
+          if (oldEvt.taskId) removedTaskIds.add(oldEvt.taskId);
+        }
+      });
     }
 
     const allMerged = [...localEvents, ...updatedGoogleList];
     StorageManager.saveEvents(allMerged);
+
+    if (removedIds.size > 0) {
+      this._pendingRemovedTaskIds = removedTaskIds;
+      this._cleanupRemovedEventLinks(removedIds, { clearTaskSchedule: true, remainingEvents: allMerged });
+    }
+
+    // Répercuter sur les tâches liées les créneaux déplacés directement côté Google Calendar
+    if (rescheduledLinkedEvents.length > 0 && typeof window !== 'undefined' && window.AgendaManager && typeof window.AgendaManager.syncEventDateToTask === 'function') {
+      rescheduledLinkedEvents.forEach(ev => {
+        const startTime = !ev.isAllDay && ev.start && ev.start.length >= 16 ? ev.start.slice(11, 16) : null;
+        window.AgendaManager.syncEventDateToTask(ev.taskId, ev.start.slice(0, 10), startTime);
+      });
+    }
+
     return allMerged;
   },
 
@@ -612,6 +741,7 @@ const GoogleSyncManager = {
   },
 
   updateOfflineBadge() {
+    if (typeof document === 'undefined') return;
     const badge = document.getElementById('google-offline-queue-badge');
     const queue = this.getOfflineQueue();
     if (badge) {
@@ -625,7 +755,7 @@ const GoogleSyncManager = {
   },
 
   isNetworkError(err) {
-    if (!navigator.onLine) return true;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
     if (!err) return false;
     const msg = (err.message || '').toLowerCase();
     return err.name === 'TypeError' ||
@@ -639,67 +769,158 @@ const GoogleSyncManager = {
            msg.includes('connexion');
   },
 
+  _isPermanentQueueError(err) {
+    if (!err || this.isNetworkError(err)) return false;
+    const status = Number(err.status);
+    if (status === 404 || status === 410) return true;
+    if (status === 401 || status === 403 || status === 429 || (status >= 500 && status < 600)) {
+      return false;
+    }
+    const msg = (err.message || '').toLowerCase();
+    if (err.code === 'INVALID_GRANT' || err.code === 'CONFLICT') return false;
+    if (msg.includes('invalid_grant') || msg.includes('reconnecter') || msg.includes('non connecté') || msg.includes('session') || msg.includes('rate limit') || msg.includes('quota')) {
+      return false;
+    }
+    return status === 400;
+  },
+
+  _relinkNoteEventId(oldEventId, newEventId) {
+    if (!oldEventId || !newEventId || oldEventId === newEventId || typeof StorageManager === 'undefined') return;
+    if (typeof StorageManager.getNotes !== 'function' || typeof StorageManager.saveNotes !== 'function') return;
+    const notes = StorageManager.getNotes();
+    let changed = false;
+    for (let i = 0; i < notes.length; i++) {
+      if (notes[i] && notes[i].linkedEventId === oldEventId) {
+        notes[i].linkedEventId = newEventId;
+        changed = true;
+      }
+    }
+    if (changed) {
+      StorageManager.saveNotes(notes);
+      if (window.NotesManager && typeof window.NotesManager.renderNotesList === 'function') {
+        window.NotesManager.renderNotesList();
+      }
+    }
+  },
+
   async processOfflineQueue() {
-    const queue = this.getOfflineQueue();
-    if (!queue || queue.length === 0) return 0;
-    if (!this.status || !this.status.isConnected) return 0;
-    if (!window.AntigraviteAPI?.google) return 0;
+    if (this._queuePromise) {
+      return this._queuePromise;
+    }
 
-    const remainingQueue = [];
-    let processedCount = 0;
+    this._queuePromise = (async () => {
+      const queue = this.getOfflineQueue();
+      if (!queue || queue.length === 0) return 0;
+      if (!this.status || !this.status.isConnected) return 0;
+      if (!window.AntigraviteAPI?.google) return 0;
 
-    for (const item of queue) {
-      try {
-        if (item.action === 'delete') {
-          await window.AntigraviteAPI.google.deleteEvent(item.payload.googleId, item.payload.calendarId);
-          processedCount++;
-        } else if (item.action === 'create') {
-          const created = await window.AntigraviteAPI.google.createEvent({
-            ...item.payload.eventData,
-            calendarId: item.payload.calendarId || this.status.selectedCalendarId || 'primary'
-          });
-          const events = StorageManager.getEvents();
-          const idx = events.findIndex(e => e.id === item.payload.tempId);
-          if (idx !== -1) {
-            events[idx] = created;
-          } else {
-            events.push(created);
-          }
-          StorageManager.saveEvents(events);
-          processedCount++;
-        } else if (item.action === 'update') {
-          const updated = await window.AntigraviteAPI.google.updateEvent(
-            item.payload.googleId,
-            item.payload.updatedData,
-            item.payload.calendarId,
-            null
-          );
-          const events = StorageManager.getEvents();
-          const idx = events.findIndex(e => e.googleId === item.payload.googleId || e.id === item.payload.tempId);
-          if (idx !== -1) {
-            events[idx] = { ...events[idx], ...updated, syncStatus: 'synced' };
+      const handledIds = new Set();
+      const failedKeepMap = new Map();
+      const createdIdMap = new Map();
+      let processedCount = 0;
+
+      for (const item of queue) {
+        try {
+          if (item.action === 'delete') {
+            const targetGoogleId = item.payload.googleId || createdIdMap.get(item.payload.tempId);
+            if (!targetGoogleId) {
+              handledIds.add(item.id);
+              continue;
+            }
+            await window.AntigraviteAPI.google.deleteEvent(targetGoogleId, item.payload.calendarId);
+            handledIds.add(item.id);
+            processedCount++;
+          } else if (item.action === 'create') {
+            const created = await window.AntigraviteAPI.google.createEvent({
+              ...item.payload.eventData,
+              calendarId: item.payload.calendarId || this.status.selectedCalendarId || 'primary'
+            });
+            created.taskId = created.taskId !== undefined ? created.taskId : (item.payload.eventData.taskId || null);
+            created.noteId = created.noteId !== undefined ? created.noteId : (item.payload.eventData.noteId || null);
+            if (item.payload.eventData && item.payload.eventData.recurrence && !created.recurrence) {
+              created.recurrence = item.payload.eventData.recurrence;
+              created.recurrenceEnd = item.payload.eventData.recurrenceEnd || null;
+            }
+            const events = StorageManager.getEvents();
+            const idx = events.findIndex(e => e.id === item.payload.tempId);
+            if (idx !== -1) {
+              events[idx] = created;
+            } else {
+              events.push(created);
+            }
             StorageManager.saveEvents(events);
+            this._relinkNoteEventId(item.payload.tempId, created.id);
+            if (item.payload.tempId && created.googleId) {
+              createdIdMap.set(item.payload.tempId, created.googleId);
+            }
+            handledIds.add(item.id);
+            processedCount++;
+          } else if (item.action === 'update') {
+            const targetGoogleId = item.payload.googleId || createdIdMap.get(item.payload.tempId);
+            if (!targetGoogleId) {
+              failedKeepMap.set(item.id, item);
+              continue;
+            }
+            const updated = await window.AntigraviteAPI.google.updateEvent(
+              targetGoogleId,
+              item.payload.updatedData,
+              item.payload.calendarId,
+              null
+            );
+            const events = StorageManager.getEvents();
+            const idx = events.findIndex(e => e.googleId === targetGoogleId || e.id === item.payload.tempId);
+            if (idx !== -1) {
+              events[idx] = { ...events[idx], ...updated, syncStatus: 'synced' };
+              StorageManager.saveEvents(events);
+            }
+            handledIds.add(item.id);
+            processedCount++;
+          } else {
+            handledIds.add(item.id);
           }
-          processedCount++;
-        }
-      } catch (err) {
-        if (this.isNetworkError(err)) {
-          remainingQueue.push(item);
-        } else {
-          console.warn(`[GoogleSync] Action ignorée (${item.action}) : ${err.message}`);
+        } catch (err) {
+          if (this._isPermanentQueueError(err)) {
+            console.warn(`[GoogleSync] Action hors-ligne définitivement écartée (${item.action}) : ${err.message}`);
+            handledIds.add(item.id);
+          } else {
+            console.warn(`[GoogleSync] Action conservée en file (${item.action}) : ${err.message}`);
+            failedKeepMap.set(item.id, {
+              ...item,
+              lastError: err.message || String(err),
+              retryCount: (item.retryCount || 0) + 1
+            });
+          }
         }
       }
-    }
 
-    this.saveOfflineQueue(remainingQueue);
-    if (processedCount > 0) {
-      if (window.AgendaManager) window.AgendaManager.render();
-      if (window.App && typeof window.App.updateDashboard === 'function') window.App.updateDashboard();
-      if (window.App && typeof window.App.showToast === 'function') {
-        window.App.showToast(`File hors-ligne : ${processedCount} modification${processedCount > 1 ? 's' : ''} envoyée${processedCount > 1 ? 's' : ''} à Google`, "success");
+      // Fusionner avec la file courante pour ne pas écraser d'actions ajoutées pendant les requêtes réseau
+      const latestQueue = this.getOfflineQueue();
+      const mergedQueue = [];
+      for (const curItem of latestQueue) {
+        if (handledIds.has(curItem.id)) continue;
+        if (failedKeepMap.has(curItem.id)) {
+          mergedQueue.push(failedKeepMap.get(curItem.id));
+        } else {
+          mergedQueue.push(curItem);
+        }
       }
+
+      this.saveOfflineQueue(mergedQueue);
+      if (processedCount > 0) {
+        if (window.AgendaManager) window.AgendaManager.render();
+        if (window.App && typeof window.App.updateDashboard === 'function') window.App.updateDashboard();
+        if (window.App && typeof window.App.showToast === 'function') {
+          window.App.showToast(`File hors-ligne : ${processedCount} modification${processedCount > 1 ? 's' : ''} envoyée${processedCount > 1 ? 's' : ''} à Google`, "success");
+        }
+      }
+      return processedCount;
+    })();
+
+    try {
+      return await this._queuePromise;
+    } finally {
+      this._queuePromise = null;
     }
-    return processedCount;
   },
 
   // =========================================================================
@@ -756,6 +977,10 @@ const GoogleSyncManager = {
           status: 'confirmed',
           syncStatus: 'pending_create',
           taskId: eventData.taskId || null,
+          noteId: eventData.noteId || null,
+          projectId: eventData.projectId || null,
+          recurrence: eventData.recurrence || 'none',
+          recurrenceEnd: eventData.recurrenceEnd || null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
@@ -790,6 +1015,47 @@ const GoogleSyncManager = {
 
     const calendarId = localEvt.googleCalendarId || this.status.selectedCalendarId || 'primary';
 
+    // Événement créé hors-ligne pas encore poussé vers Google : mettre à jour localement + la file 'create'
+    if (!localEvt.googleId) {
+      const events = StorageManager.getEvents();
+      const idx = events.findIndex(e => e.id === localEvt.id);
+      if (idx !== -1) {
+        events[idx] = {
+          ...events[idx],
+          ...updatedData,
+          syncStatus: 'pending_create',
+          updatedAt: new Date().toISOString()
+        };
+        StorageManager.saveEvents(events);
+      }
+      const queue = this.getOfflineQueue();
+      let patched = false;
+      for (let i = 0; i < queue.length; i++) {
+        if (queue[i].action === 'create' && queue[i].payload && queue[i].payload.tempId === localEvt.id) {
+          queue[i].payload.eventData = { ...queue[i].payload.eventData, ...updatedData };
+          patched = true;
+        }
+      }
+      if (patched) {
+        this.saveOfflineQueue(queue);
+      } else {
+        this.enqueueOfflineAction('create', {
+          tempId: localEvt.id,
+          eventData: { ...localEvt, ...updatedData },
+          calendarId
+        });
+      }
+      if (window.AgendaManager) window.AgendaManager.render();
+      if (window.App && typeof window.App.updateDashboard === 'function') window.App.updateDashboard();
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        await this.processOfflineQueue();
+      } else if (window.App && typeof window.App.showToast === 'function') {
+        window.App.showToast("Modifications enregistrées localement (en attente de réseau)", "warning");
+      }
+      const latestEvents = StorageManager.getEvents();
+      return latestEvents.find(e => e.id === localEvt.id || e.title === updatedData.title) || events[idx];
+    }
+
     try {
       const updated = await window.AntigraviteAPI.google.updateEvent(
         localEvt.googleId,
@@ -807,7 +1073,8 @@ const GoogleSyncManager = {
           ...updated,
           syncStatus: 'synced',
           taskId: updatedData.taskId !== undefined ? updatedData.taskId : events[idx].taskId,
-          noteId: updatedData.noteId !== undefined ? updatedData.noteId : events[idx].noteId
+          noteId: updatedData.noteId !== undefined ? updatedData.noteId : events[idx].noteId,
+          projectId: updatedData.projectId !== undefined ? updatedData.projectId : (events[idx].projectId || null)
         };
       } else {
         events.push(updated);
@@ -827,13 +1094,20 @@ const GoogleSyncManager = {
       return updated;
     } catch (err) {
       // Gestion des conflits concurrents (ETag / Precondition Failed)
-      if (err.code === 'CONFLICT') {
-        const force = confirm(
-          "⚠️ Conflit de synchronisation détecté !\n\n" +
+      const isConflict = err && (err.code === 'CONFLICT' || (typeof err.message === 'string' && err.message.includes('[CONFLICT]')));
+      if (isConflict) {
+        const conflictMsg =
           "Cet événement a été modifié directement sur Google Agenda depuis votre dernière synchronisation.\n\n" +
-          "• Cliquez sur 'OK' pour écraser avec vos modifications locales.\n" +
-          "• Cliquez sur 'Annuler' pour récupérer la version la plus récente de Google Agenda."
-        );
+          "Voulez-vous écraser la version Google avec vos modifications locales ? Sinon, la version la plus récente de Google Agenda sera récupérée.";
+        const force = (window.App && typeof window.App.confirm === 'function')
+          ? await window.App.confirm({
+              title: 'Conflit de synchronisation Google Agenda',
+              message: conflictMsg,
+              confirmText: 'Écraser par mes modifs',
+              cancelText: 'Récupérer Google',
+              danger: true
+            })
+          : (typeof confirm === 'function' ? confirm("⚠️ Conflit de synchronisation détecté !\n\n" + conflictMsg) : false);
 
         if (force) {
           const forced = await window.AntigraviteAPI.google.updateEvent(
@@ -906,22 +1180,32 @@ const GoogleSyncManager = {
       return;
     }
 
+    // Si l'événement n'a jamais atteint Google (création hors-ligne), annuler les actions locales en attente sans appel réseau
+    if (!localEvt.googleId) {
+      const queue = this.getOfflineQueue();
+      const filteredQueue = queue.filter(item => !(item && item.payload && item.payload.tempId === localEvt.id));
+      if (filteredQueue.length !== queue.length) {
+        this.saveOfflineQueue(filteredQueue);
+      }
+      this.removeLocalEvent(localEvt.id);
+      if (window.App && typeof window.App.showToast === 'function') {
+        window.App.showToast("Créneau Google non synchronisé supprimé.", "info");
+      }
+      return;
+    }
+
     const calendarId = localEvt.googleCalendarId || this.status.selectedCalendarId || 'primary';
     let deletedRemotely = false;
 
     try {
-      if (localEvt.googleId) {
-        await window.AntigraviteAPI.google.deleteEvent(localEvt.googleId, calendarId);
-        deletedRemotely = true;
-      }
+      await window.AntigraviteAPI.google.deleteEvent(localEvt.googleId, calendarId);
+      deletedRemotely = true;
     } catch (err) {
-      if (this.isNetworkError(err)) {
-        if (localEvt.googleId) {
-          this.enqueueOfflineAction('delete', {
-            googleId: localEvt.googleId,
-            calendarId
-          });
-        }
+      if (this.isNetworkError(err) || !this._isPermanentQueueError(err)) {
+        this.enqueueOfflineAction('delete', {
+          googleId: localEvt.googleId,
+          calendarId
+        });
       } else {
         throw err;
       }
@@ -941,8 +1225,14 @@ const GoogleSyncManager = {
 
   removeLocalEvent(id) {
     const events = StorageManager.getEvents();
+    const target = events.find(e => e.id === id);
     const filtered = events.filter(e => e.id !== id);
     StorageManager.saveEvents(filtered);
+
+    if (target) {
+      this._pendingRemovedTaskIds = target.taskId ? new Set([target.taskId]) : null;
+      this._cleanupRemovedEventLinks(new Set([id]), { clearTaskSchedule: true, remainingEvents: filtered });
+    }
 
     if (window.AgendaManager) {
       window.AgendaManager.render();
@@ -977,7 +1267,7 @@ const GoogleSyncManager = {
     resultBox.innerHTML = `<div style="padding: 12px; color: var(--text-dim); font-size: 0.84rem;">Récupération sécurisée des événements en cours...</div>`;
 
     try {
-      const result = await window.AntigraviteAPI.google.fetchEvents({ maxResults: 100 });
+      const result = await window.AntigraviteAPI.google.fetchEvents({ maxResults: 100, persistSyncState: false });
       const count = result.totalCount;
       const previewList = result.events.slice(0, 6);
 
@@ -1037,13 +1327,16 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = GoogleSyncManager;
 }
 
-// Initialisation dès que le DOM est prêt
+// Initialisation autonome uniquement si App ne pilote pas le démarrage
 if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
+  const initIfStandalone = () => {
+    if (typeof window === 'undefined' || !window.App) {
       GoogleSyncManager.init();
-    });
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initIfStandalone);
   } else {
-    GoogleSyncManager.init();
+    initIfStandalone();
   }
 }

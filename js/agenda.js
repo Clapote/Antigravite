@@ -21,47 +21,22 @@ const AgendaManager = {
       return App.getSvgIcon(name, size, extraClass);
     }
     const cls = extraClass ? `app-icon ${extraClass}` : 'app-icon';
-    switch (name) {
-      case 'pin':
-      case '📌':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
-      case 'note':
-      case '📝':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`;
-      case 'calendar':
-      case '📅':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>`;
-      case 'sun':
-      case '☀️':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
-      case 'repeat':
-      case '🔁':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
-      case 'location':
-      case '📍':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
-      case 'check':
-      case '✓':
-      case '✅':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-      case 'edit':
-      case '✏️':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
-      case 'trash':
-      case '🗑️':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
-      case 'plus':
-      case '➕':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
-      case 'zap':
-      case '⚡':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
-      case 'globe':
-      case '🌐':
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
-      default:
-        return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
-    }
+    const map = {
+      pin: ['pin', 2], '📌': ['pin', 2],
+      note: ['note', 2], '📝': ['note', 2],
+      calendar: ['calendar', 2], '📅': ['calendar', 2],
+      sun: ['sun', 2.5], '☀️': ['sun', 2.5],
+      repeat: ['repeat', 2.5], '🔁': ['repeat', 2.5],
+      location: ['location', 2], '📍': ['location', 2],
+      check: ['check', 3], '✓': ['check', 3], '✅': ['check', 3],
+      edit: ['edit', 2], '✏️': ['edit', 2],
+      trash: ['trash', 2], '🗑️': ['trash', 2],
+      plus: ['plus', 2.5], '➕': ['plus', 2.5],
+      zap: ['zap', 2], '⚡': ['zap', 2],
+      globe: ['globe', 2], '🌐': ['globe', 2]
+    };
+    const [sym, sw] = map[name] || ['important', 2];
+    return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ico-${sym}"/></svg>`;
   },
 
   scrollToNormalHours(smooth = false) {
@@ -76,14 +51,16 @@ const AgendaManager = {
     }
   },
 
-  init() {
+  init(options = {}) {
     if (this.initialized) {
-      this.render();
+      if (!options || !options.deferRender) this.render();
       return;
     }
     this.initialized = true;
     this.initWeek();
-    this.render();
+    if (!options || !options.deferRender) {
+      this.render();
+    }
     this.bindEvents();
     this.initContextMenu();
     this.initDragAndDrop();
@@ -104,13 +81,31 @@ const AgendaManager = {
     this.currentWeekStart = this.getMonday(new Date());
   },
 
+  _addMonthsSafe(dateObj, deltaMonths) {
+    const base = dateObj ? new Date(dateObj) : new Date();
+    const origDay = base.getDate();
+    base.setDate(1);
+    base.setMonth(base.getMonth() + deltaMonths);
+    const maxDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    base.setDate(Math.min(origDay, maxDay));
+    return base;
+  },
+
+  _shiftIsoDate(dateStr, deltaDays) {
+    if (!dateStr || typeof dateStr !== 'string') return dateStr;
+    const parts = dateStr.slice(0, 10).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+    const shifted = new Date(parts[0], parts[1] - 1, parts[2] + deltaDays);
+    return this.formatDateIso(shifted);
+  },
+
   navigatePrev() {
     if (!this.currentWeekStart) this.initWeek();
     if (this.currentView === 'day') {
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 1);
       this.activeDateStr = this.formatDateIso(this.currentWeekStart);
     } else if (this.currentView === 'month') {
-      this.currentWeekStart.setMonth(this.currentWeekStart.getMonth() - 1);
+      this.currentWeekStart = new Date(this.currentWeekStart.getFullYear(), this.currentWeekStart.getMonth() - 1, 1);
     } else {
       this.currentWeekStart = this.getMonday(this.currentWeekStart);
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() - 7);
@@ -127,7 +122,7 @@ const AgendaManager = {
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 1);
       this.activeDateStr = this.formatDateIso(this.currentWeekStart);
     } else if (this.currentView === 'month') {
-      this.currentWeekStart.setMonth(this.currentWeekStart.getMonth() + 1);
+      this.currentWeekStart = new Date(this.currentWeekStart.getFullYear(), this.currentWeekStart.getMonth() + 1, 1);
     } else {
       this.currentWeekStart = this.getMonday(this.currentWeekStart);
       this.currentWeekStart.setDate(this.currentWeekStart.getDate() + 7);
@@ -169,8 +164,12 @@ const AgendaManager = {
         b.classList.toggle('active', b.dataset.view === 'week');
       });
     }
-    this.render();
-    if (typeof this.scrollToNormalHours === 'function') {
+    if (typeof this.renderIfNeeded === 'function') {
+      this.renderIfNeeded();
+    } else {
+      this.render();
+    }
+    if (typeof this.scrollToNormalHours === 'function' && (this._lastScrollTop === null || this._lastScrollTop === undefined)) {
       this.scrollToNormalHours(false);
     }
     if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
@@ -248,6 +247,10 @@ const AgendaManager = {
         if (!isNaN(picked.getTime())) {
           if (this.currentView === 'day') {
             this.currentWeekStart = picked;
+            this.activeDateStr = this.formatDateIso(picked);
+            if (typeof window !== 'undefined' && window.App && typeof window.App.updateSidebarDayProgress === 'function') {
+              window.App.updateSidebarDayProgress(this.activeDateStr);
+            }
           } else if (this.currentView === 'month') {
             picked.setDate(1);
             this.currentWeekStart = picked;
@@ -342,13 +345,20 @@ const AgendaManager = {
       });
     }
 
-    // Indicateur interactif de survol de créneau heure par heure (Ghost slot)
+    // Indicateur interactif de survol de créneau heure par heure (Ghost slot) optimisé via rAF
     if (calendarBody && !this._gridHoverBound) {
       this._gridHoverBound = true;
       let hoverIndicator = null;
       let lastActiveLabel = null;
+      let hoverRaf = null;
+      let pendingHoverData = null;
 
       const removeHover = () => {
+        if (hoverRaf && typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(hoverRaf);
+          hoverRaf = null;
+        }
+        pendingHoverData = null;
         // Ne JAMAIS supprimer le retour visuel pendant qu'un clic droit est maintenu
         if (this._rightClickSession) return;
         if (hoverIndicator && hoverIndicator.parentElement) {
@@ -360,41 +370,19 @@ const AgendaManager = {
         }
       };
 
-      calendarBody.addEventListener('mousemove', (e) => {
-        if (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function' && StorageManager.getSettings().disablePreviews === true) {
-          removeHover();
-          return;
-        }
-        // Ignorer complètement si une session de clic droit ou de drag est active, ou si un bouton est enfoncé
-        if (this._rightClickSession || this.dragSession || (typeof document !== 'undefined' && document.querySelector('.dragging'))) {
-          return;
-        }
-        if (e.buttons !== 0) {
-          return;
-        }
-        if (e.target.closest('.calendar-event')) {
-          removeHover();
-          return;
-        }
+      const renderHoverFrame = () => {
+        hoverRaf = null;
+        const payload = pendingHoverData;
+        pendingHoverData = null;
+        if (!payload) return;
+        const { dayCol, clientY } = payload;
 
-        const dayCol = e.target.closest('.day-column');
-        if (!dayCol) {
-          removeHover();
-          return;
-        }
-
-        const dateStr = dayCol.dataset.date;
-        if (!dateStr) {
-          removeHover();
-          return;
-        }
-
+        // Lecture géométrique groupée avant toute écriture DOM
         const rect = dayCol.getBoundingClientRect();
-        const relY = Math.max(0, e.clientY - rect.top);
+        const relY = Math.max(0, clientY - rect.top);
         const hoursOffset = relY / this.slotHeight;
         const clickedHour = Math.floor(this.dayHoursStart + hoursOffset);
 
-        // Même arrondi au quart d'heure que lors du clic (00, 15, 30, 45)
         const rawMinutes = Math.floor((hoursOffset % 1) * 60);
         const roundedMinutes = Math.min(45, Math.floor(rawMinutes / 15) * 15);
 
@@ -408,14 +396,15 @@ const AgendaManager = {
           endTime = '23:59';
         } else {
           const endHour = startHour + 1;
-          const endHourStr = String(endHour).padStart(2, '0');
-          endTime = `${endHourStr}:${startMinStr}`;
+          endTime = `${String(endHour).padStart(2, '0')}:${startMinStr}`;
         }
 
         const topPx = (startHour - this.dayHoursStart + (roundedMinutes / 60)) * this.slotHeight;
         const totalHours = this.dayHoursEnd - this.dayHoursStart;
         const maxH = totalHours * this.slotHeight;
         const heightPx = Math.min(this.slotHeight, Math.max(20, maxH - topPx));
+
+        const hourLabel = calendarBody.querySelector(`.time-slot-label[data-hour="${startHour}"]`);
 
         if (!hoverIndicator || !hoverIndicator.parentElement) {
           hoverIndicator = document.getElementById('agenda-slot-hover-indicator');
@@ -436,8 +425,9 @@ const AgendaManager = {
         }
 
         const timeSpan = hoverIndicator.querySelector('.agenda-slot-hover-time');
-        if (timeSpan) {
-          timeSpan.textContent = `${startTime} – ${endTime}`;
+        const nextLabelText = `${startTime} – ${endTime}`;
+        if (timeSpan && timeSpan.textContent !== nextLabelText) {
+          timeSpan.textContent = nextLabelText;
         }
 
         hoverIndicator.style.top = `${topPx}px`;
@@ -447,14 +437,42 @@ const AgendaManager = {
           dayCol.appendChild(hoverIndicator);
         }
 
-        // Mettre en évidence l'heure correspondante dans la colonne des heures (time-gutter)
-        const hourLabel = calendarBody.querySelector(`.time-slot-label[data-hour="${startHour}"]`);
         if (lastActiveLabel && lastActiveLabel !== hourLabel) {
           lastActiveLabel.classList.remove('active-slot');
         }
-        if (hourLabel) {
+        if (hourLabel && lastActiveLabel !== hourLabel) {
           hourLabel.classList.add('active-slot');
           lastActiveLabel = hourLabel;
+        }
+      };
+
+      calendarBody.addEventListener('mousemove', (e) => {
+        if (typeof StorageManager !== 'undefined' && typeof StorageManager.getSettings === 'function' && StorageManager.getSettings().disablePreviews === true) {
+          removeHover();
+          return;
+        }
+        if (this._rightClickSession || this.dragSession || (typeof document !== 'undefined' && document.querySelector('.dragging'))) {
+          return;
+        }
+        if (e.buttons !== 0) {
+          return;
+        }
+        if (e.target.closest('.calendar-event')) {
+          removeHover();
+          return;
+        }
+
+        const dayCol = e.target.closest('.day-column');
+        if (!dayCol || !dayCol.dataset.date) {
+          removeHover();
+          return;
+        }
+
+        pendingHoverData = { dayCol, clientY: e.clientY };
+        if (!hoverRaf) {
+          hoverRaf = (typeof requestAnimationFrame === 'function')
+            ? requestAnimationFrame(renderHoverFrame)
+            : (renderHoverFrame(), null);
         }
       });
 
@@ -502,6 +520,43 @@ const AgendaManager = {
     }
   },
 
+  _clearTaskScheduleIfNoRemainingEvents(taskId, eventsList = null) {
+    if (!taskId || typeof StorageManager === 'undefined' || typeof StorageManager.getTasks !== 'function') return;
+    const events = Array.isArray(eventsList) ? eventsList : this.getAll();
+    if (events.some(e => e && e.taskId === taskId)) return;
+
+    try {
+      const tasks = StorageManager.getTasks();
+      let modified = false;
+      const clearRec = (list) => {
+        if (!Array.isArray(list)) return;
+        for (const t of list) {
+          if (!t) continue;
+          if (t.id === taskId) {
+            if (t.plannedDate !== null || t.plannedTime !== null) {
+              t.plannedDate = null;
+              t.plannedTime = null;
+              t.updatedAt = new Date().toISOString();
+              modified = true;
+            }
+            return true;
+          }
+          if (Array.isArray(t.subtasks) && clearRec(t.subtasks)) return true;
+        }
+        return false;
+      };
+      clearRec(tasks);
+      if (modified && typeof StorageManager.saveTasks === 'function') {
+        StorageManager.saveTasks(tasks);
+        if (typeof window !== 'undefined' && window.TasksManager && typeof window.TasksManager.render === 'function') {
+          window.TasksManager.render();
+        }
+      }
+    } catch (e) {
+      console.warn('[AgendaManager] Erreur nettoyage horaire tâche détachée :', e);
+    }
+  },
+
   addEvent(eventData) {
     if (eventData.start) {
       this.activeDateStr = eventData.start.slice(0, 10);
@@ -509,6 +564,7 @@ const AgendaManager = {
     const events = this.getAll();
 
     let taskId = eventData.taskId || null;
+    let resolvedProjectId = eventData.projectId || eventData.taskProject || null;
     if (eventData.createTask && !taskId) {
       if (typeof TasksManager !== 'undefined' && typeof TasksManager.addTask === 'function') {
         const startDateStr = (eventData.start || '').slice(0, 10);
@@ -516,18 +572,37 @@ const AgendaManager = {
         const newTask = TasksManager.addTask({
           title: eventData.title.trim(),
           description: eventData.description ? eventData.description.trim() : '',
-          projectId: eventData.taskProject || null,
+          projectId: eventData.taskProject || resolvedProjectId || null,
           priority: eventData.taskPriority || 'medium',
           plannedDate: startDateStr || null,
           plannedTime: startTimeStr,
           skipEventCreation: true
         });
-        if (newTask && newTask.id) taskId = newTask.id;
+        if (newTask && newTask.id) {
+          taskId = newTask.id;
+          if (!resolvedProjectId && newTask.projectId) resolvedProjectId = newTask.projectId;
+        }
       }
     }
 
+    if (!resolvedProjectId && taskId && typeof StorageManager !== 'undefined' && typeof StorageManager.getTasks === 'function') {
+      const findProj = (list) => {
+        for (const t of list || []) {
+          if (!t) continue;
+          if (t.id === taskId) return t.projectId || null;
+          if (Array.isArray(t.subtasks)) {
+            const sub = findProj(t.subtasks);
+            if (sub !== undefined) return sub;
+          }
+        }
+        return undefined;
+      };
+      const fp = findProj(StorageManager.getTasks());
+      if (fp) resolvedProjectId = fp;
+    }
+
     const newEvent = {
-      id: 'evt-' + Date.now(),
+      id: 'evt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
       title: eventData.title.trim(),
       description: eventData.description ? eventData.description.trim() : '',
       location: eventData.location ? eventData.location.trim() : '',
@@ -535,6 +610,7 @@ const AgendaManager = {
       end: eventData.end,
       isAllDay: !!eventData.isAllDay,
       color: eventData.color || '#3b82f6',
+      projectId: resolvedProjectId,
       taskId: taskId,
       noteId: eventData.noteId || null,
       recurrence: eventData.recurrence || 'none',
@@ -546,17 +622,18 @@ const AgendaManager = {
     events.push(newEvent);
     this.saveAll(events);
 
-    // Si lié à une tâche, synchroniser la date planifiée de la tâche
+    // Si lié à une tâche, synchroniser la date planifiée et l'heure de la tâche
     if (newEvent.taskId && newEvent.start) {
-      this.syncEventDateToTask(newEvent.taskId, newEvent.start.slice(0, 10));
+      const startTime = !newEvent.isAllDay && newEvent.start.length >= 16 ? newEvent.start.slice(11, 16) : null;
+      this.syncEventDateToTask(newEvent.taskId, newEvent.start.slice(0, 10), startTime);
     }
 
     if (window.App) window.App.showToast("Créneau ajouté dans l'agenda", "success");
     return newEvent;
   },
 
-  // Synchroniser la date d'un événement vers sa tâche liée
-  syncEventDateToTask(taskId, newDateStr) {
+  // Synchroniser la date (et éventuellement l'heure) d'un événement vers sa tâche liée
+  syncEventDateToTask(taskId, newDateStr, newTimeStr = null) {
     if (!taskId || !newDateStr) return;
     if (typeof StorageManager === 'undefined' || typeof StorageManager.getTasks !== 'function') return;
 
@@ -567,8 +644,9 @@ const AgendaManager = {
       const updateRecursive = (list) => {
         for (const t of list) {
           if (t.id === taskId) {
-            if (t.plannedDate !== newDateStr) {
+            if (t.plannedDate !== newDateStr || (newTimeStr && t.plannedTime !== newTimeStr)) {
               t.plannedDate = newDateStr;
+              if (newTimeStr) t.plannedTime = newTimeStr;
               t.updatedAt = new Date().toISOString();
               modified = true;
             }
@@ -602,6 +680,8 @@ const AgendaManager = {
     const evt = events.find(e => e.id === id);
     if (!evt) return false;
 
+    const prevTaskId = evt.taskId || null;
+    const startChanged = updatedData && updatedData.start !== undefined && updatedData.start !== evt.start;
     if (updatedData.title !== undefined) evt.title = updatedData.title.trim();
     if (updatedData.description !== undefined) evt.description = updatedData.description ? updatedData.description.trim() : '';
     if (updatedData.location !== undefined) evt.location = updatedData.location.trim();
@@ -609,6 +689,7 @@ const AgendaManager = {
     if (updatedData.end !== undefined) evt.end = updatedData.end;
     if (updatedData.isAllDay !== undefined) evt.isAllDay = !!updatedData.isAllDay;
     if (updatedData.color !== undefined) evt.color = updatedData.color || evt.color;
+    if (updatedData.projectId !== undefined) evt.projectId = updatedData.projectId || null;
     evt.taskId = updatedData.taskId !== undefined ? updatedData.taskId : evt.taskId;
     if (updatedData.noteId !== undefined) evt.noteId = updatedData.noteId;
     if (updatedData.recurrence !== undefined) evt.recurrence = updatedData.recurrence;
@@ -622,10 +703,22 @@ const AgendaManager = {
 
     this.saveAll(events);
 
+    if (startChanged && typeof AgendaNotificationManager !== 'undefined' && typeof AgendaNotificationManager.resetEventNotifications === 'function') {
+      AgendaNotificationManager.resetEventNotifications(id);
+    } else if (startChanged && typeof window !== 'undefined' && window.AgendaNotificationManager && typeof window.AgendaNotificationManager.resetEventNotifications === 'function') {
+      window.AgendaNotificationManager.resetEventNotifications(id);
+    }
+
+    // Si la tâche précédemment liée a été détachée, nettoyer son horaire s'il ne reste plus aucun créneau associé
+    if (prevTaskId && prevTaskId !== evt.taskId) {
+      this._clearTaskScheduleIfNoRemainingEvents(prevTaskId, events);
+    }
+
     // Synchronisation bidirectionnelle : si l'événement est lié à une tâche,
-    // synchroniser la date prévue de la tâche selon le créneau dans l'agenda
+    // synchroniser la date (et heure) prévue de la tâche selon le créneau dans l'agenda
     if (evt.taskId && evt.start) {
-      this.syncEventDateToTask(evt.taskId, evt.start.slice(0, 10));
+      const startTime = !evt.isAllDay && evt.start.length >= 16 ? evt.start.slice(11, 16) : null;
+      this.syncEventDateToTask(evt.taskId, evt.start.slice(0, 10), startTime);
     }
 
     if (window.App) window.App.showToast("Créneau mis à jour", "info");
@@ -640,8 +733,20 @@ const AgendaManager = {
     if (!target) return;
 
     const hadTask = !!target.taskId;
+    const prevTaskId = target.taskId || null;
     const filtered = events.filter(e => e.id !== id);
     this.saveAll(filtered);
+
+    if (typeof AgendaNotificationManager !== 'undefined' && typeof AgendaNotificationManager.resetEventNotifications === 'function') {
+      AgendaNotificationManager.resetEventNotifications(id);
+    } else if (typeof window !== 'undefined' && window.AgendaNotificationManager && typeof window.AgendaNotificationManager.resetEventNotifications === 'function') {
+      window.AgendaNotificationManager.resetEventNotifications(id);
+    }
+
+    // Si aucun autre créneau ne reste lié à cette tâche, libérer sa date prévue sans jamais la supprimer
+    if (prevTaskId) {
+      this._clearTaskScheduleIfNoRemainingEvents(prevTaskId, filtered);
+    }
 
     // Détacher la note liée sans la modifier par ailleurs
     if (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function') {
@@ -698,6 +803,57 @@ const AgendaManager = {
     return `${year}-${month}-${day}`;
   },
 
+  _dateMetaCache: new Map(),
+
+  _getDateMeta(dateStr) {
+    let meta = this._dateMetaCache.get(dateStr);
+    if (meta) return meta;
+    const d = new Date(`${dateStr}T00:00:00`);
+    meta = { dow: d.getDay(), dom: d.getDate() };
+    if (this._dateMetaCache.size > 400) {
+      this._dateMetaCache.clear();
+    }
+    this._dateMetaCache.set(dateStr, meta);
+    return meta;
+  },
+
+  // Pré-calcul des métadonnées de dates & occurrences récurrentes de la semaine/du mois courant (pendant le Splash Screen)
+  warmUpRecurrenceCache() {
+    const baseDate = this.currentWeekStart ? new Date(this.currentWeekStart) : this.getMonday(new Date());
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      this._getDateMeta(this.formatDateIso(new Date(year, month, day)));
+    }
+    const events = this.getAll();
+    const weekStartIso = this.formatDateIso(baseDate);
+    const weekDays = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() + i);
+      weekDays.push(this.formatDateIso(d));
+    }
+    const weekEventsMap = new Map();
+    weekDays.forEach(iso => weekEventsMap.set(iso, []));
+    for (let i = 0; i < events.length; i++) {
+      const evt = events[i];
+      if (!evt || !evt.start) continue;
+      if (evt.recurrence && evt.recurrence !== 'none') {
+        const sDay = evt.start.slice(0, 10);
+        this._getDateMeta(sDay);
+      }
+      for (let j = 0; j < weekDays.length; j++) {
+        const iso = weekDays[j];
+        if (this.isEventOnDate(evt, iso)) {
+          weekEventsMap.get(iso).push(evt);
+        }
+      }
+    }
+    this._warmWeekCache = { weekStartIso, weekEventsMap };
+    return this._warmWeekCache;
+  },
+
   // Détermine si un événement (mono-jour, multi-jours, all-day, minuté ou récurrent) est actif à la date dateStr (YYYY-MM-DD)
   isEventOnDate(evt, dateStr) {
     if (!evt || !evt.start) return false;
@@ -705,7 +861,7 @@ const AgendaManager = {
     const endDay = evt.end ? evt.end.slice(0, 10) : startDay;
     const effectiveEndDay = endDay >= startDay ? endDay : startDay;
 
-    // Prise en charge de la récurrence (daily, weekly, monthly)
+    // Prise en charge de la récurrence (daily, weekly, monthly) avec cache de calendrier O(1)
     if (evt.recurrence && evt.recurrence !== 'none') {
       if (dateStr < startDay) return false; // Avant la date de création
       if (evt.recurrenceEnd && dateStr > evt.recurrenceEnd) return false;
@@ -714,14 +870,10 @@ const AgendaManager = {
         return true;
       }
       if (evt.recurrence === 'weekly') {
-        const targetD = new Date(`${dateStr}T00:00:00`);
-        const startD = new Date(`${startDay}T00:00:00`);
-        return targetD.getDay() === startD.getDay();
+        return this._getDateMeta(dateStr).dow === this._getDateMeta(startDay).dow;
       }
       if (evt.recurrence === 'monthly') {
-        const targetD = new Date(`${dateStr}T00:00:00`);
-        const startD = new Date(`${startDay}T00:00:00`);
-        return targetD.getDate() === startD.getDate();
+        return this._getDateMeta(dateStr).dom === this._getDateMeta(startDay).dom;
       }
     }
 
@@ -776,18 +928,19 @@ const AgendaManager = {
         const rawStartMin = fastParseMinutes(evt.start, 8 * 60);
         const rawEndMin = fastParseMinutes(evt.end, rawStartMin + 60);
 
+        const minCollisionMin = Math.max(20, Math.ceil((28 / (this.slotHeight || 50)) * 60));
         if (!dateStr || startDay === effectiveEndDay || (evt.recurrence && evt.recurrence !== 'none')) {
           // Événement mono-jour, récurrent ou pas de dateStr fourni
           startMin = rawStartMin;
-          endMin = Math.max(startMin + 20, rawEndMin);
+          endMin = Math.max(startMin + minCollisionMin, rawEndMin);
         } else {
           // Événement horodaté multi-jours : borner selon la journée courante
           if (dateStr === startDay) {
             startMin = rawStartMin;
-            endMin = Math.max(startMin + 20, defaultDayEndMin);
+            endMin = Math.max(startMin + minCollisionMin, defaultDayEndMin);
           } else if (dateStr === effectiveEndDay) {
             startMin = defaultDayStartMin;
-            endMin = Math.max(startMin + 20, rawEndMin);
+            endMin = Math.max(startMin + minCollisionMin, rawEndMin);
           } else {
             // Jour intermédiaire complet
             startMin = defaultDayStartMin;
@@ -864,6 +1017,20 @@ const AgendaManager = {
     return layout;
   },
 
+  /**
+   * Résout le projet associé à un événement (priorité au projet de la tâche liée, puis projet direct du créneau).
+   */
+  _resolveEventProject(e, linkedTask, projectMap) {
+    if (!projectMap) return null;
+    if (linkedTask && linkedTask.task && linkedTask.task.projectId) {
+      return projectMap.get(linkedTask.task.projectId) || null;
+    }
+    if (e && e.projectId) {
+      return projectMap.get(e.projectId) || null;
+    }
+    return null;
+  },
+
   renderMonthView(allEvents, taskMap, noteById, noteByEventId, projectMap = null) {
     if (!this.currentWeekStart) this.initWeek();
     const gridEl = document.getElementById('calendar-month-grid');
@@ -880,28 +1047,77 @@ const AgendaManager = {
 
     const todayStr = this.formatDateIso(new Date());
     const lastOfMonth = new Date(currentYear, currentMonth + 1, 0);
-    const cellsToRender = (startCalendarDate.getTime() + 35 * 86400000) <= lastOfMonth.getTime() ? 42 : 35;
+    const day35Date = new Date(startCalendarDate.getFullYear(), startCalendarDate.getMonth(), startCalendarDate.getDate() + 35);
+    const cellsToRender = day35Date.getTime() <= lastOfMonth.getTime() ? 42 : 35;
+
+    // Pré-indexer en une seule passe O(N) les événements par cellule du mois
+    const cellDates = [];
+    const eventsByDate = new Map();
+    const iterDate = new Date(startCalendarDate);
+    for (let c = 0; c < cellsToRender; c++) {
+      const dIso = this.formatDateIso(iterDate);
+      cellDates.push({
+        dateIso: dIso,
+        dayNum: iterDate.getDate(),
+        isOtherMonth: iterDate.getMonth() !== currentMonth,
+        isToday: dIso === todayStr
+      });
+      eventsByDate.set(dIso, []);
+      iterDate.setDate(iterDate.getDate() + 1);
+    }
+
+    const gridStartIso = cellDates[0].dateIso;
+    const gridEndIso = cellDates[cellDates.length - 1].dateIso;
+
+    if (Array.isArray(allEvents)) {
+      for (let i = 0; i < allEvents.length; i++) {
+        const e = allEvents[i];
+        if (!e) continue;
+        if (e.recurrence && e.recurrence !== 'none') {
+          for (let c = 0; c < cellDates.length; c++) {
+            const dIso = cellDates[c].dateIso;
+            if (this.isEventOnDate(e, dIso)) {
+              eventsByDate.get(dIso).push(e);
+            }
+          }
+        } else if (e.start) {
+          const eStartIso = e.start.slice(0, 10);
+          const eEndIso = e.end ? e.end.slice(0, 10) : eStartIso;
+          const spanEnd = eEndIso >= eStartIso ? eEndIso : eStartIso;
+          if (spanEnd < gridStartIso || eStartIso > gridEndIso) continue;
+          if (eStartIso === spanEnd) {
+            const bucket = eventsByDate.get(eStartIso);
+            if (bucket) bucket.push(e);
+          } else {
+            for (let c = 0; c < cellDates.length; c++) {
+              const dIso = cellDates[c].dateIso;
+              if (dIso >= eStartIso && dIso <= spanEnd) {
+                eventsByDate.get(dIso).push(e);
+              }
+            }
+          }
+        }
+      }
+    }
 
     let gridHtml = '';
-    const iterDate = new Date(startCalendarDate);
 
-    for (let c = 0; c < cellsToRender; c++) {
-      const dateIso = this.formatDateIso(iterDate);
-      const isOtherMonth = iterDate.getMonth() !== currentMonth;
-      const isToday = dateIso === todayStr;
+    for (let c = 0; c < cellDates.length; c++) {
+      const cell = cellDates[c];
+      const dateIso = cell.dateIso;
+      const isOtherMonth = cell.isOtherMonth;
+      const isToday = cell.isToday;
 
-      const dayEvents = allEvents.filter(e => this.isEventOnDate(e, dateIso));
+      const dayEvents = eventsByDate.get(dateIso) || [];
 
       let pillsHtml = '';
       dayEvents.forEach(e => {
         let eventColor = e.color;
         const linkedTask = e.taskId && taskMap ? taskMap.get(e.taskId) : null;
         const isTaskCompleted = !!(linkedTask && linkedTask.task && linkedTask.task.completed);
-        if (linkedTask && linkedTask.task && linkedTask.task.projectId && projectMap) {
-          const proj = projectMap.get(linkedTask.task.projectId);
-          if (proj && proj.color) {
-            eventColor = proj.color;
-          }
+        const proj = this._resolveEventProject(e, linkedTask, projectMap);
+        if (proj && proj.color) {
+          eventColor = proj.color;
         }
         if (!eventColor) {
           eventColor = (e.source === 'google' ? '#2563eb' : '#7c3aed');
@@ -927,18 +1143,41 @@ const AgendaManager = {
           <div class="month-day-header clickable-day" 
                onclick="event.stopPropagation(); AgendaManager.zoomToDay('${dateIso}');" 
                title="Zoomer sur cette journée (${dateIso})">
-            <span class="month-day-number">${iterDate.getDate()}</span>
+            <span class="month-day-number">${cell.dayNum}</span>
           </div>
           <div class="month-day-events" style="display:flex; flex-direction:column; gap:2px; overflow-y:auto; max-height:85px;">
             ${pillsHtml}
           </div>
         </div>
       `;
-
-      iterDate.setDate(iterDate.getDate() + 1);
     }
 
     gridEl.innerHTML = gridHtml;
+  },
+
+  _getRenderSig() {
+    const eRev = (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function') ? StorageManager.getRevision('events') : -1;
+    const tRev = (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function') ? StorageManager.getRevision('tasks') : -1;
+    const nRev = (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function') ? StorageManager.getRevision('notes') : -1;
+    const pRev = (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function') ? StorageManager.getRevision('projects') : -1;
+    const wTs = this.currentWeekStart ? this.currentWeekStart.getTime() : 0;
+    return `${eRev}:${tRev}:${nRev}:${pRev}:${this.currentView}:${wTs}:${this.slotHeight || 50}`;
+  },
+
+  renderIfNeeded() {
+    if (typeof document === 'undefined') return;
+    const bodyEl = document.getElementById('calendar-body-container');
+    const monthGrid = document.getElementById('calendar-month-grid');
+    if (!bodyEl) return;
+    const hasContent = this.currentView === 'month'
+      ? !!(monthGrid && monthGrid.childElementCount > 0)
+      : (bodyEl.childElementCount > 0);
+    const sig = this._getRenderSig();
+    if (!sig.startsWith('-1:') && this._lastRenderedSig === sig && hasContent) {
+      if (this.currentView !== 'month') this.updateNowIndicator();
+      return;
+    }
+    this.render();
   },
 
   render() {
@@ -950,6 +1189,7 @@ const AgendaManager = {
     const monthViewContainer = document.getElementById('calendar-month-view');
     if (!weekdaysEl || !bodyEl) return;
     if (!this.currentWeekStart) this.initWeek();
+    this._lastRenderedSig = this._getRenderSig();
 
     const allEvents = this.getAll();
     const tasks = StorageManager.getTasks();
@@ -1106,7 +1346,7 @@ const AgendaManager = {
           const dayAllDayEvents = rangeEvents.filter(e => !!e.isAllDay && this.isEventOnDate(e, dateStr));
           const isToday = (dateStr === todayStr);
 
-          alldayHtml += `<div class="calendar-allday-cell ${isToday ? 'today' : ''}" data-date="${dateStr}" onclick="AgendaManager.openEventModal(null, { start: '${dateStr}T09:00', end: '${dateStr}T10:00', isAllDay: true })" title="Cliquer pour ajouter un événement journée entière le ${dateStr}">`;
+          alldayHtml += `<div class="calendar-allday-cell ${isToday ? 'today' : ''}" data-date="${dateStr}" onclick="AgendaManager.openEventModal(null, { start: '${dateStr}', end: '${dateStr}', isAllDay: true })" title="Cliquer pour ajouter un événement journée entière le ${dateStr}">`;
 
           dayAllDayEvents.forEach(e => {
             const isGoogle = e.source === 'google';
@@ -1119,10 +1359,8 @@ const AgendaManager = {
             const isTaskCompleted = !!(linkedTask && linkedTask.task && linkedTask.task.completed);
 
             let eventColor = e.color;
-            if (linkedTask && linkedTask.task && linkedTask.task.projectId) {
-              const proj = projectMap.get(linkedTask.task.projectId);
-              if (proj && proj.color) eventColor = proj.color;
-            }
+            const proj = this._resolveEventProject(e, linkedTask, projectMap);
+            if (proj && proj.color) eventColor = proj.color;
             if (!eventColor) {
               eventColor = isGoogle ? '#2563eb' : '#7c3aed';
             }
@@ -1211,13 +1449,11 @@ const AgendaManager = {
         const isOneHour = !isCompact && height <= 58;
         const isTaskCompleted = !!(linkedTask && linkedTask.task && linkedTask.task.completed);
 
-        // Code couleur : hérité de la tâche liée et de son projet si disponible
+        // Code couleur : hérité de la tâche liée ou du projet direct du créneau
         let eventColor = e.color;
-        if (linkedTask && linkedTask.task && linkedTask.task.projectId) {
-          const proj = projectMap.get(linkedTask.task.projectId);
-          if (proj && proj.color) {
-            eventColor = proj.color;
-          }
+        const proj = this._resolveEventProject(e, linkedTask, projectMap);
+        if (proj && proj.color) {
+          eventColor = proj.color;
         }
         if (!eventColor) {
           eventColor = isGoogle ? '#2563eb' : '#7c3aed';
@@ -1325,6 +1561,23 @@ const AgendaManager = {
     return 30000;
   },
 
+  setDormant(isDormant) {
+    if (isDormant) {
+      if (this._nowInterval) {
+        clearInterval(this._nowInterval);
+        this._nowInterval = null;
+      }
+      return;
+    }
+    const perfMode = (typeof document !== 'undefined' && document.documentElement && typeof document.documentElement.getAttribute === 'function')
+      ? (document.documentElement.getAttribute('data-perf-mode') || 'normal')
+      : 'normal';
+    this.applyPerformanceMode(perfMode);
+    if (typeof window !== 'undefined' && window.App && window.App.currentScreen === 'agenda' && this.currentView !== 'month') {
+      this.updateNowIndicator();
+    }
+  },
+
   applyPerformanceMode(perfMode) {
     if (typeof window === 'undefined' || !this._nowTimerBound) return;
     const nextMs = this._getNowIntervalMs(perfMode);
@@ -1338,6 +1591,9 @@ const AgendaManager = {
         this.updateNowIndicator();
       }
     }, nextMs);
+    if (this._nowInterval && typeof this._nowInterval.unref === 'function') {
+      this._nowInterval.unref();
+    }
   },
 
   initNowIndicatorTimer() {
@@ -1422,9 +1678,12 @@ const AgendaManager = {
   },
 
   buildEventTaskGroups(tasks, allProjects) {
+    const activeProjects = (allProjects || []).filter(p => !p.archived);
+    const archivedProjectIds = new Set((allProjects || []).filter(p => p.archived).map(p => p.id));
+
     const hierProjects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
-      ? StorageManager.getProjectsHierarchy(allProjects)
-      : (allProjects || []).map(p => ({ project: p, pathTitle: p.title }));
+      ? StorageManager.getProjectsHierarchy(activeProjects)
+      : activeProjects.map(p => ({ project: p, pathTitle: p.title }));
 
     const projectObjMap = new Map();
     (allProjects || []).forEach(p => projectObjMap.set(p.id, p));
@@ -1437,16 +1696,20 @@ const AgendaManager = {
 
     const flattenTasks = (list, prefix = '') => {
       (list || []).forEach(t => {
-        const item = { id: t.id, title: prefix + t.title, completed: !!t.completed, projectId: t.projectId };
+        if (!t) return;
+        const item = { id: t.id, title: prefix + (t.title || ''), completed: !!t.completed, projectId: t.projectId };
         allFlatTasks.push(item);
-        const isDone = item.completed;
-        if (t.projectId && projectObjMap.has(t.projectId)) {
-          const targetMap = isDone ? doneByProj : activeByProj;
-          if (!targetMap.has(t.projectId)) targetMap.set(t.projectId, []);
-          targetMap.get(t.projectId).push(item);
-        } else {
-          if (isDone) donePersonal.push(item);
-          else activePersonal.push(item);
+        const isArchivedProj = t.projectId && archivedProjectIds.has(t.projectId);
+        if (!isArchivedProj) {
+          const isDone = item.completed;
+          if (t.projectId && projectObjMap.has(t.projectId)) {
+            const targetMap = isDone ? doneByProj : activeByProj;
+            if (!targetMap.has(t.projectId)) targetMap.set(t.projectId, []);
+            targetMap.get(t.projectId).push(item);
+          } else {
+            if (isDone) donePersonal.push(item);
+            else activePersonal.push(item);
+          }
         }
         if (t.subtasks && t.subtasks.length > 0) flattenTasks(t.subtasks, prefix + '— ');
       });
@@ -1502,10 +1765,13 @@ const AgendaManager = {
     const inputStart = document.getElementById('event-input-start');
     const inputEnd = document.getElementById('event-input-end');
     const inputColor = document.getElementById('event-input-color');
+    const inputProject = document.getElementById('event-input-project');
+    const btnOpenProject = document.getElementById('btn-event-open-project');
     const inputTask = document.getElementById('event-input-task');
     const inputNote = document.getElementById('event-input-note');
     const btnCreateNote = document.getElementById('btn-event-create-note');
     const btnOpenNote = document.getElementById('btn-event-open-note');
+    const btnModalFocus = document.getElementById('btn-event-modal-focus');
     const btnSave = document.getElementById('event-modal-save');
     const btnDelete = document.getElementById('event-modal-delete');
 
@@ -1583,13 +1849,9 @@ const AgendaManager = {
     if (btnRecEndDate) {
       btnRecEndDate.onclick = () => {
         if (!currentRecurrenceEnd) {
-          const sVal = (inputStart && inputStart.value) ? inputStart.value.slice(0, 10) : new Date().toISOString().slice(0, 10);
+          const sVal = (inputStart && inputStart.value) ? inputStart.value.slice(0, 10) : this.formatDateIso(new Date());
           const sDate = new Date(`${sVal}T00:00:00`);
-          sDate.setMonth(sDate.getMonth() + 1);
-          const y = sDate.getFullYear();
-          const m = String(sDate.getMonth() + 1).padStart(2, '0');
-          const d = String(sDate.getDate()).padStart(2, '0');
-          currentRecurrenceEnd = `${y}-${m}-${d}`;
+          currentRecurrenceEnd = this.formatDateIso(this._addMonthsSafe(sDate, 1));
         }
         updateRecurrenceEndUI();
         if (inputRecurrenceEnd) inputRecurrenceEnd.focus();
@@ -1602,10 +1864,10 @@ const AgendaManager = {
       };
     }
 
-    // Remplir les projets (y compris sous-projets) pour la création directe de tâche
+    // Remplir les projets (actifs uniquement) pour la création directe de tâche
     if (selectTaskProject) {
       selectTaskProject.innerHTML = '<option value="">(Aucun projet)</option>';
-      const allProjects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects() : [];
+      const allProjects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects().filter(p => !p.archived) : [];
       const hier = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjectsHierarchy === 'function')
         ? StorageManager.getProjectsHierarchy(allProjects)
         : allProjects.map(p => ({ project: p, displayTitle: p.title }));
@@ -1716,13 +1978,48 @@ const AgendaManager = {
       inputColor.onchange = () => updateActiveSwatch(inputColor.value);
     }
 
-    // Remplir les tâches pour la liaison facultative : tâches à faire par projet en haut, tâches terminées par projet tout en bas
+    // Remplir les tâches et les projets pour la liaison facultative
     const tasks = StorageManager.getTasks();
     const allProjects = (typeof StorageManager !== 'undefined') ? StorageManager.getProjects() : [];
     const projectMap = new Map();
     allProjects.forEach(p => projectMap.set(p.id, p.title));
 
     const { groups: taskGroups, allFlatTasks, projectObjMap, hierProjects } = this.buildEventTaskGroups(tasks, allProjects);
+
+    const updateProjectButtonVisibility = (projId) => {
+      if (btnOpenProject) {
+        btnOpenProject.style.display = projId ? 'inline-flex' : 'none';
+        btnOpenProject.onclick = (e) => {
+          e.preventDefault();
+          this.closeEventModal();
+          if (window.App && typeof window.App.navigate === 'function') window.App.navigate('projects');
+          if (window.ProjectsManager && typeof window.ProjectsManager.openProjectDetailModal === 'function') {
+            window.ProjectsManager.openProjectDetailModal(projId);
+          }
+        };
+      }
+    };
+
+    if (inputProject) {
+      inputProject.innerHTML = '<option value="">(Aucun projet associé)</option>';
+      hierProjects.forEach(({ project: p, pathTitle }) => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = pathTitle || p.title;
+        inputProject.appendChild(opt);
+      });
+      inputProject.onchange = () => {
+        syncSelectTitles();
+        updateProjectButtonVisibility(inputProject.value);
+        if (inputProject.value) {
+          const proj = projectObjMap.get(inputProject.value);
+          if (proj && proj.color && inputColor) {
+            inputColor.value = proj.color;
+            updateActiveSwatch(proj.color);
+          }
+        }
+      };
+    }
 
     inputTask.innerHTML = '<option value="">(Aucune tâche associée)</option>';
     taskGroups.forEach(g => {
@@ -1747,6 +2044,10 @@ const AgendaManager = {
       if (inputTask.value) {
         const found = allFlatTasks.find(t => t.id === inputTask.value);
         if (found && found.projectId) {
+          if (inputProject) {
+            inputProject.value = found.projectId;
+            updateProjectButtonVisibility(found.projectId);
+          }
           const proj = projectObjMap.get(found.projectId);
           if (proj && proj.color && inputColor) {
             inputColor.value = proj.color;
@@ -1830,8 +2131,8 @@ const AgendaManager = {
       }
 
       const activeProjId = (inputTask && inputTask.value && taskMap.has(inputTask.value))
-        ? (taskMap.get(inputTask.value).task.projectId || null)
-        : null;
+        ? (taskMap.get(inputTask.value).task.projectId || (inputProject ? (inputProject.value || null) : null))
+        : (inputProject && inputProject.value ? inputProject.value : null);
 
       const newNote = {
         id: 'note-' + Date.now(),
@@ -1895,15 +2196,16 @@ const AgendaManager = {
 
     // Fonction d'ajustement dynamique selon le mode Journée entière
     const updateInputTypesForAllDay = (allDay) => {
+      const todayIso = this.formatDateIso(new Date());
       if (allDay) {
-        const sVal = (inputStart.value || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+        const sVal = (inputStart.value || '').slice(0, 10) || todayIso;
         const eVal = (inputEnd.value || '').slice(0, 10) || sVal;
         inputStart.type = 'date';
         inputEnd.type = 'date';
         inputStart.value = sVal;
         inputEnd.value = eVal;
       } else {
-        const sVal = (inputStart.value || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+        const sVal = (inputStart.value || '').slice(0, 10) || todayIso;
         const eVal = (inputEnd.value || '').slice(0, 10) || sVal;
         inputStart.type = 'datetime-local';
         inputEnd.type = 'datetime-local';
@@ -1982,6 +2284,22 @@ const AgendaManager = {
 
         inputTask.value = evt.taskId || '';
         inputTask.disabled = false;
+        updateTaskButtonVisibility(inputTask.value);
+        const effGoogleProjId = evt.projectId || (evt.taskId && taskMap.has(evt.taskId) ? (taskMap.get(evt.taskId).task.projectId || '') : '');
+        if (inputProject) {
+          inputProject.value = effGoogleProjId || '';
+          inputProject.disabled = false;
+          updateProjectButtonVisibility(inputProject.value);
+        }
+        if (btnModalFocus) {
+          btnModalFocus.style.display = 'inline-flex';
+          btnModalFocus.onclick = () => {
+            this.closeEventModal();
+            if (window.App && typeof window.App.startFocusOn === 'function') window.App.startFocusOn('event', eventId);
+          };
+        }
+        if (containerCreateTask) containerCreateTask.style.display = 'none';
+        if (checkCreateTask) checkCreateTask.checked = false;
 
         const resolvedNoteGoogle = (evt.noteId ? allNotes.find(n => n.id === evt.noteId) : null) || allNotes.find(n => n.linkedEventId === evt.id);
         const resolvedNoteIdGoogle = resolvedNoteGoogle ? resolvedNoteGoogle.id : (evt.noteId || '');
@@ -2047,8 +2365,15 @@ const AgendaManager = {
         btnSave.textContent = "Mettre à jour dans Google Agenda";
 
         btnSave.onclick = async () => {
-          if (!inputTitle.value.trim()) return alert("Le titre est requis.");
-          if (!inputStart.value || !inputEnd.value) return alert("Les dates/heures de début et fin sont requises.");
+          const notifyErr = (msg) => {
+            if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+              window.App.showToast(msg, "error");
+            } else if (typeof alert === 'function') {
+              alert(msg);
+            }
+          };
+          if (!inputTitle.value.trim()) return notifyErr("Le titre est requis.");
+          if (!inputStart.value || !inputEnd.value) return notifyErr("Les dates/heures de début et fin sont requises.");
 
           const isAllDay = inputAllDay ? inputAllDay.checked : false;
           let startVal = inputStart.value;
@@ -2060,11 +2385,16 @@ const AgendaManager = {
             if (endDateStr < startDateStr) endDateStr = startDateStr;
             startVal = `${startDateStr}T08:00`;
             endVal = `${endDateStr}T19:00`;
+          } else if (endVal < startVal) {
+            return notifyErr("L'heure de fin doit être postérieure à l'heure de début.");
           }
 
           const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
           const recurrenceEnd = (recurrence !== 'none') ? (currentRecurrenceEnd || (inputRecurrenceEnd && inputRecurrenceEnd.value) || null) : null;
           const noteId = inputNote ? (inputNote.value || null) : null;
+          const nextTaskId = inputTask.value || null;
+          const prevGoogleTaskId = evt.taskId || null;
+          const projectId = (inputProject && inputProject.value) ? inputProject.value : (nextTaskId && taskMap.has(nextTaskId) ? (taskMap.get(nextTaskId).task.projectId || null) : null);
           const updatedData = {
             title: inputTitle.value.trim(),
             description: inputDesc.value.trim(),
@@ -2073,7 +2403,8 @@ const AgendaManager = {
             end: endVal,
             isAllDay,
             color: inputColor.value || '#3b82f6',
-            taskId: inputTask.value || null,
+            projectId,
+            taskId: nextTaskId,
             noteId,
             recurrence,
             recurrenceEnd
@@ -2086,6 +2417,13 @@ const AgendaManager = {
           try {
             if (window.GoogleSyncManager && typeof window.GoogleSyncManager.updateGoogleEvent === 'function') {
               await window.GoogleSyncManager.updateGoogleEvent(evt, updatedData);
+              if (prevGoogleTaskId && prevGoogleTaskId !== nextTaskId) {
+                this._clearTaskScheduleIfNoRemainingEvents(prevGoogleTaskId);
+              }
+              if (nextTaskId && startVal) {
+                const syncTime = !isAllDay && startVal.length >= 16 ? startVal.slice(11, 16) : null;
+                this.syncEventDateToTask(nextTaskId, startVal.slice(0, 10), syncTime);
+              }
             } else {
               // Repli local si service Google indisponible
               this.updateEvent(eventId, updatedData);
@@ -2093,7 +2431,7 @@ const AgendaManager = {
             this.syncNoteEventLink(eventId, noteId);
             this.closeEventModal();
           } catch (err) {
-            alert("Erreur lors de la mise à jour Google : " + err.message);
+            notifyErr("Erreur lors de la mise à jour Google : " + (err && err.message ? err.message : err));
           } finally {
             btnSave.disabled = false;
             btnSave.textContent = originalText;
@@ -2142,6 +2480,19 @@ const AgendaManager = {
         updateActiveSwatch(inputColor.value);
         inputTask.value = evt.taskId || '';
         updateTaskButtonVisibility(evt.taskId);
+        const effLocalProjId = evt.projectId || (evt.taskId && taskMap.has(evt.taskId) ? (taskMap.get(evt.taskId).task.projectId || '') : '');
+        if (inputProject) {
+          inputProject.value = effLocalProjId || '';
+          inputProject.disabled = false;
+          updateProjectButtonVisibility(inputProject.value);
+        }
+        if (btnModalFocus) {
+          btnModalFocus.style.display = 'inline-flex';
+          btnModalFocus.onclick = () => {
+            this.closeEventModal();
+            if (window.App && typeof window.App.startFocusOn === 'function') window.App.startFocusOn('event', eventId);
+          };
+        }
         if (containerCreateTask) containerCreateTask.style.display = evt.taskId ? 'none' : 'block';
         if (inputRecurrence) inputRecurrence.value = evt.recurrence || 'none';
         currentRecurrenceEnd = evt.recurrenceEnd || null;
@@ -2207,6 +2558,13 @@ const AgendaManager = {
             if (endDateStr < startDateStr) endDateStr = startDateStr;
             startVal = `${startDateStr}T08:00`;
             endVal = `${endDateStr}T19:00`;
+          } else if (endVal < startVal) {
+            if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+              window.App.showToast("L'heure de fin doit être postérieure à l'heure de début.", "error");
+            } else if (typeof alert === 'function') {
+              alert("L'heure de fin doit être postérieure à l'heure de début.");
+            }
+            return;
           }
 
           let taskId = inputTask.value || null;
@@ -2229,6 +2587,7 @@ const AgendaManager = {
           const recurrenceEnd = (recurrence !== 'none') ? (currentRecurrenceEnd || (inputRecurrenceEnd && inputRecurrenceEnd.value) || null) : null;
 
           const noteId = inputNote ? (inputNote.value || null) : null;
+          const projectId = (inputProject && inputProject.value) ? inputProject.value : (taskId && taskMap.has(taskId) ? (taskMap.get(taskId).task.projectId || null) : null);
           this.updateEvent(eventId, {
             title: inputTitle.value.trim(),
             description: inputDesc.value.trim(),
@@ -2237,6 +2596,7 @@ const AgendaManager = {
             end: endVal,
             isAllDay,
             color: inputColor.value,
+            projectId,
             taskId,
             noteId,
             recurrence,
@@ -2309,12 +2669,25 @@ const AgendaManager = {
       const endDate = new Date(now.getTime() + 3600000 - now.getTimezoneOffset() * 60000);
       const endStr = endDate.toISOString().slice(0, 16);
 
-      inputStart.value = (defaultValues && defaultValues.start) ? defaultValues.start : startStr;
-      inputEnd.value = (defaultValues && defaultValues.end) ? defaultValues.end : endStr;
+      const isAllDayMode = !!(inputAllDay && inputAllDay.checked);
+      const rawDefStart = (defaultValues && defaultValues.start) ? defaultValues.start : startStr;
+      const rawDefEnd = (defaultValues && defaultValues.end) ? defaultValues.end : endStr;
+      inputStart.value = isAllDayMode ? rawDefStart.slice(0, 10) : (rawDefStart.length >= 16 ? rawDefStart : `${rawDefStart.slice(0, 10)}T09:00`);
+      inputEnd.value = isAllDayMode ? rawDefEnd.slice(0, 10) : (rawDefEnd.length >= 16 ? rawDefEnd : `${rawDefEnd.slice(0, 10)}T10:00`);
       inputColor.value = (defaultValues && defaultValues.color) ? defaultValues.color : '#8b5cf6';
       updateActiveSwatch(inputColor.value);
       inputTask.value = (defaultValues && defaultValues.taskId) ? defaultValues.taskId : '';
       updateTaskButtonVisibility(inputTask.value);
+      if (inputProject) {
+        const defProj = (defaultValues && defaultValues.projectId) ? defaultValues.projectId : '';
+        inputProject.value = defProj;
+        inputProject.disabled = false;
+        updateProjectButtonVisibility(defProj);
+      }
+      if (selectTaskProject && defaultValues && defaultValues.projectId) {
+        selectTaskProject.value = defaultValues.projectId;
+      }
+      if (btnModalFocus) btnModalFocus.style.display = 'none';
       if (containerCreateTask) containerCreateTask.style.display = 'block';
       if (inputRecurrence) inputRecurrence.value = (defaultValues && defaultValues.recurrence) || 'none';
       currentRecurrenceEnd = (defaultValues && defaultValues.recurrenceEnd) || null;
@@ -2332,8 +2705,15 @@ const AgendaManager = {
       btnSave.textContent = "Enregistrer le créneau";
 
       btnSave.onclick = async () => {
-        if (!inputTitle.value.trim()) return alert("Le titre est requis.");
-        if (!inputStart.value || !inputEnd.value) return alert("Les dates/heures de début et fin sont requises.");
+        const notifyErr = (msg) => {
+          if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast(msg, "error");
+          } else if (typeof alert === 'function') {
+            alert(msg);
+          }
+        };
+        if (!inputTitle.value.trim()) return notifyErr("Le titre est requis.");
+        if (!inputStart.value || !inputEnd.value) return notifyErr("Les dates/heures de début et fin sont requises.");
 
         const isAllDay = inputAllDay ? inputAllDay.checked : false;
         let startVal = inputStart.value;
@@ -2345,10 +2725,17 @@ const AgendaManager = {
           if (endDateStr < startDateStr) endDateStr = startDateStr;
           startVal = `${startDateStr}T08:00`;
           endVal = `${endDateStr}T19:00`;
+        } else if (endVal < startVal) {
+          return notifyErr("L'heure de fin doit être postérieure à l'heure de début.");
         }
 
-        let taskId = inputTask.value || null;
-        if (checkCreateTask && checkCreateTask.checked && !taskId) {
+        const shouldCreateLinkedTask = !!(checkCreateTask && checkCreateTask.checked && !inputTask.value);
+        const initialTaskId = inputTask.value || null;
+        const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
+        const recurrenceEnd = (recurrence !== 'none') ? (currentRecurrenceEnd || (inputRecurrenceEnd && inputRecurrenceEnd.value) || null) : null;
+
+        const createLinkedTaskForEvent = () => {
+          if (!shouldCreateLinkedTask) return null;
           if (typeof TasksManager !== 'undefined' && typeof TasksManager.addTask === 'function') {
             const startTimeStr = startVal && startVal.length >= 16 ? startVal.slice(11, 16) : '09:00';
             const newTask = TasksManager.addTask({
@@ -2360,13 +2747,13 @@ const AgendaManager = {
               plannedTime: startTimeStr,
               skipEventCreation: true
             });
-            if (newTask && newTask.id) taskId = newTask.id;
+            return newTask && newTask.id ? newTask.id : null;
           }
-        }
-        const recurrence = inputRecurrence ? inputRecurrence.value : 'none';
-        const recurrenceEnd = (recurrence !== 'none') ? (currentRecurrenceEnd || (inputRecurrenceEnd && inputRecurrenceEnd.value) || null) : null;
+          return null;
+        };
 
         const noteId = inputNote ? (inputNote.value || null) : null;
+        const selectedProjId = (inputProject && inputProject.value) ? inputProject.value : (selectTaskProject && shouldCreateLinkedTask && selectTaskProject.value ? selectTaskProject.value : null);
         const eventData = {
           title: inputTitle.value.trim(),
           description: inputDesc.value.trim(),
@@ -2375,7 +2762,8 @@ const AgendaManager = {
           end: endVal,
           isAllDay,
           color: inputColor.value || '#3b82f6',
-          taskId,
+          projectId: selectedProjId,
+          taskId: initialTaskId,
           noteId,
           recurrence,
           recurrenceEnd
@@ -2389,20 +2777,40 @@ const AgendaManager = {
           try {
             if (window.GoogleSyncManager && typeof window.GoogleSyncManager.createGoogleEvent === 'function') {
               const created = await window.GoogleSyncManager.createGoogleEvent(eventData);
-              if (created && noteId) {
-                this.syncNoteEventLink(created.id, noteId);
+              if (created) {
+                const newTaskId = createLinkedTaskForEvent();
+                const finalTaskId = newTaskId || initialTaskId || null;
+                if (newTaskId) {
+                  const allEvts = this.getAll();
+                  const target = allEvts.find(ev => ev.id === created.id);
+                  if (target) {
+                    target.taskId = newTaskId;
+                    this.saveAll(allEvts);
+                  }
+                }
+                if (finalTaskId && startVal) {
+                  const syncTime = !isAllDay && startVal.length >= 16 ? startVal.slice(11, 16) : null;
+                  this.syncEventDateToTask(finalTaskId, startVal.slice(0, 10), syncTime);
+                }
+                if (noteId) {
+                  this.syncNoteEventLink(created.id, noteId);
+                }
               }
             } else {
               throw new Error("Module de synchronisation Google indisponible.");
             }
             this.closeEventModal();
           } catch (err) {
-            alert("Erreur lors de la création Google : " + err.message);
+            notifyErr("Erreur lors de la création Google : " + (err && err.message ? err.message : err));
           } finally {
             btnSave.disabled = false;
             btnSave.textContent = originalText;
           }
         } else {
+          const newTaskId = createLinkedTaskForEvent();
+          if (newTaskId) {
+            eventData.taskId = newTaskId;
+          }
           const created = this.addEvent(eventData);
           if (created && noteId) {
             this.syncNoteEventLink(created.id, noteId);
@@ -2452,13 +2860,25 @@ const AgendaManager = {
       }
     }
 
-    // Synchroniser réciproquement la propriété noteId sur l'événement dans le stockage agenda
+    // Synchroniser réciproquement la propriété noteId sur tous les événements dans le stockage agenda
     if (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function') {
       const events = StorageManager.getEvents();
+      let eventsChanged = false;
+      events.forEach(e => {
+        if (!e) return;
+        if (noteId && e.noteId === noteId && e.id !== eventId) {
+          e.noteId = null;
+          e.updatedAt = new Date().toISOString();
+          eventsChanged = true;
+        }
+      });
       const targetEvt = events.find(e => e.id === eventId);
-      if (targetEvt && targetEvt.noteId !== noteId) {
+      if (targetEvt && targetEvt.noteId !== (noteId || null)) {
         targetEvt.noteId = noteId || null;
         targetEvt.updatedAt = new Date().toISOString();
+        eventsChanged = true;
+      }
+      if (eventsChanged) {
         StorageManager.saveEvents(events);
       }
     }
@@ -2515,6 +2935,10 @@ const AgendaManager = {
         <span class="item-icon">${this.getSvgIcon('edit', 15)}</span>
         <span>Modifier l'événement</span>
       </div>
+      <div class="context-menu-item" id="cmenu-focus">
+        <span class="item-icon">${this.getSvgIcon('target', 15)}</span>
+        <span>🎯 Lancer en mode Focus</span>
+      </div>
       <div class="context-menu-item danger" id="cmenu-delete">
         <span class="item-icon">${this.getSvgIcon('trash', 15)}</span>
         <span>Supprimer l'événement</span>
@@ -2565,24 +2989,47 @@ const AgendaManager = {
       };
     }
 
+    const btnCmenuFocus = document.getElementById('cmenu-focus');
+    if (btnCmenuFocus) {
+      btnCmenuFocus.onclick = () => {
+        this.hideContextMenu();
+        if (window.App && typeof window.App.startFocusOn === 'function') {
+          window.App.startFocusOn('event', eventId);
+        }
+      };
+    }
+
     const btnDelete = document.getElementById('cmenu-delete');
     if (btnDelete) {
       btnDelete.onclick = async () => {
         this.hideContextMenu();
+        const isGoogle = evt.source === 'google';
         let shouldDelete = true;
         if (typeof window !== 'undefined' && window.App && typeof window.App.confirm === 'function') {
           shouldDelete = await window.App.confirm({
-            title: "Supprimer l'événement",
-            message: `Supprimer l'événement « ${evt.title} » ?\n(La tâche associée reste intacte).`,
+            title: isGoogle ? "Supprimer de Google Agenda" : "Supprimer l'événement",
+            message: isGoogle
+              ? `Supprimer l'événement Google « ${evt.title} » ?\n(La tâche Antigravité associée reste intacte).`
+              : `Supprimer l'événement « ${evt.title} » ?\n(La tâche associée reste intacte).`,
             confirmText: "Supprimer",
             danger: true,
-            icon: "🗑️"
+            icon: isGoogle ? "📅" : "🗑️"
           });
         } else if (typeof confirm === 'function') {
           shouldDelete = confirm(`Supprimer l'événement « ${evt.title} » ? (La tâche associée reste intacte)`);
         }
         if (shouldDelete) {
-          this.deleteEvent(eventId);
+          if (isGoogle && window.GoogleSyncManager && typeof window.GoogleSyncManager.deleteGoogleEvent === 'function') {
+            try {
+              await window.GoogleSyncManager.deleteGoogleEvent(evt);
+            } catch (err) {
+              if (window.App && typeof window.App.showToast === 'function') {
+                window.App.showToast("Erreur lors de la suppression Google : " + (err && err.message ? err.message : err), "error");
+              }
+            }
+          } else {
+            this.deleteEvent(eventId);
+          }
         }
       };
     }
@@ -2631,12 +3078,29 @@ const AgendaManager = {
           title = res.trim();
         }
 
+        let resolvedCtxProjectId = evt.projectId || null;
+        if (!resolvedCtxProjectId && evt.taskId && typeof StorageManager !== 'undefined' && typeof StorageManager.getTasks === 'function') {
+          const findTaskProj = (list) => {
+            for (const t of list || []) {
+              if (!t) continue;
+              if (t.id === evt.taskId) return t.projectId || null;
+              if (Array.isArray(t.subtasks)) {
+                const sub = findTaskProj(t.subtasks);
+                if (sub !== undefined) return sub;
+              }
+            }
+            return undefined;
+          };
+          const fp = findTaskProj(StorageManager.getTasks());
+          if (fp) resolvedCtxProjectId = fp;
+        }
+
         const newNote = {
           id: 'note-' + Date.now(),
           title: title,
           folder: 'Général',
           tags: [],
-          projectId: evt.projectId || null,
+          projectId: resolvedCtxProjectId,
           linkedEventId: eventId,
           content: '',
           createdAt: new Date().toISOString(),
@@ -2764,12 +3228,27 @@ const AgendaManager = {
   },
 
   formatHourDecimal(decH) {
+    if (!Number.isFinite(decH) || decH <= 0) return '00:00';
     const totalMinutes = Math.round(decH * 60);
+    if (totalMinutes >= 24 * 60) return '23:59';
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
     const hh = String(Math.min(23, Math.max(0, h))).padStart(2, '0');
     const mm = String(Math.min(59, Math.max(0, m))).padStart(2, '0');
     return `${hh}:${mm}`;
+  },
+
+  _cancelDragSession() {
+    if (!this.dragSession) return;
+    const s = this.dragSession;
+    this.dragSession = null;
+    const indicator = document.getElementById('agenda-drag-indicator');
+    if (indicator) indicator.style.display = 'none';
+    document.querySelectorAll('.day-column').forEach(col => col.classList.remove('drop-target'));
+    if (s.eventEl) {
+      s.eventEl.classList.remove('is-dragging', 'is-resizing');
+    }
+    this.render();
   },
 
   initDragAndDrop() {
@@ -2782,6 +3261,10 @@ const AgendaManager = {
 
     window.addEventListener('mouseup', (e) => {
       this.handleGlobalMouseUp(e);
+    });
+
+    window.addEventListener('blur', () => {
+      this._cancelDragSession();
     });
   },
 
@@ -2802,10 +3285,39 @@ const AgendaManager = {
     const evt = this.getAll().find(ev => ev.id === eventId);
     if (!evt) return;
 
+    // Protéger les séries récurrentes contre le glissement/redimensionnement direct destructif
+    if (evt.recurrence && evt.recurrence !== 'none') {
+      if (e.target && e.target.closest('.event-resize-handle')) {
+        if (window.App && typeof window.App.showToast === 'function') {
+          window.App.showToast("Événement récurrent : ouvrez sa fiche pour modifier la série ou les horaires.", "info");
+        }
+      }
+      return;
+    }
+
+    const evtStartDay = evt.start ? evt.start.slice(0, 10) : initialDateStr;
+    const evtEndDay = evt.end ? evt.end.slice(0, 10) : evtStartDay;
+    const isMultiDay = Boolean(evtStartDay && evtEndDay && evtEndDay > evtStartDay);
+    if (isMultiDay && isResize) {
+      if (window.App && typeof window.App.showToast === 'function') {
+        window.App.showToast("Événement multi-jours : modifiez les dates et heures depuis sa fiche.", "info");
+      }
+      return;
+    }
+
+    let daySpanDays = 0;
+    if (isMultiDay) {
+      const sD = new Date(`${evtStartDay}T00:00:00`);
+      const eD = new Date(`${evtEndDay}T00:00:00`);
+      if (!isNaN(sD.getTime()) && !isNaN(eD.getTime())) {
+        daySpanDays = Math.max(0, Math.round((eD - sD) / 86400000));
+      }
+    }
+
     const startH = this.parseHourDecimal(evt.start);
     let endH = this.parseHourDecimal(evt.end);
-    if (endH <= startH) endH = startH + 1;
-    const durationH = Math.max(0.25, endH - startH);
+    if (!isMultiDay && endH <= startH) endH = Math.min(24, startH + 1);
+    const durationH = isMultiDay ? 1 : Math.max(0.25, endH - startH);
 
     const eventRect = eventEl.getBoundingClientRect();
     const grabOffsetY = e.clientY - eventRect.top;
@@ -2831,6 +3343,8 @@ const AgendaManager = {
       currentStartH: startH,
       currentEndH: endH,
       durationH,
+      isMultiDay,
+      daySpanDays,
       grabOffsetY,
       columns: columnsCache
     };
@@ -2915,7 +3429,8 @@ const AgendaManager = {
         targetCol.appendChild(s.eventEl);
       }
     } else if (s.mode === 'resize-bottom') {
-      const parentCol = s.eventEl.closest('.day-column') || s.eventEl.parentElement;
+      const parentCol = (s.eventEl && s.eventEl.closest && s.eventEl.closest('.day-column')) || (s.columns && s.columns.find(c => c.date === s.currentDateStr)?.el) || (s.eventEl && s.eventEl.parentElement);
+      if (!parentCol || typeof parentCol.getBoundingClientRect !== 'function') return;
       const colRect = parentCol.getBoundingClientRect();
       const relY = Math.max(0, e.clientY - colRect.top);
       const rawEnd = this.dayHoursStart + (relY / this.slotHeight);
@@ -2935,7 +3450,8 @@ const AgendaManager = {
         timePill.textContent = `${this.formatHourDecimal(s.currentStartH)} - ${this.formatHourDecimal(s.currentEndH)}`;
       }
     } else if (s.mode === 'resize-top') {
-      const parentCol = s.eventEl.closest('.day-column') || s.eventEl.parentElement;
+      const parentCol = (s.eventEl && s.eventEl.closest && s.eventEl.closest('.day-column')) || (s.columns && s.columns.find(c => c.date === s.currentDateStr)?.el) || (s.eventEl && s.eventEl.parentElement);
+      if (!parentCol || typeof parentCol.getBoundingClientRect !== 'function') return;
       const colRect = parentCol.getBoundingClientRect();
       const relY = Math.max(0, e.clientY - colRect.top);
       const rawStart = this.dayHoursStart + (relY / this.slotHeight);
@@ -2994,8 +3510,21 @@ const AgendaManager = {
         this._suppressNextClick = false;
       }, 120);
 
-      // Appliquer la modification
-      await this.updateEventSchedule(s.eventId, s.currentDateStr, s.currentStartH, s.currentEndH);
+      // Appliquer la modification en préservant l'empan multi-jours si applicable
+      if (s.isMultiDay) {
+        const startD = new Date(`${s.initialDateStr}T00:00:00`);
+        const targetD = new Date(`${s.currentDateStr}T00:00:00`);
+        const deltaDays = (!isNaN(startD.getTime()) && !isNaN(targetD.getTime())) ? Math.round((targetD - startD) / 86400000) : 0;
+        const evt = this.getAll().find(ev => ev.id === s.eventId);
+        const origStartDay = evt && evt.start ? evt.start.slice(0, 10) : s.currentDateStr;
+        const origEndDay = evt && evt.end ? evt.end.slice(0, 10) : origStartDay;
+        const newStartDay = this._shiftIsoDate(origStartDay, deltaDays);
+        const newEndDay = this._shiftIsoDate(origEndDay, deltaDays);
+        const origEndH = evt && evt.end ? this.parseHourDecimal(evt.end) : s.initialEndH;
+        await this.updateEventSchedule(s.eventId, newStartDay, s.currentStartH, origEndH, newEndDay);
+      } else {
+        await this.updateEventSchedule(s.eventId, s.currentDateStr, s.currentStartH, s.currentEndH);
+      }
     }
   },
 
@@ -3031,7 +3560,7 @@ const AgendaManager = {
     indicator.style.top = `${y - 12}px`;
   },
 
-  async updateEventSchedule(eventId, newDateStr, newStartH, newEndH) {
+  async updateEventSchedule(eventId, newDateStr, newStartH, newEndH, explicitEndDateStr = null) {
     this.activeDateStr = newDateStr;
     const events = this.getAll();
     const evt = events.find(e => e.id === eventId);
@@ -3039,8 +3568,9 @@ const AgendaManager = {
 
     const startTimeStr = this.formatHourDecimal(newStartH);
     const endTimeStr = this.formatHourDecimal(newEndH);
+    const endDateStr = explicitEndDateStr || newDateStr;
     const newStart = `${newDateStr}T${startTimeStr}`;
-    const newEnd = `${newDateStr}T${endTimeStr}`;
+    const newEnd = `${endDateStr}T${endTimeStr}`;
 
     const isGoogle = evt.source === 'google';
     const updatedData = {
@@ -3052,14 +3582,19 @@ const AgendaManager = {
       isAllDay: false,
       color: evt.color,
       taskId: evt.taskId,
-      noteId: evt.noteId
+      noteId: evt.noteId,
+      recurrence: evt.recurrence || 'none',
+      recurrenceEnd: evt.recurrenceEnd || null
     };
 
     if (isGoogle && window.GoogleSyncManager && typeof window.GoogleSyncManager.updateGoogleEvent === 'function') {
       try {
         await window.GoogleSyncManager.updateGoogleEvent(evt, updatedData);
         if (evt.taskId) {
-          this.syncEventDateToTask(evt.taskId, newDateStr);
+          this.syncEventDateToTask(evt.taskId, newDateStr, startTimeStr);
+        }
+        if (typeof window.AgendaNotificationManager !== 'undefined' && typeof window.AgendaNotificationManager.resetEventNotifications === 'function') {
+          window.AgendaNotificationManager.resetEventNotifications(eventId);
         }
       } catch (err) {
         console.warn("[Agenda] Erreur synchro Google au déplacement :", err);
@@ -3117,16 +3652,27 @@ const AgendaManager = {
       let endH = 0;
       let dateStr = '';
 
+      let isLockedExtend = false;
       if (eventEl && e.button === 2) {
         eventId = eventEl.dataset.eventId || (eventEl.getAttribute('onclick') ? eventEl.getAttribute('onclick').match(/'([^']+)'/)?.[1] : null);
         if (eventId) {
           evt = this.getAll().find(ev => ev.id === eventId);
           if (evt && !evt.isAllDay) {
-            isExisting = true;
-            startH = this.parseHourDecimal(evt.start);
-            endH = this.parseHourDecimal(evt.end);
-            if (endH <= startH) endH = startH + 1;
-            dateStr = (evt.start && evt.start.length >= 10) ? evt.start.slice(0, 10) : (dayCol ? dayCol.dataset.date : '');
+            const sDay = evt.start ? evt.start.slice(0, 10) : '';
+            const eDay = evt.end ? evt.end.slice(0, 10) : sDay;
+            const isMultiDayEvt = Boolean(sDay && eDay && eDay > sDay);
+            const isRecurringEvt = Boolean(evt.recurrence && evt.recurrence !== 'none');
+            if (isMultiDayEvt || isRecurringEvt) {
+              isLockedExtend = true;
+              isExisting = true;
+              dateStr = dayCol ? dayCol.dataset.date : sDay;
+            } else {
+              isExisting = true;
+              startH = this.parseHourDecimal(evt.start);
+              endH = this.parseHourDecimal(evt.end);
+              if (endH <= startH) endH = Math.min(24, startH + 1);
+              dateStr = (evt.start && evt.start.length >= 10) ? evt.start.slice(0, 10) : (dayCol ? dayCol.dataset.date : '');
+            }
           }
         }
       }
@@ -3146,11 +3692,12 @@ const AgendaManager = {
 
       if (!dateStr) dateStr = this.formatDateIso(new Date());
 
-      const maxEndH = Math.min(this.dayHoursEnd + 1, startH + 12);
+      const maxEndH = Math.min(this.dayHoursEnd, startH + 12);
 
       this._rightClickSession = {
         button: e.button,
         type: isExisting ? 'existing' : 'slot',
+        isLockedExtend,
         eventId,
         eventEl,
         evt,
@@ -3167,13 +3714,15 @@ const AgendaManager = {
         holdTimeoutId: null
       };
 
+      if (isLockedExtend) return;
+
       // Rendu visuel immédiat pour figer le début et afficher l'animation dès l'appui
       this._updateRightClickVisuals(this._rightClickSession);
 
       // Si l'utilisateur maintient le clic pendant le délai imparti -> début de l'extension automatique
       const holdDelay = (e.button === 2) ? 180 : 350;
       this._rightClickSession.holdTimeoutId = setTimeout(() => {
-        if (!this._rightClickSession) return;
+        if (!this._rightClickSession || this._rightClickSession.isLockedExtend) return;
         this._startRightClickExtension();
       }, holdDelay);
     });
@@ -3181,7 +3730,7 @@ const AgendaManager = {
     // 2. Déplacement pendant l'appui (étirement en direct vers le bas avec animation fluide)
     window.addEventListener('mousemove', (e) => {
       const s = this._rightClickSession;
-      if (!s) return;
+      if (!s || s.isLockedExtend) return;
 
       const deltaY = e.clientY - s.startY;
       // Dès que la souris glisse vers le bas de plus de 5px : déclencher l'étirement immédiatement
@@ -3225,7 +3774,7 @@ const AgendaManager = {
         this._suppressNextClick = false;
       }, 300);
 
-      const durationIncreased = s.currentEndH > s.initialEndH || s.hasExtended;
+      const durationIncreased = !s.isLockedExtend && (s.currentEndH > s.initialEndH);
 
       if (s.button === 0) {
         // --- CLIC GAUCHE ---
@@ -3286,16 +3835,22 @@ const AgendaManager = {
       this._rightClickSession = null;
     });
 
-    // 4. Annulation par Escape
+    // 4. Annulation par Escape ou perte de focus fenêtre (window blur)
+    const cancelRightClick = () => {
+      if (!this._rightClickSession) return;
+      const s = this._rightClickSession;
+      if (s.holdTimeoutId) clearTimeout(s.holdTimeoutId);
+      if (s.intervalId) clearInterval(s.intervalId);
+      this._cleanupRightClickVisuals(s);
+      this._rightClickSession = null;
+    };
+
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this._rightClickSession) {
-        const s = this._rightClickSession;
-        if (s.holdTimeoutId) clearTimeout(s.holdTimeoutId);
-        if (s.intervalId) clearInterval(s.intervalId);
-        this._cleanupRightClickVisuals(s);
-        this._rightClickSession = null;
-      }
+      if (e.key === 'Escape') cancelRightClick();
     });
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blur', cancelRightClick);
+    }
   },
 
   _startRightClickExtension() {

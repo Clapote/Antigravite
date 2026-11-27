@@ -17,9 +17,9 @@ const TasksManager = {
   collapsedTasks: new Set(),
   draggedTaskId: null,
 
-  init() {
+  init(options = {}) {
     if (this.initialized) {
-      this.render();
+      if (!options || !options.deferRender) this.render();
       return;
     }
     this.initialized = true;
@@ -32,7 +32,9 @@ const TasksManager = {
         }
       }
     } catch (_) {}
-    this.render();
+    if (!options || !options.deferRender) {
+      this.render();
+    }
     this.bindEvents();
   },
 
@@ -44,6 +46,70 @@ const TasksManager = {
       });
     }
     this.render();
+  },
+
+  focusDashboardStat(statAction) {
+    this.currentFilter = 'active';
+    this.currentProjectFilter = 'all';
+    if (statAction === 'deadlines-near' && this.currentSortMode === 'manual') {
+      this.currentSortMode = 'priority';
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('antigravite_task_sort_mode', this.currentSortMode);
+        }
+      } catch (_) {}
+    }
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.task-filter-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.filter === 'active');
+      });
+      document.querySelectorAll('.tasks-sort-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.sort === this.currentSortMode);
+      });
+      const projSel = document.getElementById('tasks-project-filter');
+      if (projSel) projSel.value = 'all';
+    }
+    this.render();
+
+    if (typeof document !== 'undefined') {
+      const todayStr = (typeof App !== 'undefined' && typeof App.formatLocalYMD === 'function')
+        ? App.formatLocalYMD(new Date())
+        : new Date().toISOString().slice(0, 10);
+      const limitDate = new Date();
+      limitDate.setDate(limitDate.getDate() + 4);
+      const limitStr = (typeof App !== 'undefined' && typeof App.formatLocalYMD === 'function')
+        ? App.formatLocalYMD(limitDate)
+        : limitDate.toISOString().slice(0, 10);
+
+      const allTasks = this.getAll();
+      const targetIds = new Set();
+      const collect = (list) => {
+        if (!Array.isArray(list)) return;
+        list.forEach(t => {
+          if (t && !t.completed) {
+            if (statAction === 'planned-today' && t.plannedDate === todayStr) targetIds.add(t.id);
+            if (statAction === 'deadlines-near' && t.deadline && t.deadline <= limitStr) targetIds.add(t.id);
+          }
+          if (t && Array.isArray(t.subtasks) && t.subtasks.length > 0) collect(t.subtasks);
+        });
+      };
+      collect(allTasks);
+      if (targetIds.size > 0) {
+        let scrolled = false;
+        targetIds.forEach(id => {
+          const escapedId = (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') ? CSS.escape(id) : String(id).replace(/"/g, '\\"');
+          const el = document.querySelector(`.task-item[data-task-id="${escapedId}"]`);
+          if (el) {
+            el.classList.add('task-highlight-pulse');
+            if (!scrolled && typeof el.scrollIntoView === 'function') {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              scrolled = true;
+            }
+            setTimeout(() => el.classList.remove('task-highlight-pulse'), 2600);
+          }
+        });
+      }
+    }
   },
 
   setSortMode(mode) {
@@ -151,10 +217,189 @@ const TasksManager = {
         this.render();
       });
     }
+
+    // Délégation unique des événements Glisser-Déposer sur l'arbre des tâches
+    const treeContainer = document.getElementById('tasks-tree-container');
+    if (treeContainer) {
+      this._bindTreeDragDelegation(treeContainer);
+    }
+  },
+
+  _bindTreeDragDelegation(container) {
+    if (!container || container._dragDelegated || typeof container.addEventListener !== 'function') return;
+    container._dragDelegated = true;
+
+    const clearDropIndicators = (exceptItem = null) => {
+      if (this._activeDragOverItem && this._activeDragOverItem !== exceptItem) {
+        this._activeDragOverItem.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
+      }
+      if (!exceptItem && this._activeDragOverItem) {
+        this._activeDragOverItem.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
+        this._activeDragOverItem = null;
+      }
+    };
+
+    container.addEventListener('dragstart', (e) => {
+      const item = e.target && typeof e.target.closest === 'function' ? e.target.closest('.task-item') : null;
+      if (!item) return;
+      if (this.currentSortMode !== 'manual') {
+        e.preventDefault();
+        return;
+      }
+      if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, .task-toggle, .task-checkbox, .task-actions, input, select')) {
+        e.preventDefault();
+        return;
+      }
+      const taskId = item.dataset ? item.dataset.taskId : null;
+      if (!taskId) return;
+
+      this.draggedTaskId = taskId;
+      this._draggedItemEl = item;
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('text/plain', taskId);
+        e.dataTransfer.effectAllowed = 'move';
+      }
+      setTimeout(() => item.classList.add('dragging'), 0);
+      const rootZone = document.getElementById('tasks-root-dropzone');
+      if (rootZone) rootZone.classList.add('drag-active');
+
+      // Pré-calculer une seule fois les IDs interdits (soi-même et ses descendants)
+      this._draggedForbiddenIds = new Set([taskId]);
+      const found = this.findTaskRecursive(this.getAll(), taskId);
+      const collectDescendants = (t) => {
+        if (t && t.subtasks && t.subtasks.length > 0) {
+          for (const sub of t.subtasks) {
+            this._draggedForbiddenIds.add(sub.id);
+            collectDescendants(sub);
+          }
+        }
+      };
+      if (found && found.task) collectDescendants(found.task);
+    });
+
+    container.addEventListener('dragend', () => {
+      if (this._dragOverRaf && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(this._dragOverRaf);
+        this._dragOverRaf = null;
+      }
+      if (this._draggedItemEl) {
+        this._draggedItemEl.classList.remove('dragging');
+        this._draggedItemEl = null;
+      }
+      container.querySelectorAll('.task-item.drag-over-top, .task-item.drag-over-bottom, .task-item.drag-over-nest').forEach(el => {
+        el.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
+      });
+      this._activeDragOverItem = null;
+      const rootZone = document.getElementById('tasks-root-dropzone');
+      if (rootZone) rootZone.classList.remove('drag-active', 'drag-over');
+      this.draggedTaskId = null;
+      this._draggedForbiddenIds = null;
+    });
+
+    container.addEventListener('dragover', (e) => {
+      if (this.currentSortMode !== 'manual' || !this.draggedTaskId) return;
+      const item = e.target && typeof e.target.closest === 'function' ? e.target.closest('.task-item') : null;
+      if (!item || !item.dataset) return;
+      const targetId = item.dataset.taskId;
+      if (!targetId || (this._draggedForbiddenIds && this._draggedForbiddenIds.has(targetId))) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const clientY = e.clientY;
+      this._pendingDragOverTarget = { item, clientY };
+      if (this._dragOverRaf) return;
+
+      const schedule = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (cb) => { cb(); return null; };
+      this._dragOverRaf = schedule(() => {
+        this._dragOverRaf = null;
+        const pending = this._pendingDragOverTarget;
+        this._pendingDragOverTarget = null;
+        if (!pending || !this.draggedTaskId) return;
+        const targetItem = pending.item;
+
+        const rect = targetItem.getBoundingClientRect();
+        const relY = pending.clientY - rect.top;
+        const h = rect.height;
+
+        let pos = 'inside';
+        if (relY < h * 0.28) pos = 'before';
+        else if (relY > h * 0.72) pos = 'after';
+
+        clearDropIndicators(targetItem);
+        this._activeDragOverItem = targetItem;
+        if (targetItem.dataset.dropPos !== pos || (!targetItem.classList.contains('drag-over-top') && !targetItem.classList.contains('drag-over-bottom') && !targetItem.classList.contains('drag-over-nest'))) {
+          targetItem.classList.toggle('drag-over-top', pos === 'before');
+          targetItem.classList.toggle('drag-over-bottom', pos === 'after');
+          targetItem.classList.toggle('drag-over-nest', pos === 'inside');
+          targetItem.dataset.dropPos = pos;
+        }
+      });
+    });
+
+    container.addEventListener('dragleave', (e) => {
+      const item = e.target && typeof e.target.closest === 'function' ? e.target.closest('.task-item') : null;
+      if (!item) return;
+      if (!item.contains(e.relatedTarget)) {
+        item.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
+        if (this._activeDragOverItem === item) this._activeDragOverItem = null;
+      }
+    });
+
+    container.addEventListener('drop', (e) => {
+      const item = e.target && typeof e.target.closest === 'function' ? e.target.closest('.task-item') : null;
+      if (!item || !item.dataset) return;
+      const targetId = item.dataset.taskId;
+      if (!this.draggedTaskId || !targetId || this.draggedTaskId === targetId) return;
+      if (this._draggedForbiddenIds && this._draggedForbiddenIds.has(targetId)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (this._dragOverRaf && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(this._dragOverRaf);
+        this._dragOverRaf = null;
+      }
+      clearDropIndicators();
+      item.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
+
+      const pos = item.dataset.dropPos || 'inside';
+      const draggedId = this.draggedTaskId;
+      this.draggedTaskId = null;
+      this._draggedForbiddenIds = null;
+      if (this._draggedItemEl) {
+        this._draggedItemEl.classList.remove('dragging');
+        this._draggedItemEl = null;
+      }
+      const rootZone = document.getElementById('tasks-root-dropzone');
+      if (rootZone) rootZone.classList.remove('drag-active', 'drag-over');
+
+      this.moveTask(draggedId, targetId, pos);
+    });
+  },
+
+  _pruneCollapsedTasks(tasks = null) {
+    const list = tasks || this.getAll();
+    const validIds = new Set();
+    const visited = new Set();
+    const walk = (arr) => {
+      if (!Array.isArray(arr)) return;
+      for (const t of arr) {
+        if (!t || !t.id || visited.has(t)) continue;
+        visited.add(t);
+        validIds.add(t.id);
+        if (Array.isArray(t.subtasks) && t.subtasks.length > 0) walk(t.subtasks);
+      }
+    };
+    walk(list);
+    for (const id of Array.from(this.collapsedTasks)) {
+      if (!validIds.has(id)) this.collapsedTasks.delete(id);
+    }
   },
 
   // Basculer entre tout déplier et tout replier
   toggleAllCollapse() {
+    this._pruneCollapsedTasks();
     if (this.collapsedTasks.size > 0) {
       this.expandAll();
     } else {
@@ -189,8 +434,12 @@ const TasksManager = {
 
   // Replier toutes les branches au niveau racine
   collapseAll() {
+    const visited = new Set();
     const collectParentIds = (list) => {
+      if (!Array.isArray(list)) return;
       for (const t of list) {
+        if (!t || visited.has(t)) continue;
+        visited.add(t);
         if (t.subtasks && t.subtasks.length > 0) {
           this.collapsedTasks.add(t.id);
           collectParentIds(t.subtasks);
@@ -216,15 +465,19 @@ const TasksManager = {
       ? StorageManager.getProjects()
       : [];
     const archivedProjectIds = new Set(projects.filter(p => p.archived).map(p => p.id));
+    const visited = new Set();
 
     const countRecursive = (list) => {
+      if (!Array.isArray(list)) return;
       for (const t of list) {
-        if (t.projectId && archivedProjectIds.has(t.projectId)) {
-          continue; // Masqué car projet archivé
+        if (!t || visited.has(t)) continue;
+        visited.add(t);
+        const isArchived = t.projectId && archivedProjectIds.has(t.projectId);
+        if (!isArchived) {
+          total++;
+          if (t.completed) completed++;
+          else active++;
         }
-        total++;
-        if (t.completed) completed++;
-        else active++;
         if (t.subtasks && t.subtasks.length > 0) countRecursive(t.subtasks);
       }
     };
@@ -234,9 +487,19 @@ const TasksManager = {
     const chipActive = document.querySelector('.task-filter-chip[data-filter="active"]');
     const chipCompleted = document.querySelector('.task-filter-chip[data-filter="completed"]');
 
-    if (chipAll) chipAll.innerHTML = `Toutes <span class="filter-count-badge">${total}</span>`;
-    if (chipActive) chipActive.innerHTML = `À faire <span class="filter-count-badge">${active}</span>`;
-    if (chipCompleted) chipCompleted.innerHTML = `Terminées <span class="filter-count-badge">${completed}</span>`;
+    const updateChipCount = (chip, label, count) => {
+      if (!chip) return;
+      const badge = typeof chip.querySelector === 'function' ? chip.querySelector('.filter-count-badge') : null;
+      if (badge) {
+        const nextText = String(count);
+        if (badge.textContent !== nextText) badge.textContent = nextText;
+      } else {
+        chip.innerHTML = `${label} <span class="filter-count-badge">${count}</span>`;
+      }
+    };
+    updateChipCount(chipAll, 'Toutes', total);
+    updateChipCount(chipActive, 'À faire', active);
+    updateChipCount(chipCompleted, 'Terminées', completed);
   },
 
   // Notification Toast sécurisée (environnement navigateur et tests)
@@ -261,17 +524,24 @@ const TasksManager = {
     if (typeof window !== 'undefined' && window.App && typeof window.App.updateDashboard === 'function') {
       window.App.updateDashboard();
     }
+    if (typeof window !== 'undefined' && window.AgendaManager && typeof window.App !== 'undefined' && window.App.currentScreen === 'agenda') {
+      if (typeof window.AgendaManager.renderIfNeeded === 'function') window.AgendaManager.renderIfNeeded();
+      else if (typeof window.AgendaManager.render === 'function') window.AgendaManager.render();
+    }
     if (typeof window !== 'undefined' && window.ConstellationManager && typeof window.App !== 'undefined' && window.App.currentScreen === 'constellation') {
       window.ConstellationManager.render();
     }
   },
 
-  // Recherche récursive d'une tâche par son ID
-  findTaskRecursive(list, id) {
+  // Recherche récursive d'une tâche par son ID (avec garde anti-cycle)
+  findTaskRecursive(list, id, visited = new Set()) {
+    if (!Array.isArray(list)) return null;
     for (const task of list) {
+      if (!task || visited.has(task)) continue;
+      visited.add(task);
       if (task.id === id) return { task, parentList: list };
       if (task.subtasks && task.subtasks.length > 0) {
-        const found = this.findTaskRecursive(task.subtasks, id);
+        const found = this.findTaskRecursive(task.subtasks, id, visited);
         if (found) return found;
       }
     }
@@ -279,14 +549,17 @@ const TasksManager = {
   },
 
   // Recherche récursive détaillée avec référence au parent et à l'index
-  findTaskWithParent(list, id, parentTask = null) {
+  findTaskWithParent(list, id, parentTask = null, visited = new Set()) {
+    if (!Array.isArray(list)) return null;
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
+      if (!t || visited.has(t)) continue;
+      visited.add(t);
       if (t.id === id) {
         return { task: t, parentList: list, parentTask, index: i };
       }
       if (t.subtasks && t.subtasks.length > 0) {
-        const found = this.findTaskWithParent(t.subtasks, id, t);
+        const found = this.findTaskWithParent(t.subtasks, id, t, visited);
         if (found) return found;
       }
     }
@@ -294,12 +567,13 @@ const TasksManager = {
   },
 
   // Vérifier si targetId est le descendant d'une tâche (protection anti-boucle)
-  isDescendant(parentTask, targetId) {
-    if (!parentTask) return false;
+  isDescendant(parentTask, targetId, visited = new Set()) {
+    if (!parentTask || visited.has(parentTask)) return false;
+    visited.add(parentTask);
     if (parentTask.id === targetId) return true;
     if (parentTask.subtasks && parentTask.subtasks.length > 0) {
       for (const sub of parentTask.subtasks) {
-        if (this.isDescendant(sub, targetId)) return true;
+        if (this.isDescendant(sub, targetId, visited)) return true;
       }
     }
     return false;
@@ -437,17 +711,24 @@ const TasksManager = {
 
   // Ajouter une tâche (racine ou sous-tâche à n'importe quel niveau)
   addTask(taskData, parentId = null) {
+    const safeTitle = (taskData && typeof taskData.title === 'string') ? taskData.title.trim() : '';
+    if (!safeTitle) {
+      this._showToast("Le titre de la tâche est requis.", "warning");
+      return null;
+    }
+
     const tasks = this.getAll();
     const newTask = {
       id: 'task-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-      title: taskData.title.trim(),
-      description: taskData.description ? taskData.description.trim() : '',
+      title: safeTitle,
+      description: taskData.description ? String(taskData.description).trim() : '',
       projectId: taskData.projectId || null,
       priority: taskData.priority || 'medium',
       completed: false,
       deadline: taskData.deadline || null,
       plannedDate: taskData.plannedDate ? taskData.plannedDate.slice(0, 10) : null,
       plannedTime: taskData.plannedTime || (taskData.plannedDate && taskData.plannedDate.length >= 16 ? taskData.plannedDate.slice(11, 16) : '09:00'),
+      noteId: taskData.noteId || null,
       createdAt: new Date().toISOString(),
       order: 999, // positionné à la suite
       subtasks: []
@@ -470,6 +751,10 @@ const TasksManager = {
 
     this.saveAll(tasks);
 
+    if (newTask.noteId) {
+      this._syncNoteTaskLink(newTask.id, newTask.noteId);
+    }
+
     // EXIGENCE : Si la tâche est programmée, créer un créneau dans l'agenda sauf si la tâche provient déjà d'un créneau existant
     if (newTask.plannedDate && !taskData.skipEventCreation) {
       this.syncPlannedDateToAgenda(newTask);
@@ -477,6 +762,39 @@ const TasksManager = {
 
     this._showToast("Tâche ajoutée avec succès", "success");
     return newTask;
+  },
+
+  _syncNoteTaskLink(taskId, noteId) {
+    if (!taskId || typeof StorageManager === 'undefined' || typeof StorageManager.getNotes !== 'function') return;
+    try {
+      const notes = StorageManager.getNotes();
+      let changed = false;
+      notes.forEach(n => {
+        if (!n) return;
+        if (n.linkedTaskId === taskId && n.id !== noteId) {
+          n.linkedTaskId = null;
+          n.updatedAt = new Date().toISOString();
+          changed = true;
+        }
+        if (noteId && n.id === noteId && n.linkedTaskId !== taskId) {
+          n.linkedTaskId = taskId;
+          n.updatedAt = new Date().toISOString();
+          changed = true;
+        }
+      });
+      if (changed && typeof StorageManager.saveNotes === 'function') {
+        StorageManager.saveNotes(notes);
+        if (typeof window !== 'undefined' && window.NotesManager) {
+          if (typeof window.NotesManager.renderNotesList === 'function') window.NotesManager.renderNotesList();
+          if (typeof window.NotesManager.renderTaskSelector === 'function' && window.NotesManager.currentNoteId) {
+            const cur = notes.find(x => x.id === window.NotesManager.currentNoteId);
+            if (cur) window.NotesManager.renderTaskSelector(cur);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[TasksManager] Erreur synchronisation Note <-> Tâche :', e);
+    }
   },
 
   // Mettre à jour une tâche
@@ -488,16 +806,27 @@ const TasksManager = {
     const oldPlannedDate = found.task.plannedDate;
     const oldPlannedTime = found.task.plannedTime;
 
-    found.task.title = updatedData.title.trim();
-    found.task.description = updatedData.description !== undefined ? updatedData.description.trim() : found.task.description;
+    const nextTitle = updatedData && updatedData.title !== undefined ? String(updatedData.title).trim() : found.task.title;
+    if (!nextTitle) {
+      this._showToast("Le titre de la tâche est requis.", "warning");
+      return false;
+    }
+    found.task.title = nextTitle;
+    found.task.description = updatedData.description !== undefined ? String(updatedData.description || '').trim() : found.task.description;
     found.task.projectId = updatedData.projectId !== undefined ? updatedData.projectId : found.task.projectId;
     found.task.priority = updatedData.priority || found.task.priority;
     found.task.deadline = updatedData.deadline !== undefined ? updatedData.deadline : found.task.deadline;
     found.task.plannedDate = updatedData.plannedDate !== undefined ? (updatedData.plannedDate ? updatedData.plannedDate.slice(0, 10) : null) : found.task.plannedDate;
     if (updatedData.plannedTime !== undefined) found.task.plannedTime = updatedData.plannedTime;
+    const prevNoteId = found.task.noteId || null;
+    if (updatedData.noteId !== undefined) found.task.noteId = updatedData.noteId || null;
     found.task.updatedAt = new Date().toISOString();
 
     this.saveAll(tasks);
+
+    if (updatedData.noteId !== undefined && found.task.noteId !== prevNoteId) {
+      this._syncNoteTaskLink(found.task.id, found.task.noteId);
+    }
 
     // EXIGENCE : Si la tâche est programmée, synchroniser l'agenda en préservant horaires et durées
     if (found.task.plannedDate && !updatedData.skipEventCreation) {
@@ -512,66 +841,124 @@ const TasksManager = {
   },
 
   // Synchronisation obligatoire : programmer une tâche ajoute un créneau dans l'agenda Antigravité de base
-  syncPlannedDateToAgenda(task, oldPlannedDate = null, oldPlannedTime = null) {
+  syncPlannedDateToAgenda(task, oldPlannedDate = null, oldPlannedTime = null, options = {}) {
     if (!task || !task.plannedDate) return;
     if (typeof StorageManager === 'undefined' || typeof StorageManager.getEvents !== 'function') return;
 
     const events = StorageManager.getEvents();
-    let linkedEvent = events.find(e => e.taskId === task.id);
+    const linkedEvents = events.filter(e => e.taskId === task.id);
+    const linkedEvent = linkedEvents[0] || null;
 
     const newDateOnly = task.plannedDate.slice(0, 10);
     const hasSpecificTime = task.plannedDate.length >= 16;
     const specifiedStartTime = task.plannedTime || (hasSpecificTime ? task.plannedDate.slice(11, 16) : '09:00');
 
     if (linkedEvent) {
-      // Mettre à jour les informations textuelles
-      linkedEvent.title = task.title;
-      if (task.description !== undefined) linkedEvent.description = task.description;
+      const prevDateOnly = (typeof oldPlannedDate === 'string' && oldPlannedDate.length >= 10)
+        ? oldPlannedDate.slice(0, 10)
+        : null;
+      const dateHasChanged = prevDateOnly !== null && prevDateOnly !== newDateOnly;
+      const timeHasChanged = (oldPlannedTime !== null && oldPlannedTime !== undefined && oldPlannedTime !== '')
+        && Boolean(task.plannedTime)
+        && oldPlannedTime !== task.plannedTime;
 
-      const dateHasChanged = oldPlannedDate !== null && oldPlannedDate.slice(0, 10) !== newDateOnly;
-      const timeHasChanged = oldPlannedTime !== null && task.plannedTime && oldPlannedTime !== task.plannedTime;
+      const googlePushTargets = [];
 
-      if (!dateHasChanged && !timeHasChanged) {
-        // La date et l'heure prévues n'ont pas changé : conserver STRICTEMENT les horaires et durées existants
-      } else {
-        // La date ou l'heure a été modifiée
-        let startTime = specifiedStartTime;
-        let durationMinutes = 60; // Durée par défaut
+      // Mettre à jour titre, description et projectId sur TOUS les créneaux liés (multi-créneaux cohérents)
+      for (let i = 0; i < linkedEvents.length; i++) {
+        const evtItem = linkedEvents[i];
+        const hadMetaDiff = (
+          evtItem.title !== task.title ||
+          (task.description !== undefined && evtItem.description !== task.description) ||
+          (evtItem.projectId || null) !== (task.projectId || null)
+        );
+        evtItem.title = task.title;
+        if (task.description !== undefined) evtItem.description = task.description;
+        evtItem.projectId = task.projectId || null;
 
-        if (!timeHasChanged && linkedEvent.start && linkedEvent.start.length >= 16) {
-          startTime = linkedEvent.start.slice(11, 16);
-        }
-        if (!startTime) {
-          startTime = '09:00';
-        }
+        let scheduleModified = false;
+        if (i === 0 && (dateHasChanged || timeHasChanged)) {
+          let startTime = specifiedStartTime;
+          let durationMinutes = 60;
 
-        if (linkedEvent.start && linkedEvent.end) {
-          const prevStartMs = new Date(linkedEvent.start).getTime();
-          const prevEndMs = new Date(linkedEvent.end).getTime();
-          if (!isNaN(prevStartMs) && !isNaN(prevEndMs) && prevEndMs > prevStartMs) {
-            durationMinutes = Math.round((prevEndMs - prevStartMs) / (60 * 1000));
+          if (!timeHasChanged && evtItem.start && evtItem.start.length >= 16) {
+            startTime = evtItem.start.slice(11, 16);
           }
+          if (!startTime) startTime = '09:00';
+
+          if (evtItem.start && evtItem.end) {
+            const prevStartMs = new Date(evtItem.start).getTime();
+            const prevEndMs = new Date(evtItem.end).getTime();
+            if (!isNaN(prevStartMs) && !isNaN(prevEndMs) && prevEndMs > prevStartMs) {
+              durationMinutes = Math.round((prevEndMs - prevStartMs) / (60 * 1000));
+            }
+          }
+
+          const [sh, sm] = startTime.split(':').map(Number);
+          const safeSh = Number.isFinite(sh) ? sh : 0;
+          const safeSm = Number.isFinite(sm) ? sm : 0;
+          const startTotalMinutes = safeSh * 60 + safeSm;
+          const endTotalMinutes = Math.min(23 * 60 + 59, startTotalMinutes + durationMinutes);
+          const endH = Math.floor(endTotalMinutes / 60);
+          const endM = endTotalMinutes % 60;
+          const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+          evtItem.start = `${newDateOnly}T${startTime}`;
+          evtItem.end = `${newDateOnly}T${endTime}`;
+          scheduleModified = true;
         }
 
-        const [sh, sm] = startTime.split(':').map(Number);
-        const startTotalMinutes = (sh || 0) * 60 + (sm || 0);
-        const endTotalMinutes = Math.min(23 * 60 + 59, startTotalMinutes + durationMinutes);
-        const endH = Math.floor(endTotalMinutes / 60);
-        const endM = endTotalMinutes % 60;
-        const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-
-        linkedEvent.start = `${newDateOnly}T${startTime}`;
-        linkedEvent.end = `${newDateOnly}T${endTime}`;
+        evtItem.updatedAt = new Date().toISOString();
+        if (
+          !options.skipGooglePush &&
+          evtItem.source === 'google' &&
+          (hadMetaDiff || scheduleModified)
+        ) {
+          googlePushTargets.push(evtItem);
+        }
       }
 
-      linkedEvent.updatedAt = new Date().toISOString();
       StorageManager.saveEvents(events);
+
+      // Si lié à un événement Google et connecté, répercuter sans bloquer le thread
+      if (
+        googlePushTargets.length > 0 &&
+        typeof window !== 'undefined' &&
+        window.GoogleSyncManager &&
+        window.GoogleSyncManager.status &&
+        window.GoogleSyncManager.status.isConnected &&
+        typeof window.GoogleSyncManager.updateGoogleEvent === 'function'
+      ) {
+        googlePushTargets.forEach((gEvt) => {
+          Promise.resolve(
+            window.GoogleSyncManager.updateGoogleEvent(gEvt, {
+              title: gEvt.title,
+              description: gEvt.description || '',
+              location: gEvt.location || '',
+              start: gEvt.start,
+              end: gEvt.end,
+              isAllDay: !!gEvt.isAllDay,
+              color: gEvt.color,
+              taskId: gEvt.taskId,
+              noteId: gEvt.noteId || null,
+              projectId: gEvt.projectId || null,
+              recurrence: gEvt.recurrence || 'none',
+              recurrenceEnd: gEvt.recurrenceEnd || null
+            })
+          ).catch(() => {});
+        });
+      }
     } else {
       // Créer le créneau dans l'agenda Antigravité de base (source: 'local')
       const startTime = specifiedStartTime || '09:00';
       const [h, m] = startTime.split(':').map(Number);
-      const endH = Math.min(23, (h || 9) + 1);
-      const endTime = `${String(endH).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+      const safeH = Number.isFinite(h) ? Math.max(0, Math.min(23, h)) : 9;
+      const safeM = Number.isFinite(m) ? Math.max(0, Math.min(59, m)) : 0;
+      const startMinutes = safeH * 60 + safeM;
+      const endMinutes = Math.min(23 * 60 + 59, startMinutes + 60);
+      const endH = Math.floor(endMinutes / 60);
+      const endM = endMinutes % 60;
+      const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 
       const newEvent = {
         id: 'evt-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -583,7 +970,8 @@ const TasksManager = {
         isAllDay: false,
         color: '#8b5cf6', // Violet signature Antigravité
         taskId: task.id,
-        noteId: null,
+        noteId: task.noteId || null,
+        projectId: task.projectId || null,
         externalId: null,
         source: 'local', // Agenda Antigravité de base
         createdAt: new Date().toISOString()
@@ -657,11 +1045,35 @@ const TasksManager = {
     };
 
     const targetFound = this.findTaskRecursive(tasks, id);
+    const findParentTaskId = (list, targetId, currentParentId = null) => {
+      for (const item of list) {
+        if (!item) continue;
+        if (item.id === targetId) return currentParentId;
+        if (Array.isArray(item.subtasks) && item.subtasks.length > 0) {
+          const foundParent = findParentTaskId(item.subtasks, targetId, item.id);
+          if (foundParent !== undefined) return foundParent;
+        }
+      }
+      return undefined;
+    };
+
     if (targetFound && targetFound.task) {
       collectIdsRecursive(targetFound.task);
-      // Déplacement automatique dans la corbeille
+      const prevParentId = findParentTaskId(tasks, id, null) || null;
+      let prevEventIds = [];
+      if (typeof StorageManager !== 'undefined' && typeof StorageManager.getEvents === 'function') {
+        try {
+          prevEventIds = StorageManager.getEvents()
+            .filter(ev => ev && ev.taskId && deletedIds.has(ev.taskId))
+            .map(ev => ev.id);
+        } catch (_) {}
+      }
+      const trashPayload = Object.assign({}, targetFound.task, {
+        _deletedMeta: { previousParentTaskId: prevParentId, previousEventIds: prevEventIds }
+      });
+      // Déplacement automatique dans la corbeille avec métadonnées de restauration
       if (typeof TrashManager !== 'undefined' && typeof TrashManager.moveToTrash === 'function') {
-        TrashManager.moveToTrash('task', targetFound.task);
+        TrashManager.moveToTrash('task', trashPayload);
       }
     } else {
       deletedIds.add(id);
@@ -683,6 +1095,7 @@ const TasksManager = {
     };
 
     removeRecursive(tasks);
+    deletedIds.forEach(delId => this.collapsedTasks.delete(delId));
     this.saveAll(tasks);
 
     // RÈGLE IMPÉRATIVE N°3 :
@@ -707,6 +1120,27 @@ const TasksManager = {
       } catch (err) {
         console.warn("[TasksManager] Erreur lors du nettoyage des liaisons d'agenda :", err);
       }
+    }
+
+    // Détacher proprement les notes associées aux tâches supprimées
+    if (typeof StorageManager !== 'undefined' && typeof StorageManager.getNotes === 'function') {
+      try {
+        const notes = StorageManager.getNotes();
+        let notesModified = false;
+        notes.forEach(n => {
+          if (n && n.linkedTaskId && deletedIds.has(n.linkedTaskId)) {
+            n.linkedTaskId = null;
+            n.updatedAt = new Date().toISOString();
+            notesModified = true;
+          }
+        });
+        if (notesModified && typeof StorageManager.saveNotes === 'function') {
+          StorageManager.saveNotes(notes);
+          if (typeof window !== 'undefined' && window.NotesManager && typeof window.NotesManager.render === 'function') {
+            window.NotesManager.render();
+          }
+        }
+      } catch (_) {}
     }
 
     this._showToast("Tâche déplacée dans la corbeille", "info");
@@ -771,11 +1205,31 @@ const TasksManager = {
     this.render();
   },
 
+  _getRenderSig() {
+    const tRev = (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function') ? StorageManager.getRevision('tasks') : -1;
+    const pRev = (typeof StorageManager !== 'undefined' && typeof StorageManager.getRevision === 'function') ? StorageManager.getRevision('projects') : -1;
+    return `${tRev}:${pRev}:${this.currentFilter}:${this.currentProjectFilter}:${this.currentSortMode}:${this.collapsedTasks ? this.collapsedTasks.size : 0}`;
+  },
+
+  renderIfNeeded() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('tasks-tree-container');
+    if (!container) return;
+    const sig = this._getRenderSig();
+    if (!sig.startsWith('-1:') && this._lastRenderedSig === sig && container.childElementCount > 0) return;
+    this.render();
+  },
+
   // Rendu de l'écran des tâches
   render() {
     if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
     const container = document.getElementById('tasks-tree-container');
     if (!container) return;
+    this._lastRenderedSig = this._getRenderSig();
+
+    if (!container._dragDelegated) {
+      this._bindTreeDragDelegation(container);
+    }
 
     // Synchroniser l'état visuel de l'onglet de tri actif
     document.querySelectorAll('.tasks-sort-tab').forEach(tab => {
@@ -832,6 +1286,11 @@ const TasksManager = {
           task.projectId === this.currentProjectFilter;
 
         const hasSubtasks = task.subtasks && task.subtasks.length > 0;
+        const hasMatchingSubtask = hasSubtasks && this.hasMatchingChild(task.subtasks, matchesFilter, matchesProject, archivedProjectIds);
+        if ((!matchesFilter || !matchesProject) && !hasMatchingSubtask) {
+          return;
+        }
+
         const isCollapsed = this.collapsedTasks.has(task.id);
 
         const node = document.createElement('div');
@@ -856,99 +1315,6 @@ const TasksManager = {
           }
         }
 
-        // Événements Glisser-Déposer (Drag and Drop - actif uniquement en ordre manuel)
-        item.addEventListener('dragstart', (e) => {
-          if (!isManualSort) {
-            e.preventDefault();
-            return;
-          }
-          if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, .task-toggle, .task-checkbox, .task-actions, input, select')) {
-            e.preventDefault();
-            return;
-          }
-          this.draggedTaskId = task.id;
-          e.dataTransfer.setData('text/plain', task.id);
-          e.dataTransfer.effectAllowed = 'move';
-          setTimeout(() => item.classList.add('dragging'), 0);
-          const rootZone = document.getElementById('tasks-root-dropzone');
-          if (rootZone) rootZone.classList.add('drag-active');
-
-          // Pré-calculer l'ensemble des IDs interdits (soi-même et tous ses descendants)
-          // pour éviter les lectures localStorage et parcours récursifs à chaque événement dragover
-          this._draggedForbiddenIds = new Set([task.id]);
-          const collectDescendants = (t) => {
-            if (t.subtasks && t.subtasks.length > 0) {
-              for (const sub of t.subtasks) {
-                this._draggedForbiddenIds.add(sub.id);
-                collectDescendants(sub);
-              }
-            }
-          };
-          collectDescendants(task);
-        });
-
-        item.addEventListener('dragend', () => {
-          item.classList.remove('dragging');
-          document.querySelectorAll('.task-item').forEach(el => {
-            el.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
-          });
-          const rootZone = document.getElementById('tasks-root-dropzone');
-          if (rootZone) {
-            rootZone.classList.remove('drag-active', 'drag-over');
-          }
-          this.draggedTaskId = null;
-          this._draggedForbiddenIds = null;
-        });
-
-        item.addEventListener('dragover', (e) => {
-          if (!isManualSort || !this.draggedTaskId || (this._draggedForbiddenIds && this._draggedForbiddenIds.has(task.id))) return;
-
-          e.preventDefault();
-          e.stopPropagation();
-
-          const rect = item.getBoundingClientRect();
-          const relY = e.clientY - rect.top;
-          const h = rect.height;
-
-          item.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
-
-          if (relY < h * 0.28) {
-            item.classList.add('drag-over-top');
-            item.dataset.dropPos = 'before';
-          } else if (relY > h * 0.72) {
-            item.classList.add('drag-over-bottom');
-            item.dataset.dropPos = 'after';
-          } else {
-            item.classList.add('drag-over-nest');
-            item.dataset.dropPos = 'inside';
-          }
-        });
-
-        item.addEventListener('dragleave', (e) => {
-          if (!item.contains(e.relatedTarget)) {
-            item.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
-          }
-        });
-
-        item.addEventListener('drop', (e) => {
-          if (!this.draggedTaskId || this.draggedTaskId === task.id) return;
-          e.preventDefault();
-          e.stopPropagation();
-
-          const pos = item.dataset.dropPos || 'inside';
-          item.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-nest');
-
-          this.moveTask(this.draggedTaskId, task.id, pos);
-        });
-
-        // Masquer si non conforme au filtre (mais laisser visible si une de ses sous-tâches correspond)
-        const hasMatchingSubtask = hasSubtasks && this.hasMatchingChild(task.subtasks, matchesFilter, matchesProject, archivedProjectIds);
-        if (!matchesFilter || !matchesProject) {
-          if (!hasMatchingSubtask) {
-            node.style.display = 'none';
-          }
-        }
-
         const deadlineDate = task.deadline ? new Date(task.deadline) : null;
         const isOverdue = deadlineDate && deadlineDate.getTime() < nowTime && !task.completed;
 
@@ -966,7 +1332,7 @@ const TasksManager = {
 
             ${hasSubtasks ? `
               <button type="button" class="task-toggle ${isCollapsed ? 'collapsed' : ''}" draggable="false" onmousedown="event.stopPropagation();" onclick="event.preventDefault(); event.stopPropagation(); TasksManager.toggleCollapse('${task.id}');" title="${isCollapsed ? 'Déplier les sous-tâches' : 'Réduire les sous-tâches'}" aria-label="Déplier / replier">
-                <span class="task-toggle-icon" style="pointer-events: none;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+                <span class="task-toggle-icon" style="pointer-events: none;"><svg class="app-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ico-chevron-down"/></svg></span>
               </button>
             ` : '<div class="task-toggle-spacer"><span class="tree-bullet">•</span></div>'}
             
@@ -982,6 +1348,7 @@ const TasksManager = {
               ${project ? `<span class="badge badge-project badge-clickable" style="border:1px solid ${project.color}70; color:${project.color}; background-color:${project.color}1c; font-weight:600; cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('projects'); if (window.ProjectsManager) ProjectsManager.openProjectDetailModal('${project.id}');" title="Ouvrir le projet : ${this.escapeHtml(project.title)}"><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background-color:${project.color};"></span><span>${this.escapeHtml(project.title)}</span></span>` : ''}
               ${this.getPriorityBadge(task.priority)}
               ${task.plannedDate ? `<span class="badge badge-planned badge-clickable" style="cursor:pointer;" onclick="event.stopPropagation(); if (window.App) window.App.navigate('agenda'); if (window.AgendaManager) { const d = new Date('${task.plannedDate.slice(0, 10)}'); if (!isNaN(d.getTime())) { AgendaManager.zoomToDay('${task.plannedDate.slice(0, 10)}'); } }" title="Consulter dans l'agenda (${task.plannedDate})"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Prévu : ${task.plannedDate}</span></span>` : ''}
+              ${task.noteId ? `<span class="badge badge-clickable" style="cursor:pointer; border:1px solid rgba(56,189,248,0.4); color:var(--accent); background:rgba(56,189,248,0.12);" onclick="event.stopPropagation(); if (window.App) window.App.openNoteFromDashboard('${task.noteId}');" title="Ouvrir la note associée">${typeof App !== 'undefined' && typeof App.getSvgIcon === 'function' ? App.getSvgIcon('note', 11) : '📝'}<span>Note</span></span>` : ''}
               ${task.deadline ? `<span class="badge badge-deadline ${isOverdue ? 'overdue' : ''}" title="Échéance limite">${isOverdue ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>'}<span>Échéance : ${task.deadline.replace('T', ' ')}</span></span>` : ''}
               ${subtasksBadge}
             </div>
@@ -993,12 +1360,8 @@ const TasksManager = {
                 <button class="btn-icon" title="Monter" onclick="TasksManager.moveUp('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>
                 <button class="btn-icon" title="Descendre" onclick="TasksManager.moveDown('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
               </div>
-                <button class="btn-icon" title="Monter d'un niveau (outdent)" onclick="TasksManager.outdentTask('${task.id}')" ${level === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-                <button class="btn-icon" title="Mettre en sous-tâche de la précédente (indent)" onclick="TasksManager.indentTask('${task.id}')" ${index === 0 ? 'disabled style="opacity:0.25; cursor:default;"' : ''}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
-                <button class="btn-icon" title="Monter" onclick="TasksManager.moveUp('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>
-                <button class="btn-icon" title="Descendre" onclick="TasksManager.moveDown('${task.id}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
-              </div>
               <div class="task-action-group item-group">
+                ${!task.completed ? `<button class="btn-icon btn-action-focus" title="Démarrer une session Focus sur cette tâche" onclick="event.stopPropagation(); if (window.App && typeof window.App.startFocusOn === 'function') window.App.startFocusOn('task', '${task.id}');"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></button>` : ''}
                 <button class="btn-icon btn-action-add" title="Ajouter une sous-tâche" onclick="TasksManager.openTaskModal(null, '${task.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
                 <button class="btn-icon btn-action-edit" title="Modifier" onclick="TasksManager.openTaskModal('${task.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
                 <button class="btn-icon btn-action-delete" title="Supprimer" onclick="TasksManager.deleteTask('${task.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
@@ -1155,8 +1518,11 @@ const TasksManager = {
       rootDropZone.addEventListener('drop', (e) => {
         if (!this.draggedTaskId) return;
         e.preventDefault();
-        rootDropZone.classList.remove('drag-over');
-        this.moveTask(this.draggedTaskId, null, 'root-bottom');
+        rootDropZone.classList.remove('drag-over', 'drag-active');
+        const draggedId = this.draggedTaskId;
+        this.draggedTaskId = null;
+        this._draggedForbiddenIds = null;
+        this.moveTask(draggedId, null, 'root-bottom');
       });
 
       rootTarget.appendChild(rootDropZone);
@@ -1167,7 +1533,7 @@ const TasksManager = {
     }
   },
 
-  hasMatchingChild(subtasks, filterMatch, projMatch, archivedProjectIds = null) {
+  hasMatchingChild(subtasks, filterMatch, projMatch, archivedProjectIds = null, visited = new Set()) {
     if (!subtasks || subtasks.length === 0) return false;
     if (!archivedProjectIds) {
       const projects = (typeof StorageManager !== 'undefined' && typeof StorageManager.getProjects === 'function')
@@ -1177,21 +1543,26 @@ const TasksManager = {
     }
 
     for (const st of subtasks) {
+      if (!st || visited.has(st)) continue;
+      visited.add(st);
       const isArchived = st.projectId ? archivedProjectIds.has(st.projectId) : false;
-      if (this.currentProjectFilter === 'all' && isArchived) continue;
+      if (this.currentProjectFilter === 'all' && isArchived) {
+        if (st.subtasks && this.hasMatchingChild(st.subtasks, filterMatch, projMatch, archivedProjectIds, visited)) return true;
+        continue;
+      }
 
       if (this.currentFilter === 'all' || (this.currentFilter === 'active' && !st.completed) || (this.currentFilter === 'completed' && st.completed)) {
         if (this.currentProjectFilter === 'all' || st.projectId === this.currentProjectFilter) return true;
       }
-      if (st.subtasks && this.hasMatchingChild(st.subtasks, filterMatch, projMatch, archivedProjectIds)) return true;
+      if (st.subtasks && this.hasMatchingChild(st.subtasks, filterMatch, projMatch, archivedProjectIds, visited)) return true;
     }
     return false;
   },
 
   getPriorityBadge(priority) {
     switch (priority) {
-      case 'urgent': return '<span class="badge badge-priority-urgent"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><span>Urgent</span></span>';
-      case 'high': return '<span class="badge badge-priority-high"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Élevée</span></span>';
+      case 'urgent': return '<span class="badge badge-priority-urgent"><svg class="app-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ico-flame"/></svg><span>Urgent</span></span>';
+      case 'high': return '<span class="badge badge-priority-high"><svg class="app-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ico-zap"/></svg><span>Élevée</span></span>';
       case 'medium': return '<span class="badge badge-priority-medium">Normale</span>';
       case 'low': return '<span class="badge badge-priority-low">Basse</span>';
       default: return '';
@@ -1233,6 +1604,10 @@ const TasksManager = {
       select.appendChild(group);
     }
     select.value = currentVal;
+    if (currentVal && select.value !== currentVal) {
+      select.value = 'all';
+      this.currentProjectFilter = 'all';
+    }
   },
 
   // Modale de création / édition
@@ -1248,6 +1623,10 @@ const TasksManager = {
     const inputPlanned = document.getElementById('task-input-planned');
     const inputPlannedTime = document.getElementById('task-input-planned-time');
     const inputDeadline = document.getElementById('task-input-deadline');
+    const inputNote = document.getElementById('task-input-note');
+    const btnOpenNote = document.getElementById('btn-task-open-note');
+    const btnCreateNote = document.getElementById('btn-task-create-note');
+    const btnTaskFocus = document.getElementById('btn-task-modal-focus');
     const btnSave = document.getElementById('task-modal-save');
 
     // Remplir la liste des projets (avec hiérarchie des sous-projets)
@@ -1262,6 +1641,65 @@ const TasksManager = {
       opt.textContent = displayTitle + (p.archived ? ' (Archivé)' : '');
       inputProject.appendChild(opt);
     });
+
+    // Remplir le sélecteur de note liée (facultatif)
+    const updateTaskNoteOpenBtn = (noteId) => {
+      if (btnOpenNote) {
+        btnOpenNote.style.display = noteId ? 'inline-flex' : 'none';
+        btnOpenNote.onclick = (e) => {
+          e.preventDefault();
+          this.closeTaskModal();
+          if (window.App && typeof window.App.openNoteFromDashboard === 'function') {
+            window.App.openNoteFromDashboard(noteId);
+          }
+        };
+      }
+    };
+    if (inputNote && typeof StorageManager.getNotes === 'function') {
+      const notesList = [...StorageManager.getNotes()].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+      inputNote.innerHTML = '<option value="">(Aucune note associée)</option>';
+      notesList.forEach(n => {
+        if (!n) return;
+        const opt = document.createElement('option');
+        opt.value = n.id;
+        opt.textContent = `📝 ${n.title || 'Note sans titre'}`;
+        inputNote.appendChild(opt);
+      });
+      inputNote.onchange = () => updateTaskNoteOpenBtn(inputNote.value);
+    }
+    if (btnCreateNote) {
+      btnCreateNote.onclick = (e) => {
+        e.preventDefault();
+        const titleVal = (inputTitle && inputTitle.value && inputTitle.value.trim()) ? inputTitle.value.trim() : 'Note de tâche';
+        const projVal = inputProject ? (inputProject.value || null) : null;
+        if (typeof NotesManager !== 'undefined' && typeof NotesManager.getAll === 'function') {
+          const newNote = {
+            id: 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            title: titleVal,
+            folder: 'Général',
+            tags: [],
+            projectId: projVal,
+            linkedEventId: null,
+            linkedTaskId: taskId || null,
+            content: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          const allNotes = NotesManager.getAll();
+          allNotes.unshift(newNote);
+          NotesManager.saveAll(allNotes);
+          if (inputNote) {
+            const opt = document.createElement('option');
+            opt.value = newNote.id;
+            opt.textContent = `📝 ${newNote.title}`;
+            inputNote.appendChild(opt);
+            inputNote.value = newNote.id;
+            updateTaskNoteOpenBtn(newNote.id);
+          }
+          this._showToast(`Note « ${newNote.title} » créée et sélectionnée`, 'success');
+        }
+      };
+    }
 
     const syncHiddenPlannedTime = () => {
       if (!inputPlannedTime) return;
@@ -1298,8 +1736,32 @@ const TasksManager = {
       if (inputPlannedTime) inputPlannedTime.value = initTime;
       inputDeadline.value = t.deadline || '';
 
+      let effectiveNoteId = t.noteId || '';
+      if (!effectiveNoteId && typeof StorageManager.getNotes === 'function') {
+        const linkedN = StorageManager.getNotes().find(n => n && n.linkedTaskId === t.id);
+        if (linkedN) effectiveNoteId = linkedN.id;
+      }
+      if (inputNote) {
+        inputNote.value = effectiveNoteId;
+        updateTaskNoteOpenBtn(effectiveNoteId);
+      }
+      if (btnTaskFocus) {
+        btnTaskFocus.style.display = t.completed ? 'none' : 'inline-flex';
+        btnTaskFocus.onclick = () => {
+          this.closeTaskModal();
+          if (window.App && typeof window.App.startFocusOn === 'function') window.App.startFocusOn('task', t.id);
+        };
+      }
+
       btnSave.onclick = () => {
-        if (!inputTitle.value.trim()) return alert("Le titre est requis.");
+        if (!inputTitle.value.trim()) {
+          if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast("Le titre de la tâche est requis.", "warning");
+          } else if (typeof alert === 'function') {
+            alert("Le titre est requis.");
+          }
+          return;
+        }
         const { plannedDate, plannedTime } = extractPlannedFields();
         this.updateTask(taskId, {
           title: inputTitle.value,
@@ -1308,7 +1770,8 @@ const TasksManager = {
           priority: inputPriority.value,
           plannedDate,
           plannedTime,
-          deadline: inputDeadline.value || null
+          deadline: inputDeadline.value || null,
+          noteId: inputNote ? (inputNote.value || null) : undefined
         });
         this.closeTaskModal();
       };
@@ -1322,6 +1785,11 @@ const TasksManager = {
       inputPlanned.value = '';
       if (inputPlannedTime) inputPlannedTime.value = '09:00';
       inputDeadline.value = '';
+      if (inputNote) {
+        inputNote.value = '';
+        updateTaskNoteOpenBtn('');
+      }
+      if (btnTaskFocus) btnTaskFocus.style.display = 'none';
 
       // Si c'est une sous-tâche, hériter facultativement du projet parent
       if (parentId) {
@@ -1332,7 +1800,14 @@ const TasksManager = {
       }
 
       btnSave.onclick = () => {
-        if (!inputTitle.value.trim()) return alert("Le titre est requis.");
+        if (!inputTitle.value.trim()) {
+          if (typeof window !== 'undefined' && window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast("Le titre de la tâche est requis.", "warning");
+          } else if (typeof alert === 'function') {
+            alert("Le titre est requis.");
+          }
+          return;
+        }
         const { plannedDate, plannedTime } = extractPlannedFields();
         this.addTask({
           title: inputTitle.value,
@@ -1341,7 +1816,8 @@ const TasksManager = {
           priority: inputPriority.value,
           plannedDate,
           plannedTime,
-          deadline: inputDeadline.value || null
+          deadline: inputDeadline.value || null,
+          noteId: inputNote ? (inputNote.value || null) : null
         }, parentId);
         this.closeTaskModal();
       };

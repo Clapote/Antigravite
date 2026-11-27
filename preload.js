@@ -1,5 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+async function invokeStructuredGoogle(channel, payload) {
+  const res = await ipcRenderer.invoke(channel, payload);
+  if (res && res.__ipcError) {
+    const err = new Error(res.message || 'Erreur Google Agenda');
+    if (res.code) err.code = res.code;
+    if (res.status) err.status = res.status;
+    throw err;
+  }
+  return res;
+}
+
 contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
   getAppVersion: () => ipcRenderer.invoke('antigravite:get-app-version'),
 
@@ -88,6 +99,12 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
     getPerfDiagnostics: () => ipcRenderer.invoke('antigravite:get-perf-diagnostics')
   }),
 
+  wallpaper: Object.freeze({
+    save: (dataUrl) => ipcRenderer.invoke('antigravite:save-custom-wallpaper', dataUrl),
+    load: () => ipcRenderer.invoke('antigravite:load-custom-wallpaper'),
+    clear: () => ipcRenderer.invoke('antigravite:clear-custom-wallpaper')
+  }),
+
   openExternal: (url) => {
     return ipcRenderer.invoke('antigravite:open-external', url);
   },
@@ -113,6 +130,14 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
       return () => {
         ipcRenderer.removeListener('antigravite:window-maximize-changed', handler);
       };
+    },
+    onVisibilityChanged: (callback) => {
+      if (typeof callback !== 'function') return () => {};
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('antigravite:window-visibility', handler);
+      return () => {
+        ipcRenderer.removeListener('antigravite:window-visibility', handler);
+      };
     }
   }),
 
@@ -128,9 +153,18 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
     return ipcRenderer.invoke('antigravite:show-notification', options);
   },
 
+  onNotificationClicked: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const handler = (_event, action) => callback(action);
+    ipcRenderer.on('antigravite:notification-clicked', handler);
+    return () => {
+      ipcRenderer.removeListener('antigravite:notification-clicked', handler);
+    };
+  },
+
   // Gestionnaire de Musique & Ambiance
   music: Object.freeze({
-    listLocalTracks: () => ipcRenderer.invoke('antigravite:list-local-music'),
+    listLocalTracks: (options) => ipcRenderer.invoke('antigravite:list-local-music', options || {}),
     openMusicFolder: () => ipcRenderer.invoke('antigravite:open-music-folder'),
     selectAndCopyMusic: () => ipcRenderer.invoke('antigravite:select-and-copy-music'),
     copyMusicFiles: (filePaths) => ipcRenderer.invoke('antigravite:copy-music-files', filePaths),
@@ -153,8 +187,8 @@ contextBridge.exposeInMainWorld('AntigraviteAPI', Object.freeze({
       return ipcRenderer.invoke('antigravite:google-select-calendar', { calendarId, calendarSummary });
     },
     fetchEvents: (options) => ipcRenderer.invoke('antigravite:google-fetch-events', options || {}),
-    createEvent: (eventData) => ipcRenderer.invoke('antigravite:google-create-event', eventData),
-    updateEvent: (googleId, eventData, calendarId, expectedEtag) => ipcRenderer.invoke('antigravite:google-update-event', { googleId, eventData, calendarId, expectedEtag }),
-    deleteEvent: (googleId, calendarId) => ipcRenderer.invoke('antigravite:google-delete-event', { googleId, calendarId })
+    createEvent: (eventData) => invokeStructuredGoogle('antigravite:google-create-event', eventData),
+    updateEvent: (googleId, eventData, calendarId, expectedEtag) => invokeStructuredGoogle('antigravite:google-update-event', { googleId, eventData, calendarId, expectedEtag }),
+    deleteEvent: (googleId, calendarId) => invokeStructuredGoogle('antigravite:google-delete-event', { googleId, calendarId })
   })
 }));

@@ -23,14 +23,44 @@ const SCOPES = [
 
 class GoogleAuthService {
   constructor() {
+    this._resolvePaths();
+    this.authCache = this._defaultAuthCache();
+    this.activeServer = null;
+    this._activeCancel = null;
+    this._refreshPromise = null;
+    this._savePromise = Promise.resolve();
+  }
+
+  _defaultAuthCache() {
+    return {
+      clientId: null,
+      clientSecret: null,
+      tokens: null,
+      user: null,
+      selectedCalendarId: 'primary',
+      selectedCalendarSummary: 'Principal',
+      lastSyncAt: null,
+      lastFullRefreshAt: null,
+      syncToken: null
+    };
+  }
+
+  _escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  _resolvePaths() {
     const userDataPath = (app && typeof app.getPath === 'function')
       ? app.getPath('userData')
       : path.join(process.env.APPDATA || process.cwd(), 'Antigravite');
 
     this.authDir = path.join(userDataPath, 'google_auth');
     this.authFile = path.join(this.authDir, 'auth_data.enc');
-    this.authCache = null;
-    this.activeServer = null;
   }
 
   // =========================================================================
@@ -38,6 +68,7 @@ class GoogleAuthService {
   // =========================================================================
 
   async init() {
+    this._resolvePaths();
     await fs.mkdir(this.authDir, { recursive: true });
     await this.loadAuthData();
   }
@@ -78,34 +109,34 @@ class GoogleAuthService {
         return this.authCache;
       } catch (err) {
         console.warn('[GoogleAuth] Échec de désérialisation du trousseau chiffré:', err.message);
+        await fs.copyFile(this.authFile, `${this.authFile}.corrupt`).catch(() => {});
       }
     }
 
-    this.authCache = {
-      clientId: null,
-      clientSecret: null,
-      tokens: null,
-      user: null,
-      selectedCalendarId: 'primary',
-      selectedCalendarSummary: 'Principal',
-      lastSyncAt: null,
-      syncToken: null
-    };
+    this.authCache = this._defaultAuthCache();
     return this.authCache;
   }
 
   async saveAuthData() {
-    await fs.mkdir(this.authDir, { recursive: true });
-    const rawStr = JSON.stringify(this.authCache, null, 2);
+    const writeOp = async () => {
+      await fs.mkdir(this.authDir, { recursive: true });
+      const rawStr = JSON.stringify(this.authCache || this._defaultAuthCache(), null, 2);
 
-    let outputBuffer;
-    if (safeStorage && safeStorage.isEncryptionAvailable()) {
-      outputBuffer = safeStorage.encryptString(rawStr);
-    } else {
-      outputBuffer = Buffer.from(rawStr, 'utf8');
-    }
+      let outputBuffer;
+      if (safeStorage && safeStorage.isEncryptionAvailable()) {
+        outputBuffer = safeStorage.encryptString(rawStr);
+      } else {
+        outputBuffer = Buffer.from(rawStr, 'utf8');
+      }
 
-    await fs.writeFile(this.authFile, outputBuffer);
+      const tmpFile = `${this.authFile}.${process.pid}.${Date.now()}.tmp`;
+      await fs.writeFile(tmpFile, outputBuffer);
+      await fs.rename(tmpFile, this.authFile);
+    };
+
+    const next = this._savePromise.then(writeOp, writeOp);
+    this._savePromise = next.catch(() => {});
+    return next;
   }
 
   // =========================================================================
@@ -129,11 +160,16 @@ class GoogleAuthService {
   }
 
   async saveCredentials(clientId, clientSecret) {
-    if (!clientId || !clientSecret) {
+    const cleanId = typeof clientId === 'string' ? clientId.trim() : '';
+    const cleanSecret = typeof clientSecret === 'string' ? clientSecret.trim() : '';
+    if (!cleanId || !cleanSecret) {
       throw new Error("L'identifiant Client ID et le Client Secret sont requis.");
     }
-    this.authCache.clientId = clientId.trim();
-    this.authCache.clientSecret = clientSecret.trim();
+    if (!this.authCache) {
+      this.authCache = this._defaultAuthCache();
+    }
+    this.authCache.clientId = cleanId;
+    this.authCache.clientSecret = cleanSecret;
     await this.saveAuthData();
     return this.getStatus();
   }
@@ -147,8 +183,12 @@ class GoogleAuthService {
       throw new Error("Veuillez d'abord renseigner vos identifiants Google Cloud (Client ID et Client Secret).");
     }
 
-    // Si un serveur d'authentification était déjà ouvert, le fermer
-    if (this.activeServer) {
+    // Fermer proprement toute tentative OAuth précédente (et son timer) avant d'ouvrir la nouvelle
+    if (typeof this._activeCancel === 'function') {
+      try {
+        this._activeCancel('Nouvelle tentative de connexion lancée.');
+      } catch {}
+    } else if (this.activeServer) {
       try { this.activeServer.close(); } catch {}
       this.activeServer = null;
     }
@@ -160,17 +200,50 @@ class GoogleAuthService {
 
       const state = crypto.randomBytes(16).toString('hex');
       let timeoutHandle = null;
+      let settled = false;
 
       const cleanup = () => {
-        if (timeoutHandle) clearTimeout(timeoutHandle);
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
         try { server.close(); } catch {}
-        this.activeServer = null;
+        if (this.activeServer === server) {
+          this.activeServer = null;
+        }
+        if (this._activeCancel === cancelSession) {
+          this._activeCancel = null;
+        }
+      };
+
+      const cancelSession = (reason = 'Authentification annulée.') => {
+        cleanup();
+        if (!settled) {
+          settled = true;
+          reject(new Error(reason));
+        }
+      };
+      this._activeCancel = cancelSession;
+
+      const finishResolve = (status) => {
+        cleanup();
+        if (!settled) {
+          settled = true;
+          resolve(status);
+        }
+      };
+
+      const finishReject = (err) => {
+        cleanup();
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
       };
 
       // Expiration au bout de 5 minutes
       timeoutHandle = setTimeout(() => {
-        cleanup();
-        reject(new Error("Délai de connexion Google dépassé (5 minutes)."));
+        finishReject(new Error("Délai de connexion Google dépassé (5 minutes)."));
       }, 300000);
 
       server.on('request', async (req, res) => {
@@ -187,6 +260,7 @@ class GoogleAuthService {
           const error = reqUrl.searchParams.get('error');
 
           if (error) {
+            const safeErr = this._escapeHtml(error);
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(`
               <!DOCTYPE html>
@@ -195,25 +269,35 @@ class GoogleAuthService {
               <body style="font-family: system-ui, -apple-system, sans-serif; background: #0b0f17; color: #f1f5f9; display: flex; align-items: center; justify-content: center; height: 90vh; margin: 0;">
                 <div style="background: #131926; border: 1px solid rgba(255,255,255,0.1); padding: 36px 48px; border-radius: 12px; text-align: center; max-width: 480px;">
                   <h2 style="color: #f43f5e; margin-top: 0;">⚠️ Connexion annulée</h2>
-                  <p style="color: #94a3b8; line-height: 1.5;">L'autorisation a été interrompue (${error}). Vous pouvez fermer cet onglet et réessayer depuis Antigravité.</p>
+                  <p style="color: #94a3b8; line-height: 1.5;">L'autorisation a été interrompue (${safeErr}). Vous pouvez fermer cet onglet et réessayer depuis Antigravité.</p>
                 </div>
               </body>
               </html>
             `);
-            cleanup();
-            reject(new Error(`Autorisation refusée par Google : ${error}`));
+            finishReject(new Error(`Autorisation refusée par Google : ${error}`));
             return;
           }
 
           if (!code || returnedState !== state) {
             res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end('Paramètres de sécurité invalides.');
-            cleanup();
-            reject(new Error("Vérification d'état (CSRF) échouée lors du retour Google."));
+            finishReject(new Error("Vérification d'état (CSRF) échouée lors du retour Google."));
             return;
           }
 
-          // Afficher la page de confirmation au navigateur
+          const redirectUri = `http://127.0.0.1:${server.address().port}/oauth2callback`;
+
+          // 2. Échanger le code contre les jetons AVANT d'afficher le succès au navigateur
+          const tokenData = await this.exchangeCodeForTokens(code, redirectUri);
+          this.authCache.tokens = tokenData;
+
+          // 3. Récupérer l'identité de l'utilisateur connecté
+          const userInfo = await this.fetchUserInfo(tokenData.access_token);
+          this.authCache.user = userInfo;
+          this.authCache.lastSyncAt = null;
+
+          await this.saveAuthData();
+
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(`
             <!DOCTYPE html>
@@ -230,24 +314,27 @@ class GoogleAuthService {
             </html>
           `);
 
-          const redirectUri = `http://127.0.0.1:${server.address().port}/oauth2callback`;
-
-          // 2. Échanger le code contre les jetons
-          const tokenData = await this.exchangeCodeForTokens(code, redirectUri);
-          this.authCache.tokens = tokenData;
-
-          // 3. Récupérer l'identité de l'utilisateur connecté
-          const userInfo = await this.fetchUserInfo(tokenData.access_token);
-          this.authCache.user = userInfo;
-          this.authCache.lastSyncAt = null;
-
-          await this.saveAuthData();
-          cleanup();
-
-          resolve(this.getStatus());
+          finishResolve(this.getStatus());
         } catch (err) {
-          cleanup();
-          reject(err);
+          try {
+            if (!res.headersSent) {
+              const safeMsg = this._escapeHtml(err && err.message ? err.message : 'Erreur interne');
+              res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+              res.end(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"><title>Antigravité - Échec de connexion</title></head>
+                <body style="font-family: system-ui, -apple-system, sans-serif; background: #0b0f17; color: #f1f5f9; display: flex; align-items: center; justify-content: center; height: 90vh; margin: 0;">
+                  <div style="background: #131926; border: 1px solid rgba(255,255,255,0.1); padding: 36px 48px; border-radius: 12px; text-align: center; max-width: 480px;">
+                    <h2 style="color: #f43f5e; margin-top: 0;">Échec de la connexion Google</h2>
+                    <p style="color: #94a3b8; line-height: 1.5;">Impossible de finaliser l'authentification (${safeMsg}). Veuillez réessayer depuis Antigravité.</p>
+                  </div>
+                </body>
+                </html>
+              `);
+            }
+          } catch {}
+          finishReject(err);
         }
       });
 
@@ -276,6 +363,12 @@ class GoogleAuthService {
     });
   }
 
+  _timeoutSignal(ms = 15000) {
+    return (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
+      ? AbortSignal.timeout(ms)
+      : undefined;
+  }
+
   async exchangeCodeForTokens(code, redirectUri) {
     const params = new URLSearchParams({
       code,
@@ -288,7 +381,8 @@ class GoogleAuthService {
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString()
+      body: params.toString(),
+      signal: this._timeoutSignal()
     });
 
     if (!res.ok) {
@@ -297,10 +391,11 @@ class GoogleAuthService {
     }
 
     const json = await res.json();
+    const expiresIn = Number(json.expires_in) || 3600;
     return {
       access_token: json.access_token,
       refresh_token: json.refresh_token || this.authCache?.tokens?.refresh_token,
-      expiry_date: Date.now() + (json.expires_in * 1000),
+      expiry_date: Date.now() + (expiresIn * 1000),
       scope: json.scope,
       token_type: json.token_type
     };
@@ -308,7 +403,8 @@ class GoogleAuthService {
 
   async fetchUserInfo(accessToken) {
     const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: this._timeoutSignal()
     });
     if (!res.ok) return { email: 'compte-connecte@google.com', name: 'Utilisateur Google' };
     const json = await res.json();
@@ -335,36 +431,70 @@ class GoogleAuthService {
       return tokens.access_token;
     }
 
-    // Sinon, on renouvelle avec le refresh_token
-    if (!tokens.refresh_token) {
-      throw new Error("Jeton expiré et aucun jeton de renouvellement disponible. Veuillez vous reconnecter.");
+    // Mutualiser tout renouvellement concurrent via un verrou partagé
+    if (this._refreshPromise) {
+      return this._refreshPromise;
     }
 
-    const params = new URLSearchParams({
-      client_id: this.authCache.clientId,
-      client_secret: this.authCache.clientSecret,
-      refresh_token: tokens.refresh_token,
-      grant_type: 'refresh_token'
-    });
+    this._refreshPromise = (async () => {
+      const currentTokens = this.authCache?.tokens;
+      if (!currentTokens) {
+        throw new Error("Aucun compte Google n'est actuellement connecté.");
+      }
+      if (currentTokens.access_token && currentTokens.expiry_date && (Date.now() < currentTokens.expiry_date - 300000)) {
+        return currentTokens.access_token;
+      }
+      if (!currentTokens.refresh_token) {
+        throw new Error("Jeton expiré et aucun jeton de renouvellement disponible. Veuillez vous reconnecter.");
+      }
 
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString()
-    });
+      const params = new URLSearchParams({
+        client_id: this.authCache.clientId,
+        client_secret: this.authCache.clientSecret,
+        refresh_token: currentTokens.refresh_token,
+        grant_type: 'refresh_token'
+      });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Échec du renouvellement de session (${res.status}). Veuillez vous reconnecter : ${errText}`);
+      const res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+        signal: this._timeoutSignal()
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        let errJson = null;
+        try { errJson = JSON.parse(errText); } catch {}
+        const isInvalidGrant = (errJson && errJson.error === 'invalid_grant') || /invalid_grant/i.test(errText);
+
+        if (isInvalidGrant || res.status === 401) {
+          this.authCache.tokens = null;
+          this.authCache.syncToken = null;
+          await this.saveAuthData().catch(() => {});
+        }
+
+        const err = new Error(`Échec du renouvellement de session (${res.status}). Veuillez vous reconnecter : ${errText}`);
+        err.status = res.status;
+        if (isInvalidGrant) err.code = 'INVALID_GRANT';
+        throw err;
+      }
+
+      const json = await res.json();
+      const expiresIn = Number(json.expires_in) || 3600;
+      currentTokens.access_token = json.access_token;
+      currentTokens.expiry_date = Date.now() + (expiresIn * 1000);
+      if (json.refresh_token) currentTokens.refresh_token = json.refresh_token;
+
+      await this.saveAuthData();
+      return currentTokens.access_token;
+    })();
+
+    try {
+      return await this._refreshPromise;
+    } finally {
+      this._refreshPromise = null;
     }
-
-    const json = await res.json();
-    tokens.access_token = json.access_token;
-    tokens.expiry_date = Date.now() + (json.expires_in * 1000);
-    if (json.refresh_token) tokens.refresh_token = json.refresh_token;
-
-    await this.saveAuthData();
-    return tokens.access_token;
   }
 
   // =========================================================================
@@ -372,11 +502,13 @@ class GoogleAuthService {
   // =========================================================================
 
   async disconnect() {
+    if (!this.authCache) this.authCache = this._defaultAuthCache();
     if (this.authCache?.tokens?.access_token) {
       try {
         await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(this.authCache.tokens.access_token)}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          signal: this._timeoutSignal()
         });
       } catch (err) {
         console.warn("Révocation distante échouée :", err.message);
@@ -401,7 +533,8 @@ class GoogleAuthService {
     const accessToken = await this.getValidAccessToken();
 
     const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: this._timeoutSignal()
     });
 
     if (!res.ok) {
@@ -421,10 +554,12 @@ class GoogleAuthService {
   }
 
   async selectCalendar(calendarId, calendarSummary = '') {
+    if (!this.authCache) this.authCache = this._defaultAuthCache();
     this.authCache.selectedCalendarId = calendarId;
     this.authCache.selectedCalendarSummary = calendarSummary || calendarId;
-    // Réinitialiser le syncToken car le calendrier cible change
+    // Réinitialiser le syncToken et l'horodatage de rafraîchissement complet car le calendrier cible change
     this.authCache.syncToken = null;
+    this.authCache.lastFullRefreshAt = null;
     await this.saveAuthData();
     return this.getStatus();
   }
